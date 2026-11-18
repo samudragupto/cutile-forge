@@ -1,0 +1,29 @@
+name: Benchmark
+
+on:
+  push:
+    tags: ["bench-*"]
+  workflow_dispatch: {}
+
+jobs:
+  full-benchmark:
+    runs-on: [self-hosted, gpu]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: |
+          pip install -e ".[dev]" --no-build-isolation
+          python -m cutile_forge.baselines.build
+      - run: |
+          python benchmarks/run_all.py \
+            --model /mnt/d/models/mistral_7b_4bit/ \
+            --output benchmarks/results/ \
+            --warmup 5 --iters 200
+      - uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: benchmarks/results/
+      - run: python cutile_forge/bench/report.py --input benchmarks/results/ --output docs/RESULTS.md
+
