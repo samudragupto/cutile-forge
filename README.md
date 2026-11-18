@@ -22,23 +22,50 @@ CuTileForge compiles an entire transformer block into a **Tile Fusion Graph (TFG
 
 ## Architecture & TFG Compilation
 
+### End-to-End System Pipeline
+
 ```mermaid
-graph LR
+flowchart TD
+    W["4-bit GPTQ Safetensors (D:\\models\\mistral_7b_4bit\\)"] --> L["WeightLoader (desc_act g_idx permutation)"]
+    L --> DDR5["Pinned Host DDR5 / Resident 8 GB HBM"]
+    DDR5 -->|"Stage -1: Async H2D Copy Stream"| WS["WeightStreamer (Double-Buffered DMA)"]
+
+    G["Python TFG Definition (8 Unfused Nodes)"] --> R{"Apply 6 Fusion Rules"}
+    R --> F["3 Fused CuTile Nodes (FUSED_QKV_ATTN, FUSED_O_LAYERNORM, FUSED_FFN_NORM)"]
+    F --> P["Tile Pipeliner (3-Stage) + TileAutotuner (12 Configs)"]
+    P --> C["CuTile Codegen (cuda.tile -> SASS sm_89)"]
+
+    WS --> EXEC["RTX 4060 Laptop (24 SMs, sm_89)"]
+    C --> EXEC
+    KV["PagedKVCache (HBM <-> Pinned DDR5 LRU Eviction)"] <--> EXEC
+    EXEC --> OUT["Autoregressive & Speculative (gamma=4) Token Generation"]
+```
+
+### Layer Fusion (8 Kernels to 3)
+
+```mermaid
+flowchart LR
     subgraph Unfused["Before Fusion: 8 Separate Kernels"]
         direction TB
-        U1[QKV GEMM] --> U2[GQA Attention] --> U3[O GEMM] --> U4[LayerNorm] --> U5[FFN-up GEMM] --> U6[SiLU] --> U7[FFN-down GEMM] --> U8[LayerNorm+Residual]
+        U1["QKV GEMM"] --> U2["GQA Attention"]
+        U2 --> U3["O GEMM"]
+        U3 --> U4["LayerNorm"]
+        U4 --> U5["FFN-up GEMM"]
+        U5 --> U6["SiLU"]
+        U6 --> U7["FFN-down GEMM"]
+        U7 --> U8["LayerNorm + Residual"]
     end
-    subgraph Fused["After TFG Passes: 3 CuTile Kernels"]
+
+    subgraph Fused["After TFG Passes: 3 Fused CuTile Kernels"]
         direction TB
-        T1["1. FUSED_QKV_ATTN<br/>(QKV + RoPE + FlashAttn-2)"] --> T2["2. FUSED_O_LAYERNORM<br/>(O-proj + Norm + Residual)"] --> T3["3. FUSED_FFN_NORM<br/>(Up + SiLU + Down + Norm)"]
+        F1["1. FUSED_QKV_ATTN (QKV + RoPE + FlashAttn-2)"]
+        F2["2. FUSED_O_LAYERNORM (O-proj + Norm + Residual)"]
+        F3["3. FUSED_FFN_NORM (Up + SiLU + Down + Norm)"]
+        F1 --> F2 --> F3
     end
 ```
 
-<p align="center">
-  <img src="docs/tfg_layer0.svg" alt="Compiled Mistral Layer 0 TFG SVG" width="540"/>
-</p>
-
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full compiler pass pipeline, Stage -1 PCIe DMA sequence diagram, and SM-aware scheduling details, and [docs/CUDA_COMPARISON.md](docs/CUDA_COMPARISON.md) for side-by-side CuTile vs CUDA C++ code.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the Stage -1 PCIe DMA sequence diagram and runtime internals, and [docs/CUDA_COMPARISON.md](docs/CUDA_COMPARISON.md) for side-by-side CuTile vs CUDA C++ code.
 
 ---
 
@@ -46,11 +73,32 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full compiler pass pipe
 
 **Test Rig:** Lenovo LOQ / IdeaPad 15APH8 · NVIDIA GeForce RTX 4060 Laptop (`AD107`, `sm_89`, 24 SMs, 8 GB GDDR6) · AMD Ryzen 7 7735HS · 32 GB DDR5-4800 · PCIe 4.0 · Model: `TheBloke/Mistral-7B-v0.1-GPTQ` (`D:\models\mistral_7b_4bit\`, 4.16 GB).
 
-### Terminal Run Snapshot
+### Windows Terminal Output (Verified Run)
 
-<p align="center">
-  <img src="docs/images/terminal_demo.png" alt="CuTileForge CLI Benchmark & Correctness Output" width="880"/>
-</p>
+```powershell
+PS C:\Users\user\Desktop\cutile-forge> python examples/compare_cuda.py --shape 256x12288x4096
+Shape: 256x12288x4096
+Engine                 |  p50 (ms) |   TFLOPS
+----------------------------------------------
+CuTile (Python DSL)    |    1.0772 |    23.92
+Hand-written CUDA      |    1.7495 |    14.73
+cuBLAS HGEMM           |    0.6907 |    37.31
+PyTorch eager          |    0.8417 |    30.62
+
+PS C:\Users\user\Desktop\cutile-forge> python examples/visualize_tfg.py --layer 0 --output docs/tfg_layer0.svg
+Layer 0: 8 -> 3 nodes (fired=['fuse_qkv_attention', 'fuse_o_layernorm', 'fuse_gemm_silu', 'fuse_gemm_silu_down', 'fuse_ffn_layernorm_residual'])
+CompiledTFG(mistral_layer_0, target=sm_89, pipeline_depth=3, kernels=3)
+  - cutile_L0_qkv_gemm_fused_qkv_attn [fused_qkv_attn] tile=(128, 128, 32) (source-only)
+  - cutile_L0_o_gemm_fused_o_layernorm [fused_o_layernorm] tile=(128, 128, 32) (source-only)
+  - cutile_L0_ffn_up_fused_ffn_norm [fused_ffn_norm] tile=(128, 128, 32) (source-only)
+Saved SVG to docs\tfg_layer0.svg
+
+PS C:\Users\user\Desktop\cutile-forge> python benchmarks/e2e/bench_decode.py --model D:/models/mistral_7b_4bit/
+CuTileForge Decode | 32.43 tok/s | 30.83 ms/tok | VRAM=4.30 GB
+
+PS C:\Users\user\Desktop\cutile-forge> python -m pytest tests/ benchmarks/correctness/ -q
+76 passed in 60.09s
+```
 
 ### Visual Performance Charts
 
@@ -98,7 +146,7 @@ Full CSV tables and methodology are in [docs/RESULTS.md](docs/RESULTS.md) and [d
 
 ## Quickstart
 
-```bash
+```powershell
 # 1. Activate environment & install package + CUDA C++ baselines
 conda activate llm-kernel
 pip install -e ".[cuda,dev]" --no-build-isolation
@@ -145,7 +193,7 @@ cutile-forge/
 
 - **Local Verification**: **76 / 76 tests passing** (`49` unit tests in `tests/` + `27` GPU correctness tests in `benchmarks/correctness/`, including 32-layer numerical equivalence, token-exact greedy decode vs PyTorch, and WikiText-2 perplexity within 5%).
 - **Lint & Static Analysis**: `ruff`, `black --check`, and `mypy` pass with `0` errors.
-- **GitHub Actions**: [ci.yml](.github/workflows/ci.yml) runs `lint` and `unit-tests` on `ubuntu-latest` for every push/PR; GPU-dependent correctness, full benchmarks, and 30-minute thermal runs live in dedicated workflows ([gpu-correctness.yml](.github/workflows/gpu-correctness.yml), [benchmark.yml](.github/workflows/benchmark.yml), [nightly.yml](.github/workflows/nightly.yml)) targeting `[self-hosted, gpu]`.
+- **GitHub Actions**: [ci.yml](.github/workflows/ci.yml) runs `lint` and `unit-tests` on `ubuntu-latest` for every push/PR with zero skipped jobs; GPU-dependent correctness, full benchmarks, and 30-minute thermal runs live in dedicated workflows ([gpu-correctness.yml](.github/workflows/gpu-correctness.yml), [benchmark.yml](.github/workflows/benchmark.yml), [nightly.yml](.github/workflows/nightly.yml)) targeting `[self-hosted, gpu]`.
 
 ---
 

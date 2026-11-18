@@ -2,39 +2,65 @@
 
 CuTileForge compiles an entire transformer layer into a **Tile Fusion Graph (TFG)** and lowers it directly to NVIDIA **CuTile Python DSL** (`cuda.tile`) kernels with 3-stage software pipelining (`latency=3`) and Stage -1 PCIe DMA weight prefetching.
 
-## TFG Compilation Flow
+## End-to-End Compiler & Runtime Architecture
 
 ```mermaid
-graph TD
-    A[Python TFG Definition] --> B[FusionGraph]
-    B --> C{Apply 6 Fusion Rules}
-    C --> D[3 Fused Tile Nodes]
-    D --> E[Tile Pipeliner: 3-stage + Stage-1 PCIe]
-    E --> F[Codegen: CuTile DSL -> SASS sm_89]
-    F --> G[Runtime: WeightStreamer + KV-Cache]
+flowchart TD
+    W["4-bit GPTQ Safetensors (D:\\models\\mistral_7b_4bit\\)"] --> L["WeightLoader (desc_act g_idx permutation)"]
+    L --> DDR5["Pinned Host DDR5 / Resident 8 GB HBM"]
+    DDR5 -->|"Stage -1: Async H2D Copy Stream"| WS["WeightStreamer (Double-Buffered DMA)"]
+
+    G["Python TFG Definition (8 Unfused Nodes)"] --> R{"Apply 6 Fusion Rules"}
+    R --> F["3 Fused CuTile Nodes (FUSED_QKV_ATTN, FUSED_O_LAYERNORM, FUSED_FFN_NORM)"]
+    F --> P["Tile Pipeliner (3-Stage) + TileAutotuner (12 Configs)"]
+    P --> C["CuTile Codegen (cuda.tile -> SASS sm_89)"]
+
+    WS --> EXEC["RTX 4060 Laptop (24 SMs, sm_89)"]
+    C --> EXEC
+    KV["PagedKVCache (HBM <-> Pinned DDR5 LRU Eviction)"] <--> EXEC
+    EXEC --> OUT["Autoregressive & Speculative (gamma=4) Token Generation"]
 ```
 
 ## PCIe Weight Streaming (Stage -1)
 
 ```mermaid
 sequenceDiagram
-    Ryzen 7->>DDR5: Pinned Weight Tiles
-    Ryzen 7->>RTX 4060: cudaMemcpyAsync (PCIe 4.0)
-    par Compute
-        RTX 4060->>Tensor Cores: HMMA on Tile N
+    participant CPU as Ryzen 7 7735HS
+    participant DDR5 as Pinned DDR5
+    participant DMA as PCIe 4.0 Copy Stream
+    participant GPU as RTX 4060 Tensor Cores
+
+    CPU->>DDR5: Pin 4-bit weight tiles
+    DDR5->>DMA: cudaMemcpyAsync (Layer N+1)
+    par Overlapped Execution
+        GPU->>GPU: CuTile 3-stage HMMA (Layer N)
+    and
+        DMA->>GPU: Stage -1 H2D DMA (Layer N+1)
     end
-    RTX 4060->>HBM: LDGSTS Tile N+1
+    DMA-->>GPU: cudaEventSynchronize barrier
 ```
 
-## Fusion Before/After
+## TFG Fusion Before & After (8 Kernels to 3)
 
 ```mermaid
-graph LR
-    subgraph Before[8 Kernels]
-        K1[QKV GEMM]-->K2[Attn]-->K3[O GEMM]-->K4[LN]-->K5[FFNup]-->K6[SiLU]-->K7[FFNdown]-->K8[LN+Res]
+flowchart LR
+    subgraph Before["Before Fusion: 8 Separate Kernels"]
+        direction TB
+        K1["QKV GEMM"] --> K2["GQA Attention"]
+        K2 --> K3["O GEMM"]
+        K3 --> K4["LayerNorm"]
+        K4 --> K5["FFN-up GEMM"]
+        K5 --> K6["SiLU"]
+        K6 --> K7["FFN-down GEMM"]
+        K7 --> K8["LayerNorm + Residual"]
     end
-    subgraph After[3 Fused Kernels]
-        F1[FUSED_QKV_ATTN]-->F2[FUSED_O_LAYERNORM]-->F3[FUSED_FFN_NORM]
+
+    subgraph After["After TFG Passes: 3 Fused CuTile Kernels"]
+        direction TB
+        F1["1. FUSED_QKV_ATTN (QKV + RoPE + FlashAttn-2)"]
+        F2["2. FUSED_O_LAYERNORM (O-proj + Norm + Residual)"]
+        F3["3. FUSED_FFN_NORM (Up + SiLU + Down + Norm)"]
+        F1 --> F2 --> F3
     end
 ```
 
