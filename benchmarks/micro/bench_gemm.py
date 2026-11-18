@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import torch
 
@@ -13,22 +13,22 @@ from cutile_forge.bench.harness import benchmark, write_csv
 from cutile_forge.kernels.gemm_dequant import cutile_gemm_fp16
 
 # 8 canonical Mistral-7B shapes (M, N, K): decode (M=1) and prefill (M=256/512)
-GEMM_SHAPES: List[Tuple[int, int, int]] = [
-    (1, 12288, 4096),    # Decode QKV+O or fused QKV
+GEMM_SHAPES: list[tuple[int, int, int]] = [
+    (1, 12288, 4096),  # Decode QKV+O or fused QKV
     (256, 12288, 4096),  # Prefill fused QKV
-    (1, 14336, 4096),    # Decode FFN gate/up
+    (1, 14336, 4096),  # Decode FFN gate/up
     (256, 14336, 4096),  # Prefill FFN gate/up
-    (1, 4096, 14336),    # Decode FFN down
+    (1, 4096, 14336),  # Decode FFN down
     (256, 4096, 14336),  # Prefill FFN down
-    (1, 4096, 4096),     # Decode O-proj
-    (512, 4096, 4096),   # Prefill O-proj
+    (1, 4096, 4096),  # Decode O-proj
+    (512, 4096, 4096),  # Prefill O-proj
 ]
 
 
-def run_gemm_benchmark(warmup: int = 5, iters: int = 50) -> List[Dict[str, Any]]:
+def run_gemm_benchmark(warmup: int = 5, iters: int = 50) -> list[dict[str, Any]]:
     """Run GEMM comparison across all 8 shapes and return structured rows."""
     baselines = load_baselines()
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
 
     for m, n, k in GEMM_SHAPES:
         a = torch.randn((m, k), device="cuda", dtype=torch.float16) * 0.1
@@ -60,7 +60,7 @@ def run_gemm_benchmark(warmup: int = 5, iters: int = 50) -> List[Dict[str, Any]]
             name="pytorch",
         )
 
-        row: Dict[str, Any] = {
+        row: dict[str, Any] = {
             "shape": f"{m}x{n}x{k}",
             "M": m,
             "N": n,

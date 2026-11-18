@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import torch
 
@@ -12,7 +12,7 @@ from cutile_forge.baselines import load_baselines
 from cutile_forge.bench.harness import benchmark, write_csv
 from cutile_forge.kernels.gemm_dequant import fused_gemm_dequant, pack_int4_weights
 
-SHAPES: List[Tuple[int, int, int]] = [
+SHAPES: list[tuple[int, int, int]] = [
     (1, 12288, 4096),
     (256, 12288, 4096),
     (1, 14336, 4096),
@@ -20,11 +20,11 @@ SHAPES: List[Tuple[int, int, int]] = [
 ]
 
 
-def run_gemm_dequant_benchmark(warmup: int = 5, iters: int = 50) -> List[Dict[str, Any]]:
+def run_gemm_dequant_benchmark(warmup: int = 5, iters: int = 50) -> list[dict[str, Any]]:
     """Benchmark fused INT4-dequant GEMM vs separate CUDA dequant + CUDA GEMM."""
     baselines = load_baselines()
     gs = 128
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
 
     for m, n, k in SHAPES:
         a = torch.randn((m, k), device="cuda", dtype=torch.float16) * 0.05
@@ -47,7 +47,7 @@ def run_gemm_dequant_benchmark(warmup: int = 5, iters: int = 50) -> List[Dict[st
         )
 
         speedup = st_sep.p50_ms / max(st_fused.p50_ms, 1e-6)
-        row: Dict[str, Any] = {
+        row: dict[str, Any] = {
             "shape": f"{m}x{n}x{k}",
             "fused_ms": round(st_fused.p50_ms, 4),
             "separate_ms": round(st_sep.p50_ms, 4),

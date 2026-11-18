@@ -5,17 +5,16 @@ from __future__ import annotations
 import argparse
 import csv
 from pathlib import Path
-from typing import Dict, List
 
 
-def _read_csv(path: Path) -> List[Dict[str, str]]:
+def _read_csv(path: Path) -> list[dict[str, str]]:
     if not path.exists():
         return []
     with path.open("r", encoding="utf-8", newline="") as f:
         return list(csv.DictReader(f))
 
 
-def _md_table(rows: List[Dict[str, str]]) -> str:
+def _md_table(rows: list[dict[str, str]]) -> str:
     if not rows:
         return "_No data recorded._\n"
     cols = list(rows[0].keys())
@@ -25,14 +24,14 @@ def _md_table(rows: List[Dict[str, str]]) -> str:
     return "\n".join([header, sep] + body) + "\n"
 
 
-def generate_plots(input_dir: Path) -> List[Path]:
+def generate_plots(input_dir: Path) -> list[Path]:
     """Generate PNG charts from available CSV files in `input_dir`."""
     import matplotlib
 
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    plots: List[Path] = []
+    plots: list[Path] = []
 
     gemm_rows = _read_csv(input_dir / "gemm.csv")
     if gemm_rows:
@@ -42,10 +41,30 @@ def generate_plots(input_dir: Path) -> List[Path]:
             shapes = [r["shape"] for r in prefill]
             x = list(range(len(shapes)))
             w = 0.2
-            ax.bar([i - 1.5 * w for i in x], [float(r["cutile_tflops"]) for r in prefill], w, label="CuTile")
-            ax.bar([i - 0.5 * w for i in x], [float(r["cuda_tflops"]) for r in prefill], w, label="CUDA")
-            ax.bar([i + 0.5 * w for i in x], [float(r["cublas_tflops"]) for r in prefill], w, label="cuBLAS")
-            ax.bar([i + 1.5 * w for i in x], [float(r["pytorch_tflops"]) for r in prefill], w, label="PyTorch")
+            ax.bar(
+                [i - 1.5 * w for i in x],
+                [float(r["cutile_tflops"]) for r in prefill],
+                w,
+                label="CuTile",
+            )
+            ax.bar(
+                [i - 0.5 * w for i in x],
+                [float(r["cuda_tflops"]) for r in prefill],
+                w,
+                label="CUDA",
+            )
+            ax.bar(
+                [i + 0.5 * w for i in x],
+                [float(r["cublas_tflops"]) for r in prefill],
+                w,
+                label="cuBLAS",
+            )
+            ax.bar(
+                [i + 1.5 * w for i in x],
+                [float(r["pytorch_tflops"]) for r in prefill],
+                w,
+                label="PyTorch",
+            )
             ax.set_xticks(x)
             ax.set_xticklabels(shapes, rotation=15)
             ax.set_ylabel("TFLOPS (median)")
@@ -63,9 +82,21 @@ def generate_plots(input_dir: Path) -> List[Path]:
         seqs = [r["seq_len"] for r in layer_rows]
         x = list(range(len(seqs)))
         w = 0.25
-        ax.bar([i - w for i in x], [float(r["tfg_ms"]) for r in layer_rows], w, label="CuTileForge TFG (3 kernels)")
-        ax.bar(x, [float(r["unfused_8k_ms"]) for r in layer_rows], w, label="CUDA Unfused (8 kernels)")
-        ax.bar([i + w for i in x], [float(r["pytorch_ms"]) for r in layer_rows], w, label="PyTorch Eager")
+        ax.bar(
+            [i - w for i in x],
+            [float(r["tfg_ms"]) for r in layer_rows],
+            w,
+            label="CuTileForge TFG (3 kernels)",
+        )
+        ax.bar(
+            x, [float(r["unfused_8k_ms"]) for r in layer_rows], w, label="CUDA Unfused (8 kernels)"
+        )
+        ax.bar(
+            [i + w for i in x],
+            [float(r["pytorch_ms"]) for r in layer_rows],
+            w,
+            label="PyTorch Eager",
+        )
         ax.set_xticks(x)
         ax.set_xticklabels([f"seq={s}" for s in seqs])
         ax.set_ylabel("Latency (ms / layer)")
@@ -142,7 +173,7 @@ def generate_report(input_dir: str | Path, output_md: str | Path) -> Path:
         ("Speculative Decoding (gamma=4)", "speculative.csv"),
     ]
 
-    lines: List[str] = [
+    lines: list[str] = [
         "# CuTileForge Benchmark Results",
         "",
         "**Hardware:** Lenovo IdeaPad 15APH8 | RTX 4060 Laptop GPU (AD107, sm_89, 8 GB GDDR6) | "

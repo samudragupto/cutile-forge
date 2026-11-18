@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import textwrap
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from cutile_forge.forge.fusion_graph import FusionGraph, OpType, TileNode
 from cutile_forge.forge.scheduler import ScheduleEntry, schedule_tfg
@@ -21,12 +21,12 @@ class CompiledKernel:
     kernel_name: str
     op_type: OpType
     source_code: str
-    tile_shape: Tuple[int, int, int]
+    tile_shape: tuple[int, int, int]
     pipeline_depth: int
     target: str
-    cubin_bytes: Optional[bytes] = None
-    symbol: Optional[str] = None
-    kernel_fn: Optional[Any] = None
+    cubin_bytes: bytes | None = None
+    symbol: str | None = None
+    kernel_fn: Any | None = None
 
 
 @dataclass
@@ -36,8 +36,8 @@ class CompiledTFG:
     graph_name: str
     target: str
     pipeline_depth: int
-    kernels: List[CompiledKernel] = field(default_factory=list)
-    schedule: List[ScheduleEntry] = field(default_factory=list)
+    kernels: list[CompiledKernel] = field(default_factory=list)
+    schedule: list[ScheduleEntry] = field(default_factory=list)
 
     def summary(self) -> str:
         lines = [
@@ -52,7 +52,7 @@ class CompiledTFG:
         return "\n".join(lines)
 
 
-def _emit_kernel_source(node: TileNode, pipeline_depth: int) -> Tuple[str, str]:
+def _emit_kernel_source(node: TileNode, pipeline_depth: int) -> tuple[str, str]:
     """Generate clean CuTile Python DSL source for a TileNode."""
     safe_id = node.node_id.replace("-", "_")
     fn_name = f"cutile_{safe_id}_{node.op_type.value}"
@@ -61,8 +61,7 @@ def _emit_kernel_source(node: TileNode, pipeline_depth: int) -> Tuple[str, str]:
     lat = max(1, min(4, pipeline_depth))
 
     if node.op_type in (OpType.FUSED_QKV_ATTN, OpType.ATTENTION_GQA):
-        src = textwrap.dedent(
-            f'''
+        src = textwrap.dedent(f"""
             import cuda.tile as ct
 
             @ct.kernel(occupancy={occ})
@@ -104,13 +103,11 @@ def _emit_kernel_source(node: TileNode, pipeline_depth: int) -> Tuple[str, str]:
                     m_i = m_new
                 ct.store(o_ptr, index=(bh_q, q_tile_idx, 0),
                          tile=ct.reshape(ct.astype(acc / ct.maximum(l_i, 1.0e-6), ct.float16), (1, bq, d_head)))
-            '''
-        ).strip()
+            """).strip()
         return fn_name, src
 
     if node.op_type in (OpType.FUSED_FFN, OpType.FUSED_FFN_NORM):
-        src = textwrap.dedent(
-            f'''
+        src = textwrap.dedent(f"""
             import cuda.tile as ct
 
             @ct.kernel(occupancy={occ})
@@ -134,16 +131,14 @@ def _emit_kernel_source(node: TileNode, pipeline_depth: int) -> Tuple[str, str]:
                     twd = ct.load(wd_ptr, index=(pid_h, d_tile), shape=(th, td), padding_mode=ct.PaddingMode.ZERO, latency={lat})
                     out = ct.mma(act, twd, ct.zeros((tm, td), dtype=ct.float32))
                     ct.store(y_part_ptr, index=(row_off, d_tile), tile=ct.astype(out, ct.float16))
-            '''
-        ).strip()
+            """).strip()
         return fn_name, src
 
     # Default tiled GEMM / Fused O-proj + Norm / GEMM+SiLU lowering
     epilogue = ""
     if node.op_type == OpType.GEMM_SILU:
         epilogue = "    acc = acc * (1.0 / (1.0 + ct.exp(-acc)))"
-    src = textwrap.dedent(
-        f'''
+    src = textwrap.dedent(f"""
         import cuda.tile as ct
 
         @ct.kernel(occupancy={occ})
@@ -161,12 +156,11 @@ def _emit_kernel_source(node: TileNode, pipeline_depth: int) -> Tuple[str, str]:
                 acc = ct.mma(ta, tb, acc)
         {epilogue}
             ct.store(c_ptr, index=(pid_m, pid_n), tile=ct.astype(acc, ct.float16))
-        '''
-    ).strip()
+        """).strip()
     return fn_name, src
 
 
-def _bind_live_kernel(node: TileNode) -> Optional[Any]:
+def _bind_live_kernel(node: TileNode) -> Any | None:
     """Attach the matching live @ct.kernel callable from cutile_forge.kernels if available."""
     try:
         from cutile_forge.kernels import (
@@ -193,7 +187,7 @@ def _bind_live_kernel(node: TileNode) -> Optional[Any]:
     return mapping.get(node.op_type, gemm_dequant.gemm_fp16_kernel)
 
 
-def _try_compile_cubin(node: TileNode, target: str) -> Tuple[Optional[bytes], Optional[str]]:
+def _try_compile_cubin(node: TileNode, target: str) -> tuple[bytes | None, str | None]:
     """Compile a canonical CuTile kernel to cubin/SASS via cuda.tile.compilation."""
     try:
         import io
@@ -201,6 +195,7 @@ def _try_compile_cubin(node: TileNode, target: str) -> Tuple[Optional[bytes], Op
         import cuda.tile as ct
         import cuda.tile.compilation as cc
         import torch
+
         from cutile_forge.kernels.gemm_dequant import gemm_fp16_kernel
     except Exception:
         return None, None
@@ -254,11 +249,11 @@ def compile_tfg(
     attach_weight_streaming(graph)
     schedule = schedule_tfg(graph)
 
-    kernels: List[CompiledKernel] = []
+    kernels: list[CompiledKernel] = []
     for node in graph.topological_order():
         fn_name, src = _emit_kernel_source(node, pipeline_depth=node.pipeline_stages)
-        cubin_bytes: Optional[bytes] = None
-        symbol: Optional[str] = None
+        cubin_bytes: bytes | None = None
+        symbol: str | None = None
         if compile_cubin:
             cubin_bytes, symbol = _try_compile_cubin(node, target=target)
         kernels.append(

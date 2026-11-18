@@ -66,4 +66,3 @@ def test_layernorm_and_rmsnorm_residual() -> None:
     ).half()
     assert (r_rms - comb).abs().max().item() < 1e-3
     assert (n_rms - ref_rms).abs().max().item() < 1e-3
-

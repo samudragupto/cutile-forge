@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import time
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import torch
 
@@ -18,8 +18,8 @@ from cutile_forge.utils.memory import get_peak_vram_gb, reset_peak_vram
 
 def run_long_context_benchmark(
     model_dir: Path,
-    contexts: List[int] | None = None,
-) -> List[Dict[str, Any]]:
+    contexts: list[int] | None = None,
+) -> list[dict[str, Any]]:
     """Measure decode latency and KV-cache eviction across 4K/8K/16K/32K contexts."""
     if (model_dir / "config.json").exists():
         model = Mistral7B.from_pretrained(model_dir, device="cuda")
@@ -27,7 +27,7 @@ def run_long_context_benchmark(
         model = Mistral7B.from_random(ModelConfig(num_hidden_layers=8), device="cuda")
 
     ctx_lens = contexts or [4096, 8192, 16384, 32768]
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
 
     for ctx_len in ctx_lens:
         # 1.5 GB GPU KV budget triggers CPU DDR5 paging for long contexts on 8 GB VRAM
@@ -63,7 +63,7 @@ def run_long_context_benchmark(
             step_ms = (time.perf_counter() - t0) * 1000.0
 
         vram = get_peak_vram_gb()
-        row: Dict[str, Any] = {
+        row: dict[str, Any] = {
             "context_len": ctx_len,
             "decode_step_ms": round(step_ms, 2),
             "kv_evictions": kv.evictions,

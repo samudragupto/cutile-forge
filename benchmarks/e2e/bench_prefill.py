@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import time
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import torch
 
@@ -23,15 +23,17 @@ def _load_model(model_dir: Path) -> Mistral7B:
 
 def run_prefill_benchmark(
     model_dir: Path,
-    prompt_lens: List[int] | None = None,
-) -> List[Dict[str, Any]]:
+    prompt_lens: list[int] | None = None,
+) -> list[dict[str, Any]]:
     """Measure prefill latency, tokens/s, and peak VRAM across prompt lengths."""
     model = _load_model(model_dir)
     lens = prompt_lens or [128, 512, 2048, 4096]
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
 
     for seq_len in lens:
-        prompt = torch.randint(1, model.config.vocab_size, (1, seq_len), device="cuda", dtype=torch.long)
+        prompt = torch.randint(
+            1, model.config.vocab_size, (1, seq_len), device="cuda", dtype=torch.long
+        )
         with torch.inference_mode():
             # Warmup once on smaller slice
             _ = model.forward(prompt[:, : min(32, seq_len)], last_token_only=True)
@@ -44,7 +46,7 @@ def run_prefill_benchmark(
 
         tps = (seq_len * 1000.0) / max(ms, 1e-6)
         vram = get_peak_vram_gb()
-        row: Dict[str, Any] = {
+        row: dict[str, Any] = {
             "prompt_tokens": seq_len,
             "prefill_ms": round(ms, 2),
             "tokens_per_sec": round(tps, 2),

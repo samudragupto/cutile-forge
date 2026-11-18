@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional
 
 import torch
 
@@ -29,7 +28,7 @@ class SpeculativeDecoder:
     def __init__(
         self,
         target_model: Mistral7B,
-        draft_model: Optional[Mistral7B] = None,
+        draft_model: Mistral7B | None = None,
         gamma: int = 4,
     ) -> None:
         self.target = target_model
@@ -41,7 +40,7 @@ class SpeculativeDecoder:
         self,
         prompt_ids: torch.Tensor,
         max_new_tokens: int = 64,
-    ) -> tuple[List[int], SpeculativeStats]:
+    ) -> tuple[list[int], SpeculativeStats]:
         """Run greedy speculative decoding with `gamma` draft tokens verified in parallel."""
         import time
 
@@ -59,7 +58,7 @@ class SpeculativeDecoder:
         t0 = time.perf_counter()
         logits = self.target.forward(prompt_ids, kv_cache=kv, pos_offset=0)
         cur_tok = int(logits[:, -1, :].argmax(dim=-1).item())
-        generated: List[int] = [cur_tok]
+        generated: list[int] = [cur_tok]
         pos = int(prompt_ids.shape[1])
 
         draft_steps = 0
@@ -68,16 +67,20 @@ class SpeculativeDecoder:
         while len(generated) < max_new_tokens:
             draft_steps += 1
             # Draft `gamma` tokens using first few layers / draft model
-            draft_toks: List[int] = []
+            draft_toks: list[int] = []
             ctx = torch.tensor([[cur_tok]], device=self.target.device, dtype=torch.long)
             for _ in range(self.gamma):
-                d_logits = self.draft.forward(ctx[:, -1:], kv_cache=None, pos_offset=pos + len(draft_toks))
+                d_logits = self.draft.forward(
+                    ctx[:, -1:], kv_cache=None, pos_offset=pos + len(draft_toks)
+                )
                 nxt = int(d_logits[:, -1, :].argmax(dim=-1).item())
                 draft_toks.append(nxt)
                 ctx = torch.cat([ctx, torch.tensor([[nxt]], device=self.target.device)], dim=1)
 
             # Verify [cur_tok, draft_0, ..., draft_{gamma-1}] in one batched target forward
-            verify_in = torch.tensor([[cur_tok] + draft_toks], device=self.target.device, dtype=torch.long)
+            verify_in = torch.tensor(
+                [[cur_tok] + draft_toks], device=self.target.device, dtype=torch.long
+            )
             t_logits = self.target.forward(verify_in, kv_cache=kv, pos_offset=pos)
             target_preds = t_logits[0].argmax(dim=-1).tolist()
 

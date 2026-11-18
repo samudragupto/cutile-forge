@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Optional
 
 import torch
 
@@ -15,8 +14,8 @@ class PrefetchSlot:
     """Tracks an asynchronous H2D transfer for a layer or tensor."""
 
     layer_idx: int
-    gpu_tensors: Dict[str, torch.Tensor]
-    ready_event: Optional[torch.cuda.Event]
+    gpu_tensors: dict[str, torch.Tensor]
+    ready_event: torch.cuda.Event | None
     bytes_transferred: int
 
 
@@ -28,7 +27,7 @@ class WeightStreamer:
         self.device = torch.device(device)
         self.use_cuda = self.device.type == "cuda" and torch.cuda.is_available()
         self.copy_stream = torch.cuda.Stream(device=self.device) if self.use_cuda else None
-        self._slots: Dict[int, PrefetchSlot] = {}
+        self._slots: dict[int, PrefetchSlot] = {}
         self.total_bytes_streamed = 0
 
     @staticmethod
@@ -45,7 +44,7 @@ class WeightStreamer:
     def prefetch_layer(
         self,
         layer_idx: int,
-        host_weights: Dict[str, torch.Tensor],
+        host_weights: dict[str, torch.Tensor],
     ) -> PrefetchSlot:
         """Schedule asynchronous H2D DMA copy for `layer_idx` on the dedicated copy stream."""
         if layer_idx in self._slots:
@@ -56,9 +55,9 @@ class WeightStreamer:
             oldest_key = next(iter(self._slots))
             del self._slots[oldest_key]
 
-        gpu_tensors: Dict[str, torch.Tensor] = {}
+        gpu_tensors: dict[str, torch.Tensor] = {}
         total_bytes = 0
-        event: Optional[torch.cuda.Event] = None
+        event: torch.cuda.Event | None = None
 
         if self.use_cuda and self.copy_stream is not None:
             with torch.cuda.stream(self.copy_stream):
@@ -88,9 +87,9 @@ class WeightStreamer:
     def acquire_layer(
         self,
         layer_idx: int,
-        host_weights: Dict[str, torch.Tensor] | None = None,
-        compute_stream: Optional[torch.cuda.Stream] = None,
-    ) -> Dict[str, torch.Tensor]:
+        host_weights: dict[str, torch.Tensor] | None = None,
+        compute_stream: torch.cuda.Stream | None = None,
+    ) -> dict[str, torch.Tensor]:
         """Wait on DMA barrier for `layer_idx` and return resident GPU weight tensors."""
         if layer_idx not in self._slots:
             if host_weights is None:

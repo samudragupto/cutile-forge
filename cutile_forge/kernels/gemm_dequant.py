@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Tuple
-
 import cuda.tile as ct
 import torch
 
@@ -125,7 +123,7 @@ def gemm_dequant_kernel(
     ct.store(c_ptr, index=(pid_m, pid_n), tile=ct.astype(acc, ct.float16))
 
 
-def _select_gemm_tiles(m: int, group_size: int = 128) -> Tuple[int, int, int]:
+def _select_gemm_tiles(m: int, group_size: int = 128) -> tuple[int, int, int]:
     """Select optimal tile shape (TM, TN, TK) based on batch/sequence length M."""
     tk = 64 if group_size >= 64 else 32
     if m <= 16:
@@ -164,7 +162,7 @@ def unpack_int4_weights_torch(
 def cutile_gemm_fp16(
     a: torch.Tensor,
     b: torch.Tensor,
-    tile_shape: Tuple[int, int, int] | None = None,
+    tile_shape: tuple[int, int, int] | None = None,
 ) -> torch.Tensor:
     """Run tiled FP16 GEMM: (M, K) @ (K, N) -> (M, N) using CuTile."""
     if a.ndim != 2 or b.ndim != 2:
@@ -190,7 +188,7 @@ def fused_gemm_dequant(
     scales: torch.Tensor,
     zeros: torch.Tensor,
     group_size: int = 128,
-    tile_shape: Tuple[int, int, int] | None = None,
+    tile_shape: tuple[int, int, int] | None = None,
 ) -> torch.Tensor:
     """Run fused INT4 dequantization + GEMM in a single CuTile kernel.
 

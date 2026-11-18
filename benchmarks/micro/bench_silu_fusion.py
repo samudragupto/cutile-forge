@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import torch
 
@@ -15,10 +15,10 @@ from cutile_forge.kernels.gemm_dequant_silu import fused_gemm_dequant_silu
 
 
 def run_silu_fusion_benchmark(
-    seq_lens: List[int] | None = None,
+    seq_lens: list[int] | None = None,
     warmup: int = 5,
     iters: int = 50,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Compare fused GEMM+dequant+SiLU against separate GEMM+dequant + CUDA SiLU."""
     baselines = load_baselines()
     seqs = seq_lens or [1, 64, 256, 512]
@@ -28,7 +28,7 @@ def run_silu_fusion_benchmark(
     s = torch.rand((k_dim // gs, n_dim), device="cuda", dtype=torch.float16) * 0.05 + 0.01
     z = torch.randint(4, 12, (k_dim // gs, n_dim), device="cuda", dtype=torch.float16)
 
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     for seq in seqs:
         x = torch.randn((seq, k_dim), device="cuda", dtype=torch.float16) * 0.05
 
@@ -46,7 +46,7 @@ def run_silu_fusion_benchmark(
         )
 
         speedup = st_sep.p50_ms / max(st_fused.p50_ms, 1e-6)
-        row: Dict[str, Any] = {
+        row: dict[str, Any] = {
             "seq_len": seq,
             "fused_ms": round(st_fused.p50_ms, 4),
             "separate_ms": round(st_sep.p50_ms, 4),

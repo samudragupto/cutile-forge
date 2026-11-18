@@ -48,4 +48,3 @@ def test_greedy_mistral_real_if_available(model_dir: Path) -> None:
     toks_ct = engine.generate_ids(prompt, max_new_tokens=16, temperature=0.0, backend="cutile")
     toks_pt = engine.generate_ids(prompt, max_new_tokens=16, temperature=0.0, backend="pytorch")
     assert toks_ct == toks_pt
-

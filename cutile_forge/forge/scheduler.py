@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Tuple
 
 from cutile_forge.forge.fusion_graph import FusionGraph
 
@@ -14,15 +13,15 @@ class ScheduleEntry:
 
     node_id: str
     order: int
-    grid: Tuple[int, int, int]
+    grid: tuple[int, int, int]
     swizzle_group_m: int
     estimated_waves: float
     stream_id: int
 
 
-def schedule_tfg(graph: FusionGraph, num_sms: int = 24) -> List[ScheduleEntry]:
+def schedule_tfg(graph: FusionGraph, num_sms: int = 24) -> list[ScheduleEntry]:
     """Assign grid dimensions, L2 swizzle group, and wave estimates across SMs."""
-    entries: List[ScheduleEntry] = []
+    entries: list[ScheduleEntry] = []
     for idx, node in enumerate(graph.topological_order()):
         m = int(node.attrs.get("M", 256))
         n = int(node.attrs.get("N", 4096))

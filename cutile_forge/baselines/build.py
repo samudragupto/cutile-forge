@@ -8,7 +8,6 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import List
 
 
 def _find_vcvars64() -> Path | None:
@@ -77,7 +76,7 @@ def build_baselines(verbose: bool = True) -> Path:
     build_dir = baselines_dir / "build"
     build_dir.mkdir(parents=True, exist_ok=True)
 
-    sources: List[str] = [str(baselines_dir / "bindings.cpp")]
+    sources: list[str] = [str(baselines_dir / "bindings.cpp")]
     for cu_name in [
         "cuda_gemm.cu",
         "cuda_gemm_dequant.cu",

@@ -9,9 +9,7 @@ import torch.nn.functional as F
 from cutile_forge.kernels.attention_gqa import fused_attention_gqa
 
 
-def _ref_gqa(
-    q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, causal: bool
-) -> torch.Tensor:
+def _ref_gqa(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, causal: bool) -> torch.Tensor:
     hq, hkv = q.shape[1], k.shape[1]
     k_rep = k.repeat_interleave(hq // hkv, dim=1)
     v_rep = v.repeat_interleave(hq // hkv, dim=1)
@@ -45,4 +43,3 @@ def test_attention_gqa(b: int, hq: int, hkv: int, sq: int, skv: int, causal: boo
     out = fused_attention_gqa(q, k, v, causal=causal)
     ref = _ref_gqa(q, k, v, causal=causal)
     assert (out - ref).abs().max().item() < 1e-2
-

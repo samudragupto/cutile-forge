@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Iterator, List, Optional
 
 import torch
 
@@ -46,7 +46,7 @@ class InferenceEngine:
             gpu_budget_bytes=kv_gpu_budget_bytes,
             device=model.device,
         )
-        self.last_stats: Optional[GenerationStats] = None
+        self.last_stats: GenerationStats | None = None
 
     @torch.inference_mode()
     def generate_ids(
@@ -56,9 +56,9 @@ class InferenceEngine:
         temperature: float = 0.0,
         top_k: int = 50,
         top_p: float = 0.9,
-        eos_token_id: Optional[int] = None,
+        eos_token_id: int | None = None,
         backend: str = "cutile",
-    ) -> List[int]:
+    ) -> list[int]:
         """Generate token IDs autoregressively from `prompt_ids` of shape `(1, S)`."""
         if prompt_ids.ndim == 1:
             prompt_ids = prompt_ids.unsqueeze(0)
@@ -81,7 +81,7 @@ class InferenceEngine:
         next_tok = sample_tokens(
             logits[:, -1, :], temperature=temperature, top_k=top_k, top_p=top_p
         )
-        generated: List[int] = [int(next_tok.item())]
+        generated: list[int] = [int(next_tok.item())]
         pos = int(prompt_ids.shape[1])
 
         t_dec0 = time.perf_counter()
@@ -124,7 +124,7 @@ class InferenceEngine:
         temperature: float = 0.0,
         top_k: int = 50,
         top_p: float = 0.9,
-        eos_token_id: Optional[int] = None,
+        eos_token_id: int | None = None,
         backend: str = "cutile",
     ) -> Iterator[int]:
         """Yield generated token IDs one by one."""
@@ -157,4 +157,3 @@ class InferenceEngine:
             pos += 1
             if eos_token_id is not None and tok_id == eos_token_id:
                 break
-

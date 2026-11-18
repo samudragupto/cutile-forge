@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Dict
-
 import torch
 
 
@@ -27,7 +25,7 @@ def reset_peak_vram(device: int = 0) -> None:
         torch.cuda.reset_peak_memory_stats(device)
 
 
-def get_vram_summary(device: int = 0) -> Dict[str, float]:
+def get_vram_summary(device: int = 0) -> dict[str, float]:
     """Return allocated, reserved, peak, and total VRAM in GB."""
     if not torch.cuda.is_available():
         return {"allocated_gb": 0.0, "reserved_gb": 0.0, "peak_gb": 0.0, "total_gb": 0.0}

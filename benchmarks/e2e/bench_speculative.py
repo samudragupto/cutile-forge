@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import torch
 
@@ -19,7 +19,7 @@ def run_speculative_benchmark(
     model_dir: Path,
     gamma: int = 4,
     max_tokens: int = 64,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Compare speculative decoding (`gamma=4`) against standard decode."""
     if (model_dir / "config.json").exists():
         from transformers import AutoTokenizer
@@ -57,7 +57,7 @@ def run_speculative_benchmark(
     spec = SpeculativeDecoder(target_model=model, draft_model=draft, gamma=gamma)
     _, st = spec.generate(prompt, max_new_tokens=max_tokens)
 
-    row: Dict[str, Any] = {
+    row: dict[str, Any] = {
         "gamma": gamma,
         "tokens_generated": st.tokens_generated,
         "acceptance_rate": round(st.acceptance_rate, 3),

@@ -61,4 +61,3 @@ def test_32_layers() -> None:
 
     err = (h_ct - h_pt).abs().max().item()
     assert err < 1e-2, f"32-layer max_abs_err={err}"
-

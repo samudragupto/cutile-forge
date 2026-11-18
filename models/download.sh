@@ -8,3 +8,4 @@ echo "=== Verifying ==="
 ls -lh "${OUT_DIR}"
 du -sh "${OUT_DIR}"
 echo "=== Done ==="
+

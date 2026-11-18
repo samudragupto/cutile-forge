@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 
 @dataclass
@@ -46,10 +46,10 @@ class ModelConfig:
         return self.num_attention_heads // self.num_key_value_heads
 
     @classmethod
-    def from_json(cls, path: str | Path) -> "ModelConfig":
+    def from_json(cls, path: str | Path) -> ModelConfig:
         """Load ModelConfig from a HuggingFace config.json (plus optional quantize_config.json)."""
         cfg_path = Path(path)
-        data: Dict[str, Any] = json.loads(cfg_path.read_text(encoding="utf-8"))
+        data: dict[str, Any] = json.loads(cfg_path.read_text(encoding="utf-8"))
         q_path = cfg_path.parent / "quantize_config.json"
         if q_path.exists():
             q_data = json.loads(q_path.read_text(encoding="utf-8"))

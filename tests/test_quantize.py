@@ -5,7 +5,11 @@ from __future__ import annotations
 import pytest
 import torch
 
-from cutile_forge.utils.quantize import dequantize_4bit_group, quantize_4bit_group, unpack_gptq_layer
+from cutile_forge.utils.quantize import (
+    dequantize_4bit_group,
+    quantize_4bit_group,
+    unpack_gptq_layer,
+)
 
 
 def test_4bit_roundtrip_accuracy() -> None:
@@ -28,7 +32,7 @@ def test_4bit_exact_integer_grid() -> None:
 
 def test_unpack_gptq_layer() -> None:
     k, n, gs = 128, 32, 128
-    qw_i32 = torch.randint(-2**31, 2**31 - 1, (k // 8, n), dtype=torch.int32)
+    qw_i32 = torch.randint(-(2**31), 2**31 - 1, (k // 8, n), dtype=torch.int32)
     qz_i32 = torch.zeros((k // gs, n // 8), dtype=torch.int32)
     scales = torch.ones((k // gs, n), dtype=torch.float16) * 0.1
     qw_u8, s_out, z_out, perm = unpack_gptq_layer(qw_i32, qz_i32, scales, group_size=gs)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import csv
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from cutile_forge.bench.nvml_logger import NVMLLogger
 
@@ -16,18 +16,20 @@ class ThermalLogger:
         self.output_csv = Path(output_csv)
         self.output_csv.parent.mkdir(parents=True, exist_ok=True)
         self.nvml = NVMLLogger(device_index=device_index)
-        self.rows: List[Dict[str, Any]] = []
+        self.rows: list[dict[str, Any]] = []
         self._base_clock: int = 0
 
-    def record(self, elapsed_s: float, tok_s: float) -> Dict[str, Any]:
+    def record(self, elapsed_s: float, tok_s: float) -> dict[str, Any]:
         sample = self.nvml.sample_once()
         if self._base_clock == 0 and sample.sm_clock_mhz > 0:
             self._base_clock = sample.sm_clock_mhz
         throttle_pct = 0.0
         if self._base_clock > 0 and sample.sm_clock_mhz < self._base_clock:
-            throttle_pct = ((self._base_clock - sample.sm_clock_mhz) / float(self._base_clock)) * 100.0
+            throttle_pct = (
+                (self._base_clock - sample.sm_clock_mhz) / float(self._base_clock)
+            ) * 100.0
 
-        row: Dict[str, Any] = {
+        row: dict[str, Any] = {
             "timestamp_s": round(elapsed_s, 2),
             "temp_c": round(sample.temp_c, 1),
             "power_w": round(sample.power_w, 2),

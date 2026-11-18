@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from dataclasses import dataclass
-from typing import Dict, List, Tuple
 
 import torch
 
@@ -45,11 +44,13 @@ class PagedKVCache:
         self.head_dim = head_dim
         self.page_size = page_size
         self.gpu_budget_bytes = gpu_budget_bytes
-        self.device = torch.device(device if (str(device) != "cuda" or torch.cuda.is_available()) else "cpu")
+        self.device = torch.device(
+            device if (str(device) != "cuda" or torch.cuda.is_available()) else "cpu"
+        )
         self.dtype = dtype
 
-        self.pages: Dict[Tuple[int, int], KVPage] = {}
-        self.gpu_lru: "OrderedDict[Tuple[int, int], int]" = OrderedDict()
+        self.pages: dict[tuple[int, int], KVPage] = {}
+        self.gpu_lru: OrderedDict[tuple[int, int], int] = OrderedDict()
         self.gpu_used_bytes: int = 0
         self.seq_len: int = 0
         self.evictions: int = 0
@@ -74,7 +75,7 @@ class PagedKVCache:
                 page.on_gpu = False
                 self.evictions += 1
 
-    def _ensure_on_gpu(self, key: Tuple[int, int]) -> KVPage:
+    def _ensure_on_gpu(self, key: tuple[int, int]) -> KVPage:
         page = self.pages[key]
         if not page.on_gpu and self.device.type == "cuda":
             self._evict_if_needed(page.nbytes)
@@ -149,7 +150,7 @@ class PagedKVCache:
         max_page = max(layer_pages, key=lambda p: p.page_idx)
         return max_page.page_idx * self.page_size + max_page.valid_tokens
 
-    def get_kv(self, layer_idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
+    def get_kv(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor]:
         """Gather full `(1, H_kv, S_kv, D)` K and V tensors on `self.device`."""
         layer_keys = sorted(k for k in self.pages if k[0] == layer_idx)
         if not layer_keys:
@@ -160,8 +161,8 @@ class PagedKVCache:
             )
             return empty, empty
 
-        k_chunks: List[torch.Tensor] = []
-        v_chunks: List[torch.Tensor] = []
+        k_chunks: list[torch.Tensor] = []
+        v_chunks: list[torch.Tensor] = []
         for key in layer_keys:
             page = self._ensure_on_gpu(key)
             n = page.valid_tokens

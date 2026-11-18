@@ -67,7 +67,9 @@ def run_sustained_benchmark(
             break
 
     csv_path = logger.save()
-    print(f"Sustained run complete: {total_tokens} tokens, {len(logger.rows)} samples -> {csv_path}")
+    print(
+        f"Sustained run complete: {total_tokens} tokens, {len(logger.rows)} samples -> {csv_path}"
+    )
     return csv_path
 
 

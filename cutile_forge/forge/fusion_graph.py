@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from enum import StrEnum
+from typing import Any
 
 
-class OpType(str, Enum):
+class OpType(StrEnum):
     """Supported primitive and fused tile operations in a TFG."""
 
     DEQUANT = "dequant"
@@ -37,7 +37,7 @@ class DataTensor:
     """Tensor descriptor flowing along TFG edges."""
 
     name: str
-    shape: Tuple[int, ...]
+    shape: tuple[int, ...]
     dtype: str = "float16"
     residency: str = "hbm"  # "hbm", "ddr5", "sram", "register"
     quantized: bool = False
@@ -64,14 +64,14 @@ class TileNode:
     node_id: str
     op_type: OpType
     name: str
-    inputs: List[DataTensor] = field(default_factory=list)
-    outputs: List[DataTensor] = field(default_factory=list)
-    tile_shape: Tuple[int, int, int] = (128, 128, 64)
+    inputs: list[DataTensor] = field(default_factory=list)
+    outputs: list[DataTensor] = field(default_factory=list)
+    tile_shape: tuple[int, int, int] = (128, 128, 64)
     pipeline_stages: int = 1
     prefetch_stage: int = -1
     occupancy: int = 2
-    attrs: Dict[str, Any] = field(default_factory=dict)
-    fused_ops: List[str] = field(default_factory=list)
+    attrs: dict[str, Any] = field(default_factory=dict)
+    fused_ops: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if not self.fused_ops:
@@ -92,8 +92,8 @@ class FusionGraph:
 
     def __init__(self, name: str = "tfg_layer") -> None:
         self.name = name
-        self.nodes: Dict[str, TileNode] = {}
-        self.edges: List[Edge] = []
+        self.nodes: dict[str, TileNode] = {}
+        self.edges: list[Edge] = []
 
     def add_node(self, node: TileNode) -> TileNode:
         if node.node_id in self.nodes:
@@ -112,16 +112,16 @@ class FusionGraph:
         self.edges.append(edge)
         return edge
 
-    def predecessors(self, node_id: str) -> List[str]:
+    def predecessors(self, node_id: str) -> list[str]:
         return [e.src_id for e in self.edges if e.dst_id == node_id]
 
-    def successors(self, node_id: str) -> List[str]:
+    def successors(self, node_id: str) -> list[str]:
         return [e.dst_id for e in self.edges if e.src_id == node_id]
 
-    def outgoing_edges(self, node_id: str) -> List[Edge]:
+    def outgoing_edges(self, node_id: str) -> list[Edge]:
         return [e for e in self.edges if e.src_id == node_id]
 
-    def incoming_edges(self, node_id: str) -> List[Edge]:
+    def incoming_edges(self, node_id: str) -> list[Edge]:
         return [e for e in self.edges if e.dst_id == node_id]
 
     def remove_node(self, node_id: str) -> None:
@@ -136,7 +136,7 @@ class FusionGraph:
         dst_id: str,
         new_op: OpType,
         new_name: str | None = None,
-        attrs: Dict[str, Any] | None = None,
+        attrs: dict[str, Any] | None = None,
     ) -> TileNode:
         """Merge `src_id -> dst_id` into a single fused TileNode preserving external edges."""
         src = self.nodes[src_id]
@@ -158,7 +158,7 @@ class FusionGraph:
         )
 
         # Redirect incoming edges to dst (excluding src->dst) and outgoing edges from dst
-        new_edges: List[Edge] = []
+        new_edges: list[Edge] = []
         for edge in self.edges:
             if edge.src_id == src_id and edge.dst_id == dst_id:
                 continue
@@ -174,16 +174,16 @@ class FusionGraph:
         self.edges = new_edges
         return fused
 
-    def topological_order(self) -> List[TileNode]:
+    def topological_order(self) -> list[TileNode]:
         """Return nodes in topological order; raises ValueError if a cycle exists."""
-        in_deg: Dict[str, int] = {nid: 0 for nid in self.nodes}
+        in_deg: dict[str, int] = {nid: 0 for nid in self.nodes}
         for edge in self.edges:
             if edge.src_id not in self.nodes or edge.dst_id not in self.nodes:
                 raise ValueError(f"Dangling edge: {edge.src_id} -> {edge.dst_id}")
             in_deg[edge.dst_id] += 1
 
         queue = deque([nid for nid, deg in in_deg.items() if deg == 0])
-        ordered: List[TileNode] = []
+        ordered: list[TileNode] = []
         while queue:
             nid = queue.popleft()
             ordered.append(self.nodes[nid])
@@ -210,7 +210,7 @@ class FusionGraph:
 
 def build_mistral_layer_tfg(
     layer_idx: int = 0,
-    config: Optional[Any] = None,
+    config: Any | None = None,
     seq_len: int = 256,
 ) -> FusionGraph:
     """Build the 8-node unfused TFG for a Mistral-7B transformer layer."""
@@ -250,7 +250,12 @@ def build_mistral_layer_tfg(
             name="GQA Attention",
             inputs=[t_qkv],
             outputs=[t_attn],
-            attrs={"layer": layer_idx, "n_heads": n_heads, "n_kv_heads": n_kv_heads, "head_dim": head_dim},
+            attrs={
+                "layer": layer_idx,
+                "n_heads": n_heads,
+                "n_kv_heads": n_kv_heads,
+                "head_dim": head_dim,
+            },
         )
     )
     n2 = g.add_node(

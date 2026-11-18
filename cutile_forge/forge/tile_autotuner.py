@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Tuple
 
 import torch
 
@@ -21,12 +20,12 @@ class TileConfig:
     pipeline_stages: int
 
     @property
-    def shape(self) -> Tuple[int, int, int]:
+    def shape(self) -> tuple[int, int, int]:
         return (self.tm, self.tn, self.tk)
 
 
 # 12 tuned candidate configurations targeting Ada (sm_89) and Ampere+ GPUs
-CANDIDATE_TILE_CONFIGS: List[TileConfig] = [
+CANDIDATE_TILE_CONFIGS: list[TileConfig] = [
     TileConfig(16, 64, 64, occupancy=4, pipeline_stages=3),
     TileConfig(16, 128, 64, occupancy=4, pipeline_stages=3),
     TileConfig(32, 64, 64, occupancy=4, pipeline_stages=3),
@@ -48,9 +47,9 @@ class TileAutotuner:
     def __init__(self, target: str = "sm_89", smem_limit_bytes: int = SM89_MAX_SMEM_BYTES) -> None:
         self.target = target
         self.smem_limit_bytes = smem_limit_bytes
-        self._cache: Dict[Tuple[int, int, int, bool], TileConfig] = {}
+        self._cache: dict[tuple[int, int, int, bool], TileConfig] = {}
 
-    def valid_configs(self, quantized: bool = False) -> List[TileConfig]:
+    def valid_configs(self, quantized: bool = False) -> list[TileConfig]:
         """Return candidate configs that fit within target shared-memory budget."""
         return [
             cfg
@@ -104,8 +103,16 @@ class TileAutotuner:
             filtered = [c for c in candidates if c.tm <= max(16, m * 2)] or candidates[:4]
             for cfg in filtered:
                 try:
+
+                    def _run_cfg(
+                        a: torch.Tensor = a,
+                        b: torch.Tensor = b,
+                        shape: tuple[int, int, int] = cfg.shape,
+                    ) -> torch.Tensor:
+                        return cutile_gemm_fp16(a, b, tile_shape=shape)
+
                     st = benchmark(
-                        lambda a=a, b=b, cfg=cfg: cutile_gemm_fp16(a, b, tile_shape=cfg.shape),
+                        _run_cfg,
                         warmup=warmup,
                         iters=iters,
                         name=f"{cfg.tm}x{cfg.tn}x{cfg.tk}",

@@ -332,4 +332,3 @@ def fused_ffn_dequant_up_silu_down(
         ),
     )
     return y_part.view(nh, m_pad, d)[:, :m, :].sum(dim=0)
-

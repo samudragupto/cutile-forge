@@ -18,3 +18,4 @@ python models/download.py --output D:/models/mistral_7b_4bit/
 | `model.safetensors` | 4-bit GPTQ weights (`TheBloke/Mistral-7B-v0.1-GPTQ`) | ~4.16 GB |
 
 Total size: **~4.16 GB** (fits alongside KV-cache and activations on an 8 GB VRAM RTX 4060, or streams via Stage -1 pinned DDR5 DMA).
+

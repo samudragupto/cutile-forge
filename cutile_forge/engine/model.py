@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import math
 from pathlib import Path
-from typing import List, Optional, Tuple
 
 import torch
 import torch.nn.functional as F
@@ -77,7 +75,7 @@ class MistralLayer:
         weights: MistralLayerWeights,
         cos: torch.Tensor,
         sin: torch.Tensor,
-        kv_cache: Optional[PagedKVCache] = None,
+        kv_cache: PagedKVCache | None = None,
         pos_offset: int = 0,
     ) -> torch.Tensor:
         """Execute one layer using fused CuTile kernels."""
@@ -90,9 +88,15 @@ class MistralLayer:
         k = _quant_linear_cutile(x_norm, weights.k_proj)
         v = _quant_linear_cutile(x_norm, weights.v_proj)
 
-        q = q.view(bsz, seq_len, self.config.num_attention_heads, self.config.head_dim).transpose(1, 2)
-        k = k.view(bsz, seq_len, self.config.num_key_value_heads, self.config.head_dim).transpose(1, 2)
-        v = v.view(bsz, seq_len, self.config.num_key_value_heads, self.config.head_dim).transpose(1, 2)
+        q = q.view(bsz, seq_len, self.config.num_attention_heads, self.config.head_dim).transpose(
+            1, 2
+        )
+        k = k.view(bsz, seq_len, self.config.num_key_value_heads, self.config.head_dim).transpose(
+            1, 2
+        )
+        v = v.view(bsz, seq_len, self.config.num_key_value_heads, self.config.head_dim).transpose(
+            1, 2
+        )
 
         q = apply_rope(q, cos, sin, position_offset=pos_offset)
         k = apply_rope(k, cos, sin, position_offset=pos_offset)
@@ -112,7 +116,11 @@ class MistralLayer:
             o_proj, x_2d, weights.post_attention_layernorm, eps=self.config.rms_norm_eps
         )
 
-        gate_in = post_norm[:, weights.gate_proj.perm] if weights.gate_proj.perm is not None else post_norm
+        gate_in = (
+            post_norm[:, weights.gate_proj.perm]
+            if weights.gate_proj.perm is not None
+            else post_norm
+        )
         gate_act = fused_gemm_dequant_silu(
             gate_in,
             weights.gate_proj.qweight,
@@ -131,7 +139,7 @@ class MistralLayer:
         weights: MistralLayerWeights,
         cos: torch.Tensor,
         sin: torch.Tensor,
-        kv_cache: Optional[PagedKVCache] = None,
+        kv_cache: PagedKVCache | None = None,
         pos_offset: int = 0,
     ) -> torch.Tensor:
         """Reference PyTorch execution using identical dequantized 4-bit weights."""
@@ -143,9 +151,15 @@ class MistralLayer:
         k = _quant_linear_pytorch(x_norm, weights.k_proj)
         v = _quant_linear_pytorch(x_norm, weights.v_proj)
 
-        q = q.view(bsz, seq_len, self.config.num_attention_heads, self.config.head_dim).transpose(1, 2)
-        k = k.view(bsz, seq_len, self.config.num_key_value_heads, self.config.head_dim).transpose(1, 2)
-        v = v.view(bsz, seq_len, self.config.num_key_value_heads, self.config.head_dim).transpose(1, 2)
+        q = q.view(bsz, seq_len, self.config.num_attention_heads, self.config.head_dim).transpose(
+            1, 2
+        )
+        k = k.view(bsz, seq_len, self.config.num_key_value_heads, self.config.head_dim).transpose(
+            1, 2
+        )
+        v = v.view(bsz, seq_len, self.config.num_key_value_heads, self.config.head_dim).transpose(
+            1, 2
+        )
 
         q = _pytorch_rope(q, cos, sin, pos_offset)
         k = _pytorch_rope(k, cos, sin, pos_offset)
@@ -188,7 +202,7 @@ class Mistral7B:
     def __init__(
         self,
         weights: LoadedModelWeights,
-        gpu_config: Optional[GPUConfig] = None,
+        gpu_config: GPUConfig | None = None,
         device: str | torch.device = "cuda",
     ) -> None:
         self.weights = weights
@@ -197,7 +211,7 @@ class Mistral7B:
         self.device = torch.device(
             device if (str(device) != "cuda" or torch.cuda.is_available()) else "cpu"
         )
-        self.layers: List[MistralLayer] = [
+        self.layers: list[MistralLayer] = [
             MistralLayer(i, self.config) for i in range(self.config.num_hidden_layers)
         ]
         self.streamer = WeightStreamer(num_slots=2, device=self.device)
@@ -210,10 +224,10 @@ class Mistral7B:
     def from_pretrained(
         cls,
         model_dir: str | Path,
-        gpu_config: Optional[GPUConfig] = None,
+        gpu_config: GPUConfig | None = None,
         device: str | torch.device = "cuda",
-        max_gpu_layers: Optional[int] = None,
-    ) -> "Mistral7B":
+        max_gpu_layers: int | None = None,
+    ) -> Mistral7B:
         gcfg = gpu_config or GPUConfig()
         if max_gpu_layers is None and gcfg.stream_weights:
             max_gpu_layers = 0
@@ -225,11 +239,11 @@ class Mistral7B:
     @classmethod
     def from_random(
         cls,
-        config: Optional[ModelConfig] = None,
-        gpu_config: Optional[GPUConfig] = None,
+        config: ModelConfig | None = None,
+        gpu_config: GPUConfig | None = None,
         device: str | torch.device = "cuda",
         seed: int = 42,
-    ) -> "Mistral7B":
+    ) -> Mistral7B:
         cfg = config or ModelConfig()
         weights = create_random_4bit_weights(cfg, device=device, seed=seed)
         return cls(weights=weights, gpu_config=gpu_config, device=device)
@@ -240,9 +254,7 @@ class Mistral7B:
             return lw
         # Layer resides in pinned DDR5 -> acquire via Stage -1 DMA streamer
         d = self.streamer.acquire_layer(layer_idx, lw.to_tensor_dict())
-        return MistralLayerWeights.from_tensor_dict(
-            layer_idx, d, group_size=self.config.group_size
-        )
+        return MistralLayerWeights.from_tensor_dict(layer_idx, d, group_size=self.config.group_size)
 
     def _prefetch_next_layer(self, next_idx: int) -> None:
         if next_idx < self.config.num_hidden_layers:
@@ -253,7 +265,7 @@ class Mistral7B:
     def forward(
         self,
         input_ids: torch.Tensor,
-        kv_cache: Optional[PagedKVCache] = None,
+        kv_cache: PagedKVCache | None = None,
         pos_offset: int = 0,
         backend: str = "cutile",
         last_token_only: bool = False,
@@ -287,4 +299,3 @@ class Mistral7B:
 
         logits = torch.matmul(normed, self.weights.lm_head.t())
         return logits.view(bsz, seq_len, self.config.vocab_size)
-

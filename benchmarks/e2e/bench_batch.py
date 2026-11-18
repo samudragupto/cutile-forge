@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import time
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import torch
 
@@ -17,9 +17,9 @@ from cutile_forge.utils.memory import get_peak_vram_gb, reset_peak_vram
 
 def run_batch_benchmark(
     model_dir: Path,
-    batches: List[int] | None = None,
+    batches: list[int] | None = None,
     seq_len: int = 32,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Measure aggregate throughput (tokens/sec) across batch sizes 1..16."""
     if (model_dir / "config.json").exists():
         model = Mistral7B.from_pretrained(model_dir, device="cuda")
@@ -27,7 +27,7 @@ def run_batch_benchmark(
         model = Mistral7B.from_random(ModelConfig(num_hidden_layers=8), device="cuda")
 
     batch_sizes = batches or [1, 2, 4, 8, 16]
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
 
     for bsz in batch_sizes:
         inp = torch.randint(
@@ -46,7 +46,7 @@ def run_batch_benchmark(
 
         tps = (bsz * seq_len * 1000.0) / max(ms, 1e-6)
         vram = get_peak_vram_gb()
-        row: Dict[str, Any] = {
+        row: dict[str, Any] = {
             "batch_size": bsz,
             "seq_len": seq_len,
             "latency_ms": round(ms, 2),

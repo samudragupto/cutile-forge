@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import torch
 import torch.nn.functional as F
@@ -15,10 +15,10 @@ from cutile_forge.kernels.layernorm import cutile_layernorm
 
 
 def run_layernorm_benchmark(
-    seq_lens: List[int] | None = None,
+    seq_lens: list[int] | None = None,
     warmup: int = 5,
     iters: int = 50,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Benchmark LayerNorm (D=4096) across sequence lengths."""
     baselines = load_baselines()
     seqs = seq_lens or [1, 64, 256, 1024]
@@ -26,7 +26,7 @@ def run_layernorm_benchmark(
     w = torch.randn(d_model, device="cuda", dtype=torch.float16)
     b = torch.randn(d_model, device="cuda", dtype=torch.float16)
 
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     for seq in seqs:
         x = torch.randn((seq, d_model), device="cuda", dtype=torch.float16)
         num_bytes = 2.0 * x.numel() * 2.0  # read x + write y (fp16)
@@ -50,7 +50,7 @@ def run_layernorm_benchmark(
             name="pytorch",
         )
 
-        row: Dict[str, Any] = {
+        row: dict[str, Any] = {
             "seq_len": seq,
             "cutile_ms": round(st_cutile.p50_ms, 4),
             "cuda_ms": round(st_cuda.p50_ms, 4),
@@ -80,4 +80,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

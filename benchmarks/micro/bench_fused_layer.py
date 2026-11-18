@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import torch
 import torch.nn.functional as F
@@ -22,10 +22,10 @@ from cutile_forge.kernels.layernorm_residual import fused_rmsnorm_residual
 
 
 def run_fused_layer_benchmark(
-    seq_lens: List[int] | None = None,
+    seq_lens: list[int] | None = None,
     warmup: int = 5,
     iters: int = 30,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Benchmark full Mistral-7B layer: 3-kernel TFG vs 8-kernel unfused CUDA vs PyTorch."""
     baselines = load_baselines()
     seqs = seq_lens or [1, 64, 256, 512]
@@ -54,7 +54,7 @@ def run_fused_layer_benchmark(
     w_up_fp16 = unpack_int4_weights_torch(qw_up, s_up, z_up, gs)
     w_down_fp16 = unpack_int4_weights_torch(qw_down, s_down, z_down, gs)
 
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     for seq in seqs:
         x = torch.randn((seq, d_model), device="cuda", dtype=torch.float16) * 0.05
         tm = 16 if seq <= 16 else 64
@@ -62,13 +62,20 @@ def run_fused_layer_benchmark(
         nh = (inter + 127) // 128
         workspace = torch.empty((nh * m_pad, d_model), device="cuda", dtype=torch.float16)
 
-        def run_tfg_layer(x: torch.Tensor = x, seq: int = seq, ws: torch.Tensor = workspace) -> torch.Tensor:
+        def run_tfg_layer(
+            x: torch.Tensor = x, seq: int = seq, ws: torch.Tensor = workspace
+        ) -> torch.Tensor:
             # Stage 1: QKV + GQA Attention
             qkv = fused_gemm_dequant(x, qw_qkv, s_qkv, z_qkv, gs)
             q = qkv[:, :4096].view(1, seq, 32, 128).transpose(1, 2)
             k = qkv[:, 4096:5120].view(1, seq, 8, 128).transpose(1, 2)
             v = qkv[:, 5120:6144].view(1, seq, 8, 128).transpose(1, 2)
-            attn = fused_attention_gqa(q, k, v, causal=True).transpose(1, 2).contiguous().view(seq, d_model)
+            attn = (
+                fused_attention_gqa(q, k, v, causal=True)
+                .transpose(1, 2)
+                .contiguous()
+                .view(seq, d_model)
+            )
             # Stage 2: O GEMM + Fused RMSNorm+Residual
             o = fused_gemm_dequant(attn, qw_o, s_o, z_o, gs)
             post_norm, res_mid = fused_rmsnorm_residual(o, x, ln_w, 1e-5)
@@ -83,7 +90,12 @@ def run_fused_layer_benchmark(
             q = qkv[:, :4096].view(1, seq, 32, 128).transpose(1, 2)
             k = qkv[:, 4096:5120].view(1, seq, 8, 128).transpose(1, 2)
             v = qkv[:, 5120:6144].view(1, seq, 8, 128).transpose(1, 2)
-            attn = baselines.cuda_attention_gqa(q, k, v, True).transpose(1, 2).contiguous().view(seq, d_model)
+            attn = (
+                baselines.cuda_attention_gqa(q, k, v, True)
+                .transpose(1, 2)
+                .contiguous()
+                .view(seq, d_model)
+            )
             o = baselines.cuda_gemm_dequant_separate(attn, qw_o, s_o, z_o, gs)
             ln1 = baselines.cuda_layernorm(o + x, ln_w, ln_b, 1e-5)
             h_up = baselines.cuda_gemm_dequant_separate(ln1, qw_up, s_up, z_up, gs)
@@ -107,7 +119,7 @@ def run_fused_layer_benchmark(
         st_pt = benchmark(run_pytorch_eager, warmup=warmup, iters=iters, name=f"pytorch_{seq}")
 
         speedup = st_cuda.p50_ms / max(st_tfg.p50_ms, 1e-6)
-        row: Dict[str, Any] = {
+        row: dict[str, Any] = {
             "seq_len": seq,
             "tfg_kernels": 3,
             "unfused_kernels": 8,
@@ -126,7 +138,9 @@ def run_fused_layer_benchmark(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Benchmark full Mistral layer: 3-kernel TFG vs 8-kernel")
+    parser = argparse.ArgumentParser(
+        description="Benchmark full Mistral layer: 3-kernel TFG vs 8-kernel"
+    )
     parser.add_argument("--output", type=Path, default=Path("benchmarks/results/layer.csv"))
     parser.add_argument("--warmup", type=int, default=5)
     parser.add_argument("--iters", type=int, default=30)

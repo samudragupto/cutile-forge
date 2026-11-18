@@ -32,7 +32,9 @@ def sample_tokens(
         kth_val = top_vals[:, -1].unsqueeze(-1)
         scaled = scaled.masked_fill(scaled < kth_val, float("-inf"))
 
-    probs = online_softmax(scaled).float() if scaled.is_cuda else torch.softmax(scaled.float(), dim=-1)
+    probs = (
+        online_softmax(scaled).float() if scaled.is_cuda else torch.softmax(scaled.float(), dim=-1)
+    )
 
     if 0.0 < top_p < 1.0:
         sorted_probs, sorted_indices = torch.sort(probs, descending=True, dim=-1)

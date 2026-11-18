@@ -3,18 +3,23 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
-from benchmarks.micro.bench_attention import run_attention_benchmark
-from benchmarks.micro.bench_ffn_fused import run_ffn_benchmark
-from benchmarks.micro.bench_fused_layer import run_fused_layer_benchmark
-from benchmarks.micro.bench_gemm import run_gemm_benchmark
-from benchmarks.micro.bench_gemm_dequant import run_gemm_dequant_benchmark
-from benchmarks.micro.bench_layernorm import run_layernorm_benchmark
-from benchmarks.micro.bench_silu_fusion import run_silu_fusion_benchmark
-from benchmarks.micro.bench_weight_stream import run_weight_stream_benchmark
-from cutile_forge.bench.harness import write_csv
-from cutile_forge.bench.report import generate_report
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from benchmarks.micro.bench_attention import run_attention_benchmark  # noqa: E402
+from benchmarks.micro.bench_ffn_fused import run_ffn_benchmark  # noqa: E402
+from benchmarks.micro.bench_fused_layer import run_fused_layer_benchmark  # noqa: E402
+from benchmarks.micro.bench_gemm import run_gemm_benchmark  # noqa: E402
+from benchmarks.micro.bench_gemm_dequant import run_gemm_dequant_benchmark  # noqa: E402
+from benchmarks.micro.bench_layernorm import run_layernorm_benchmark  # noqa: E402
+from benchmarks.micro.bench_silu_fusion import run_silu_fusion_benchmark  # noqa: E402
+from benchmarks.micro.bench_weight_stream import run_weight_stream_benchmark  # noqa: E402
+from cutile_forge.bench.harness import write_csv  # noqa: E402
+from cutile_forge.bench.report import generate_report  # noqa: E402
 
 
 def run_all(

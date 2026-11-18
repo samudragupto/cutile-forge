@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import torch
 
@@ -14,10 +14,10 @@ from cutile_forge.bench.pcie_monitor import measure_pcie_h2d_bandwidth
 from cutile_forge.kernels.gemm_dequant import fused_gemm_dequant, pack_int4_weights
 
 
-def run_weight_stream_benchmark(warmup: int = 3, iters: int = 20) -> List[Dict[str, Any]]:
+def run_weight_stream_benchmark(warmup: int = 3, iters: int = 20) -> list[dict[str, Any]]:
     """Measure Compute-DMA overlap across layer weight sizes (4-bit tiles)."""
     pcie = measure_pcie_h2d_bandwidth(nbytes=64 * 1024 * 1024, iters=10)
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
 
     # Simulate streaming next-layer 4-bit weights (32 MB / 64 MB / 115 MB) while computing GEMM
     for mb in [32, 64, 115]:
@@ -49,7 +49,7 @@ def run_weight_stream_benchmark(warmup: int = 3, iters: int = 20) -> List[Dict[s
             dev_tile.copy_(host_tile, non_blocking=True)
 
         ov = measure_compute_dma_overlap(compute_fn, dma_fn, warmup=warmup, iters=iters)
-        row: Dict[str, Any] = {
+        row: dict[str, Any] = {
             "tile_mb": mb,
             "serial_ms": ov.serial_ms,
             "overlapped_ms": ov.overlapped_ms,

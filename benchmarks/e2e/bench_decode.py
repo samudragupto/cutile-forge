@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import torch
 
@@ -19,7 +19,7 @@ def run_decode_benchmark(
     model_dir: Path,
     prompt_text: str = "The capital of France is",
     max_tokens: int = 256,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Run 256-token decode and record tok/s, ms/tok, VRAM, and PCIe metrics."""
     if (model_dir / "config.json").exists():
         from transformers import AutoTokenizer
@@ -40,7 +40,7 @@ def run_decode_benchmark(
     assert stats is not None
 
     pcie = measure_pcie_h2d_bandwidth(nbytes=32 * 1024 * 1024, iters=5)
-    row: Dict[str, Any] = {
+    row: dict[str, Any] = {
         "engine": "CuTileForge",
         "prompt_tokens": stats.prompt_tokens,
         "generated_tokens": len(out_ids),

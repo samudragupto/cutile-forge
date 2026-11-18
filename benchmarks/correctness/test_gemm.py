@@ -45,4 +45,3 @@ def test_gemm_shape(m: int, n: int, k: int) -> None:
     c_dq = fused_gemm_dequant(a, qw, scales, zeros, group_size=128)
     ref_dq = torch.matmul(a, unpack_int4_weights_torch(qw, scales, zeros, 128))
     assert (c_dq - ref_dq).abs().max().item() < 1e-2
-

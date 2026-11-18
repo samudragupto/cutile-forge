@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import torch
 
@@ -15,10 +15,10 @@ from cutile_forge.kernels.gemm_dequant import pack_int4_weights
 
 
 def run_ffn_benchmark(
-    seq_lens: List[int] | None = None,
+    seq_lens: list[int] | None = None,
     warmup: int = 5,
     iters: int = 30,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Benchmark 4-bit fused FFN (1 kernel) vs 3 separate CUDA kernels."""
     baselines = load_baselines()
     seqs = seq_lens or [1, 64, 256, 512]
@@ -28,7 +28,9 @@ def run_ffn_benchmark(
     qw_up = pack_int4_weights(
         torch.randint(0, 16, (k_dim, h_dim), device="cuda", dtype=torch.uint8)
     )
-    s_up = torch.rand((k_dim // group_size, h_dim), device="cuda", dtype=torch.float16) * 0.05 + 0.01
+    s_up = (
+        torch.rand((k_dim // group_size, h_dim), device="cuda", dtype=torch.float16) * 0.05 + 0.01
+    )
     z_up = torch.randint(4, 12, (k_dim // group_size, h_dim), device="cuda", dtype=torch.float16)
 
     qw_down = pack_int4_weights(
@@ -39,7 +41,7 @@ def run_ffn_benchmark(
     )
     z_down = torch.randint(4, 12, (h_dim // group_size, d_dim), device="cuda", dtype=torch.float16)
 
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     for seq in seqs:
         x = torch.randn((seq, k_dim), device="cuda", dtype=torch.float16) * 0.05
         tm = 16 if seq <= 16 else 64
@@ -64,7 +66,7 @@ def run_ffn_benchmark(
         st_sep = benchmark(run_separate, warmup=warmup, iters=iters, name=f"sep_{seq}")
         speedup = st_sep.p50_ms / max(st_fused.p50_ms, 1e-6)
 
-        row: Dict[str, Any] = {
+        row: dict[str, Any] = {
             "seq_len": seq,
             "fused_ms": round(st_fused.p50_ms, 4),
             "separate_ms": round(st_sep.p50_ms, 4),
@@ -92,4 +94,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

@@ -69,7 +69,11 @@ def test_kv_cache_empty_layer() -> None:
 def test_kv_cache_reset() -> None:
     device = "cuda" if torch.cuda.is_available() else "cpu"
     kv = PagedKVCache(num_layers=1, num_kv_heads=4, head_dim=32, device=device)
-    kv.update(0, torch.ones((1, 4, 3, 32), device=device, dtype=torch.float16), torch.ones((1, 4, 3, 32), device=device, dtype=torch.float16))
+    kv.update(
+        0,
+        torch.ones((1, 4, 3, 32), device=device, dtype=torch.float16),
+        torch.ones((1, 4, 3, 32), device=device, dtype=torch.float16),
+    )
     kv.reset()
     assert kv.seq_len == 0
     assert kv.gpu_used_bytes == 0

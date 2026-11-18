@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import torch
 import torch.nn.functional as F
@@ -15,16 +15,16 @@ from cutile_forge.kernels.attention_gqa import fused_attention_gqa
 
 
 def run_attention_benchmark(
-    seq_lens: List[int] | None = None,
+    seq_lens: list[int] | None = None,
     warmup: int = 5,
     iters: int = 30,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Benchmark GQA 32:8 attention across sequence lengths."""
     baselines = load_baselines()
     seqs = seq_lens or [64, 256, 512, 1024]
     bsz, h_q, h_kv, d_head = 1, 32, 8, 128
 
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     for seq in seqs:
         q = torch.randn((bsz, h_q, seq, d_head), device="cuda", dtype=torch.float16) * 0.5
         k = torch.randn((bsz, h_kv, seq, d_head), device="cuda", dtype=torch.float16) * 0.5
@@ -45,14 +45,16 @@ def run_attention_benchmark(
             name="cuda",
         )
 
-        def run_torch(q: torch.Tensor = q, k: torch.Tensor = k, v: torch.Tensor = v) -> torch.Tensor:
+        def run_torch(
+            q: torch.Tensor = q, k: torch.Tensor = k, v: torch.Tensor = v
+        ) -> torch.Tensor:
             k_rep = k.repeat_interleave(h_q // h_kv, dim=1)
             v_rep = v.repeat_interleave(h_q // h_kv, dim=1)
             return F.scaled_dot_product_attention(q, k_rep, v_rep, is_causal=True)
 
         st_torch = benchmark(run_torch, warmup=warmup, iters=iters, name="pytorch")
 
-        row: Dict[str, Any] = {
+        row: dict[str, Any] = {
             "seq_len": seq,
             "cutile_ms": round(st_cutile.p50_ms, 4),
             "cuda_ms": round(st_cuda.p50_ms, 4),
@@ -84,4 +86,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Tuple
-
 import cuda.tile as ct
 import torch
 
@@ -105,7 +103,7 @@ def fused_layernorm_residual(
     weight: torch.Tensor,
     bias: torch.Tensor | None = None,
     eps: float = 1e-5,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """Compute (LayerNorm(x + residual), x + residual) in a single CuTile kernel."""
     orig_shape = x.shape
     d_model = orig_shape[-1]
@@ -147,7 +145,7 @@ def fused_rmsnorm_residual(
     residual: torch.Tensor,
     weight: torch.Tensor,
     eps: float = 1e-5,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """Compute (RMSNorm(x + residual), x + residual) in a single CuTile kernel."""
     orig_shape = x.shape
     d_model = orig_shape[-1]

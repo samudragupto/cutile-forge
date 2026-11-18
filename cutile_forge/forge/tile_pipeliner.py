@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Tuple
 
 from cutile_forge.forge.fusion_graph import FusionGraph, OpType
 
@@ -18,11 +17,11 @@ class PipelinePlan:
     node_id: str
     stages: int
     smem_bytes: int
-    stages_schedule: Tuple[str, ...]
+    stages_schedule: tuple[str, ...]
     latency_hint: int
 
 
-def estimate_smem_bytes(tile_shape: Tuple[int, int, int], stages: int, quantized: bool) -> int:
+def estimate_smem_bytes(tile_shape: tuple[int, int, int], stages: int, quantized: bool) -> int:
     """Estimate shared-memory ring buffer footprint for a tiled GEMM/fused kernel."""
     tm, tn, tk = tile_shape
     a_bytes = tm * tk * 2  # float16 activation tile
@@ -34,7 +33,7 @@ def insert_software_pipeline(
     graph: FusionGraph,
     pipeline_depth: int = 3,
     max_smem_bytes: int = SM89_MAX_SMEM_BYTES,
-) -> Dict[str, PipelinePlan]:
+) -> dict[str, PipelinePlan]:
     """Insert 3-stage software pipeline metadata (load -> compute -> store) on TFG nodes.
 
     Reduces `pipeline_stages` automatically if the tile's shared memory footprint
@@ -43,12 +42,14 @@ def insert_software_pipeline(
     if pipeline_depth < 1 or pipeline_depth > 4:
         raise ValueError(f"pipeline_depth must be in [1, 4], got {pipeline_depth}")
 
-    plans: Dict[str, PipelinePlan] = {}
+    plans: dict[str, PipelinePlan] = {}
     for node in graph.topological_order():
         quantized = bool(node.attrs.get("quantized", False))
         stages = pipeline_depth
 
-        while stages > 1 and estimate_smem_bytes(node.tile_shape, stages, quantized) > max_smem_bytes:
+        while (
+            stages > 1 and estimate_smem_bytes(node.tile_shape, stages, quantized) > max_smem_bytes
+        ):
             stages -= 1
 
         node.pipeline_stages = stages
@@ -68,7 +69,7 @@ def insert_software_pipeline(
             OpType.FUSED_FFN,
             OpType.FUSED_FFN_NORM,
         ):
-            schedule: List[str] = ["stage_-1_pcie_dma"] + [
+            schedule: list[str] = ["stage_-1_pcie_dma"] + [
                 f"stage_{i}_{'load' if i == 0 else ('mma_compute' if i < stages - 1 else 'epilogue_store')}"
                 for i in range(stages)
             ]

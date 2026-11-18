@@ -5,9 +5,10 @@ from __future__ import annotations
 import csv
 import math
 import time
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Sequence
+from typing import Any
 
 import torch
 
@@ -43,7 +44,7 @@ class Stats:
             return 0.0
         return num_bytes / (self.p50_ms * 1e-3) / 1e9
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
@@ -79,7 +80,7 @@ def benchmark(
     if cuda_mode:
         torch.cuda.synchronize()
 
-    timings_ms: List[float] = []
+    timings_ms: list[float] = []
     if cuda_mode:
         starts = [torch.cuda.Event(enable_timing=True) for _ in range(iters)]
         ends = [torch.cuda.Event(enable_timing=True) for _ in range(iters)]
@@ -115,7 +116,7 @@ def benchmark(
     )
 
 
-def write_csv(path: str | Path, rows: Iterable[Dict[str, Any]]) -> Path:
+def write_csv(path: str | Path, rows: Iterable[dict[str, Any]]) -> Path:
     """Write benchmark result dictionaries to a CSV file, creating parent dirs."""
     out_path = Path(path)
     out_path.parent.mkdir(parents=True, exist_ok=True)

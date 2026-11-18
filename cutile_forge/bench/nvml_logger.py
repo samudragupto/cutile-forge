@@ -5,7 +5,6 @@ from __future__ import annotations
 import threading
 import time
 from dataclasses import dataclass
-from typing import List, Optional
 
 
 @dataclass
@@ -29,9 +28,9 @@ class NVMLLogger:
     def __init__(self, device_index: int = 0, interval_s: float = 0.5) -> None:
         self.device_index = device_index
         self.interval_s = interval_s
-        self.samples: List[NVMLSample] = []
+        self.samples: list[NVMLSample] = []
         self._stop = threading.Event()
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
         self._start_time = 0.0
         self._nvml = None
         self._handle = None
@@ -106,7 +105,7 @@ class NVMLLogger:
         self._thread = threading.Thread(target=self._loop, daemon=True)
         self._thread.start()
 
-    def stop(self) -> List[NVMLSample]:
+    def stop(self) -> list[NVMLSample]:
         self._stop.set()
         if self._thread is not None:
             self._thread.join(timeout=2.0)

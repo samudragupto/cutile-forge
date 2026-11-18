@@ -6,11 +6,10 @@ import html
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Dict, List
 
 from cutile_forge.forge.fusion_graph import FusionGraph, OpType
 
-_OP_COLORS: Dict[str, str] = {
+_OP_COLORS: dict[str, str] = {
     OpType.FUSED_QKV_ATTN.value: "#2563eb",
     OpType.FUSED_O_LAYERNORM.value: "#0d9488",
     OpType.FUSED_FFN.value: "#7c3aed",
@@ -21,7 +20,7 @@ _OP_COLORS: Dict[str, str] = {
 
 def to_dot(graph: FusionGraph) -> str:
     """Serialize a FusionGraph into Graphviz DOT syntax."""
-    lines: List[str] = [
+    lines: list[str] = [
         f'digraph "{graph.name}" {{',
         "  rankdir=TB;",
         '  node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=11];',
@@ -56,19 +55,19 @@ def _fallback_svg(graph: FusionGraph) -> str:
     margin_top = 48
     height = margin_top + max(1, len(nodes)) * (box_h + gap_y) + 20
 
-    parts: List[str] = [
+    parts: list[str] = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
         f'viewBox="0 0 {width} {height}">',
         '<rect width="100%" height="100%" fill="#0f172a"/>',
         f'<text x="{width // 2}" y="28" text-anchor="middle" fill="#f8fafc" '
         f'font-family="sans-serif" font-size="16" font-weight="bold">'
         f"{html.escape(graph.name)} ({len(nodes)} nodes)</text>",
-        "<defs><marker id=\"arrow\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" "
-        "markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\">"
+        '<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" '
+        'markerWidth="6" markerHeight="6" orient="auto-start-reverse">'
         '<path d="M 0 1 L 10 5 L 0 9 z" fill="#94a3b8"/></marker></defs>',
     ]
 
-    pos: Dict[str, tuple[int, int]] = {}
+    pos: dict[str, tuple[int, int]] = {}
     x0 = (width - box_w) // 2
     for idx, node in enumerate(nodes):
         y0 = margin_top + idx * (box_h + gap_y)

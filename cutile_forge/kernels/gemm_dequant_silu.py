@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Tuple
-
 import cuda.tile as ct
 import torch
 
@@ -118,7 +116,7 @@ def gemm_dequant_silu_kernel(
 def fused_gemm_fp16_silu(
     a: torch.Tensor,
     b: torch.Tensor,
-    tile_shape: Tuple[int, int, int] | None = None,
+    tile_shape: tuple[int, int, int] | None = None,
 ) -> torch.Tensor:
     """Compute SiLU(a @ b) in one fused CuTile kernel."""
     m, k = a.shape
@@ -141,7 +139,7 @@ def fused_gemm_dequant_silu(
     scales: torch.Tensor,
     zeros: torch.Tensor,
     group_size: int = 128,
-    tile_shape: Tuple[int, int, int] | None = None,
+    tile_shape: tuple[int, int, int] | None = None,
 ) -> torch.Tensor:
     """Compute SiLU(a @ dequant(qweight)) in one fused CuTile kernel."""
     m, k = a.shape

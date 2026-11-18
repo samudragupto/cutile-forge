@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator, Sequence
 from pathlib import Path
-from typing import Iterator, List, Optional, Sequence
 
 import torch
 
@@ -16,7 +16,7 @@ class TokenGenerator:
     def __init__(
         self,
         engine: InferenceEngine,
-        tokenizer_path: Optional[str | Path] = None,
+        tokenizer_path: str | Path | None = None,
     ) -> None:
         self.engine = engine
         self.tokenizer = None
@@ -43,7 +43,7 @@ class TokenGenerator:
         temperature: float = 0.0,
         top_k: int = 50,
         top_p: float = 0.9,
-        stop_tokens: Optional[Sequence[int]] = None,
+        stop_tokens: Sequence[int] | None = None,
     ) -> str:
         """Generate completion text for `prompt`."""
         prompt_ids = self.encode(prompt)
@@ -61,7 +61,7 @@ class TokenGenerator:
             eos_token_id=eos_id,
         )
         if stop_tokens:
-            trimmed: List[int] = []
+            trimmed: list[int] = []
             stop_set = set(stop_tokens)
             for tid in out_ids:
                 if tid in stop_set:
@@ -92,5 +92,5 @@ class TokenGenerator:
             yield self.decode([tid])
 
     @property
-    def last_stats(self) -> Optional[GenerationStats]:
+    def last_stats(self) -> GenerationStats | None:
         return self.engine.last_stats

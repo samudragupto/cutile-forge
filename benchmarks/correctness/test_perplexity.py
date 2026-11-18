@@ -55,5 +55,6 @@ def test_wikitext2_ppl(model_dir: Path) -> None:
     ppl_ct = _compute_ppl(model, ids, backend="cutile")
     ppl_pt = _compute_ppl(model, ids, backend="pytorch")
     rel_diff = abs(ppl_ct - ppl_pt) / max(1e-6, ppl_pt)
-    assert rel_diff < 0.05, f"PPL diff {rel_diff:.4f} >= 0.05 (cutile={ppl_ct:.3f}, pt={ppl_pt:.3f})"
-
+    assert (
+        rel_diff < 0.05
+    ), f"PPL diff {rel_diff:.4f} >= 0.05 (cutile={ppl_ct:.3f}, pt={ppl_pt:.3f})"

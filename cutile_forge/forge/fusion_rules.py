@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Callable, List, Sequence
 
 from cutile_forge.forge.fusion_graph import FusionGraph, OpType, TileNode
 
@@ -54,9 +54,10 @@ def _act_dequant_gemm(graph: FusionGraph, node: TileNode) -> bool:
 
 
 def _cond_qkv_attn(graph: FusionGraph, node: TileNode) -> bool:
-    return node.op_type == OpType.QKV_GEMM and _single_successor(
-        graph, node, OpType.ATTENTION_GQA
-    ) is not None
+    return (
+        node.op_type == OpType.QKV_GEMM
+        and _single_successor(graph, node, OpType.ATTENTION_GQA) is not None
+    )
 
 
 def _act_qkv_attn(graph: FusionGraph, node: TileNode) -> bool:
@@ -73,7 +74,10 @@ def _act_qkv_attn(graph: FusionGraph, node: TileNode) -> bool:
 def _cond_o_layernorm(graph: FusionGraph, node: TileNode) -> bool:
     if node.op_type != OpType.O_GEMM:
         return False
-    return any(graph.nodes[s].op_type in (OpType.LAYERNORM, OpType.RMSNORM) for s in graph.successors(node.node_id))
+    return any(
+        graph.nodes[s].op_type in (OpType.LAYERNORM, OpType.RMSNORM)
+        for s in graph.successors(node.node_id)
+    )
 
 
 def _act_o_layernorm(graph: FusionGraph, node: TileNode) -> bool:
@@ -131,7 +135,11 @@ def _cond_ffn_ln_res(graph: FusionGraph, node: TileNode) -> bool:
     succs = graph.successors(node.node_id)
     if len(succs) != 1:
         return False
-    return graph.nodes[succs[0]].op_type in (OpType.LAYERNORM_RESIDUAL, OpType.LAYERNORM, OpType.RMSNORM)
+    return graph.nodes[succs[0]].op_type in (
+        OpType.LAYERNORM_RESIDUAL,
+        OpType.LAYERNORM,
+        OpType.RMSNORM,
+    )
 
 
 def _act_ffn_ln_res(graph: FusionGraph, node: TileNode) -> bool:
@@ -145,7 +153,7 @@ def _act_ffn_ln_res(graph: FusionGraph, node: TileNode) -> bool:
     return True
 
 
-DEFAULT_FUSION_RULES: List[FusionRule] = [
+DEFAULT_FUSION_RULES: list[FusionRule] = [
     FusionRule(
         name="fuse_dequant_into_gemm",
         description="Fold INT4 dequantization into GEMM tile register load",
@@ -188,10 +196,10 @@ DEFAULT_FUSION_RULES: List[FusionRule] = [
 def apply_fusion_rules(
     graph: FusionGraph,
     rules: Sequence[FusionRule] | None = None,
-) -> List[str]:
+) -> list[str]:
     """Iteratively apply fusion rules until fixed point; returns fired rule names."""
     active_rules = list(rules) if rules is not None else DEFAULT_FUSION_RULES
-    fired: List[str] = []
+    fired: list[str] = []
 
     changed = True
     while changed:

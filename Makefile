@@ -55,3 +55,4 @@ docs:
 	$(PYTHON) examples/visualize_tfg.py --layer 0 --output docs/tfg_layer0.svg
 	$(PYTHON) examples/visualize_tfg.py --layer 1 --output docs/tfg_layer1.svg
 	@echo "Docs generated"
+

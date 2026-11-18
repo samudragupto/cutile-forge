@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Tuple
-
 import torch
 
 from cutile_forge.kernels.gemm_dequant import pack_int4_weights, unpack_int4_weights_torch
@@ -12,7 +10,7 @@ from cutile_forge.kernels.gemm_dequant import pack_int4_weights, unpack_int4_wei
 def quantize_4bit_group(
     weight: torch.Tensor,
     group_size: int = 128,
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Quantize a 2D float16/float32 weight matrix (K, N) to unsigned 4-bit groups.
 
     Returns:
@@ -54,7 +52,7 @@ def unpack_gptq_layer(
     scales: torch.Tensor,
     group_size: int = 128,
     g_idx: torch.Tensor | None = None,
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor | None]:
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor | None]:
     """Convert HuggingFace AutoGPTQ int32 `(K//8, N)` / `(K//gs, N//8)` to CuTileForge uint8 format.
 
     AutoGPTQ stores `qzeros` as `(val - 1)` packed 8x int4 in `int32` along N.
@@ -86,4 +84,3 @@ def unpack_gptq_layer(
         zeros_fp16.contiguous(),
         perm,
     )
-

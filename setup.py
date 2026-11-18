@@ -6,3 +6,4 @@ setup(
     packages=find_packages(include=["cutile_forge", "cutile_forge.*"]),
     python_requires=">=3.11",
 )
+

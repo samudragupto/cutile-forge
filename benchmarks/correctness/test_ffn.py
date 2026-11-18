@@ -75,4 +75,3 @@ def test_ffn_dequant_fused(seq_len: int) -> None:
     wd = unpack_int4_weights_torch(qwd, sd, zd, 128)
     ref = F.silu(x @ wu) @ wd
     assert (out - ref).abs().max().item() < 1e-2
-

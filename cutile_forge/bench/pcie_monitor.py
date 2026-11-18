@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import time
 from dataclasses import dataclass
 
 import torch
@@ -68,7 +67,9 @@ def measure_pcie_h2d_bandwidth(nbytes: int = 128 * 1024 * 1024, iters: int = 20)
     )
 
 
-def estimate_pcie_utilization(bytes_transferred: int, elapsed_s: float, theoretical_gb_s: float = 25.0) -> float:
+def estimate_pcie_utilization(
+    bytes_transferred: int, elapsed_s: float, theoretical_gb_s: float = 25.0
+) -> float:
     """Compute effective PCIe utilization percentage from streamed bytes and elapsed seconds."""
     if elapsed_s <= 0.0 or theoretical_gb_s <= 0.0:
         return 0.0

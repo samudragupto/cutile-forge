@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
 
 import torch
 
@@ -19,12 +18,12 @@ class QuantLinearWeight:
     """Packed 4-bit linear projection weight in CuTileForge `(K//2, N)` uint8 format."""
 
     qweight: torch.Tensor  # (K // 2, N) uint8
-    scales: torch.Tensor   # (K // group_size, N) float16
-    zeros: torch.Tensor    # (K // group_size, N) float16
+    scales: torch.Tensor  # (K // group_size, N) float16
+    zeros: torch.Tensor  # (K // group_size, N) float16
     group_size: int = 128
-    perm: Optional[torch.Tensor] = None  # optional act-order row permutation (K,) int64
+    perm: torch.Tensor | None = None  # optional act-order row permutation (K,) int64
 
-    def to(self, device: torch.device | str) -> "QuantLinearWeight":
+    def to(self, device: torch.device | str) -> QuantLinearWeight:
         return QuantLinearWeight(
             qweight=self.qweight.to(device, non_blocking=True),
             scales=self.scales.to(device, non_blocking=True),
@@ -57,7 +56,7 @@ class MistralLayerWeights:
     up_proj: QuantLinearWeight
     down_proj: QuantLinearWeight
 
-    def to_tensor_dict(self) -> Dict[str, torch.Tensor]:
+    def to_tensor_dict(self) -> dict[str, torch.Tensor]:
         return {
             "input_layernorm": self.input_layernorm,
             "post_attention_layernorm": self.post_attention_layernorm,
@@ -86,8 +85,8 @@ class MistralLayerWeights:
 
     @classmethod
     def from_tensor_dict(
-        cls, layer_idx: int, d: Dict[str, torch.Tensor], group_size: int = 128
-    ) -> "MistralLayerWeights":
+        cls, layer_idx: int, d: dict[str, torch.Tensor], group_size: int = 128
+    ) -> MistralLayerWeights:
         return cls(
             layer_idx=layer_idx,
             input_layernorm=d["input_layernorm"],
@@ -110,19 +109,19 @@ class LoadedModelWeights:
     embed_tokens: torch.Tensor
     norm: torch.Tensor
     lm_head: torch.Tensor
-    layers: List[MistralLayerWeights]
+    layers: list[MistralLayerWeights]
 
 
-def _pin_dict(d: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+def _pin_dict(d: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
     return {k: WeightStreamer.pin_tensor(v) for k, v in d.items()}
 
 
 def load_gptq_weights(
     model_dir: str | Path,
-    config: Optional[ModelConfig] = None,
+    config: ModelConfig | None = None,
     device: str | torch.device = "cuda",
     pin_ddr5: bool = True,
-    max_gpu_layers: Optional[int] = None,
+    max_gpu_layers: int | None = None,
 ) -> LoadedModelWeights:
     """Load 4-bit GPTQ safetensors from `model_dir` into pinned DDR5 / GPU HBM."""
     from safetensors import safe_open
@@ -141,7 +140,7 @@ def load_gptq_weights(
     if not shard_files:
         raise FileNotFoundError(f"No .safetensors files found in {base}")
 
-    raw: Dict[str, torch.Tensor] = {}
+    raw: dict[str, torch.Tensor] = {}
     for sf in shard_files:
         with safe_open(str(sf), framework="pt", device="cpu") as f:
             for key in f.keys():
@@ -151,13 +150,11 @@ def load_gptq_weights(
     embed_tokens = raw["model.embed_tokens.weight"].to(dtype=torch.float16, device=target_dev)
     norm = raw["model.norm.weight"].to(dtype=torch.float16, device=target_dev)
     lm_head = (
-        raw["lm_head.weight"]
-        if "lm_head.weight" in raw
-        else raw["model.embed_tokens.weight"]
+        raw["lm_head.weight"] if "lm_head.weight" in raw else raw["model.embed_tokens.weight"]
     ).to(dtype=torch.float16, device=target_dev)
 
     gpu_layers = config.num_hidden_layers if max_gpu_layers is None else max_gpu_layers
-    layers: List[MistralLayerWeights] = []
+    layers: list[MistralLayerWeights] = []
 
     def _load_proj(prefix: str, target: torch.device | str) -> QuantLinearWeight:
         qw_i32 = raw[f"{prefix}.qweight"]
@@ -234,7 +231,9 @@ def create_random_4bit_weights(
         )
 
     def _rand_quant(k_dim: int, n_dim: int) -> QuantLinearWeight:
-        w = (torch.randn((k_dim, n_dim), generator=gen, dtype=torch.float32) * 0.015).to(torch.float16)
+        w = (torch.randn((k_dim, n_dim), generator=gen, dtype=torch.float32) * 0.015).to(
+            torch.float16
+        )
         qw, s, z = quantize_4bit_group(w, group_size=config.group_size)
         return QuantLinearWeight(qw.to(dev), s.to(dev), z.to(dev), group_size=config.group_size)
 
@@ -243,7 +242,7 @@ def create_random_4bit_weights(
     q_dim = config.num_attention_heads * config.head_dim
     inter = config.intermediate_size
 
-    layers: List[MistralLayerWeights] = []
+    layers: list[MistralLayerWeights] = []
     for idx in range(config.num_hidden_layers):
         layers.append(
             MistralLayerWeights(
@@ -267,4 +266,3 @@ def create_random_4bit_weights(
         lm_head=_rand_fp16((config.vocab_size, h), scale=0.05),
         layers=layers,
     )
-
