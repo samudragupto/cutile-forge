@@ -333,3 +333,128 @@ def fused_gemm_dequant(
         (a_c, qw_u8, s_c, z_c, c, tm, tn, tk, group_size),
     )
     return c
+
+
+@ct.kernel(occupancy=2)
+def gemm_nvfp4_dequant_kernel(
+    a_ptr,
+    qw_ptr,
+    scales_ptr,
+    c_ptr,
+    tm: ct.Constant[int],
+    tn: ct.Constant[int],
+    tk: ct.Constant[int],
+    bs: ct.Constant[int],
+) -> None:
+    """Fused NVFP4 (e2m1) dequant + FP16 Tensor Core GEMM on sm_120."""
+    group_m: ct.Constant[int] = 8
+    pid = ct.bid(0)
+    num_m = ct.num_tiles(a_ptr, axis=0, shape=(tm, tk))
+    num_n = ct.num_tiles(qw_ptr, axis=1, shape=(tk // 2, tn))
+    num_pid_in_group = group_m * num_n
+    group_id = pid // num_pid_in_group
+    first_pid_m = group_id * group_m
+    group_size_m = min(num_m - first_pid_m, group_m)
+    pid_m = first_pid_m + (pid % group_size_m)
+    pid_n = (pid % num_pid_in_group) // group_size_m
+
+    num_k = ct.num_tiles(a_ptr, axis=1, shape=(tm, tk))
+    half_tk: ct.Constant[int] = tk // 2
+    acc = ct.zeros((tm, tn), dtype=ct.float32)
+
+    for k in range(num_k):
+        tile_a = ct.load(
+            a_ptr,
+            index=(pid_m, k),
+            shape=(tm, tk),
+            padding_mode=ct.PaddingMode.ZERO,
+            latency=3,
+        )
+        qw = ct.load(
+            qw_ptr,
+            index=(k, pid_n),
+            shape=(half_tk, tn),
+            padding_mode=ct.PaddingMode.ZERO,
+            latency=3,
+        )
+        lo_n = ct.bitwise_and(qw, 0x0F)
+        hi_n = ct.bitwise_and(ct.bitwise_rshift(qw, 4), 0x0F)
+
+        # Decode e2m1 nibbles in registers: [0, 0.5, 1, 1.5, 2, 3, 4, 6] with sign bit
+        lo_sign = ct.bitwise_rshift(lo_n, 3)
+        lo_mag = ct.bitwise_and(lo_n, 0x07)
+        lo_exp = ct.bitwise_rshift(lo_mag, 1)
+        lo_man = ct.astype(ct.bitwise_and(lo_mag, 1), ct.float16)
+        lo_val = ct.where(
+            lo_exp == 0,
+            ct.astype(0.5, ct.float16) * lo_man,
+            (ct.astype(1.0, ct.float16) + ct.astype(0.5, ct.float16) * lo_man)
+            * ct.astype(ct.exp2(ct.astype(lo_exp, ct.float32) - 1.0), ct.float16),
+        )
+        lo_f = ct.where(lo_sign != 0, -lo_val, lo_val)
+
+        hi_sign = ct.bitwise_rshift(hi_n, 3)
+        hi_mag = ct.bitwise_and(hi_n, 0x07)
+        hi_exp = ct.bitwise_rshift(hi_mag, 1)
+        hi_man = ct.astype(ct.bitwise_and(hi_mag, 1), ct.float16)
+        hi_val = ct.where(
+            hi_exp == 0,
+            ct.astype(0.5, ct.float16) * hi_man,
+            (ct.astype(1.0, ct.float16) + ct.astype(0.5, ct.float16) * hi_man)
+            * ct.astype(ct.exp2(ct.astype(hi_exp, ct.float32) - 1.0), ct.float16),
+        )
+        hi_f = ct.where(hi_sign != 0, -hi_val, hi_val)
+
+        lo_e = ct.reshape(lo_f, (half_tk, 1, tn))
+        hi_e = ct.reshape(hi_f, (half_tk, 1, tn))
+        w_e2m1 = ct.reshape(ct.cat((lo_e, hi_e), axis=1), (tk, tn))
+
+        g_idx = (k * tk) // bs
+        scale = ct.load(
+            scales_ptr,
+            index=(g_idx, pid_n),
+            shape=(1, tn),
+            padding_mode=ct.PaddingMode.ZERO,
+            latency=3,
+        )
+        w_fp16 = w_e2m1 * scale
+        acc = ct.mma(tile_a, w_fp16, acc)
+
+    ct.store(c_ptr, index=(pid_m, pid_n), tile=ct.astype(acc, ct.float16))
+
+
+def fused_gemm_nvfp4_dequant(
+    a: torch.Tensor,
+    qweight_fp4: torch.Tensor,
+    block_scales: torch.Tensor,
+    bias: torch.Tensor | None = None,
+    tile_shape: tuple[int, int, int] | None = None,
+) -> torch.Tensor:
+    """Run fused NVFP4 (e2m1) dequantization + GEMM in a single CuTile kernel."""
+    m, k = a.shape
+    qw_u8 = qweight_fp4.contiguous()
+    n = qw_u8.shape[1]
+    if qw_u8.shape != (k // 2, n):
+        raise ValueError(f"Weight qweight_fp4 must be [K//2, N], got {tuple(qw_u8.shape)}")
+    block_size = k // max(1, block_scales.shape[0])
+    if block_scales.shape[1] != n or k % block_size != 0:
+        raise ValueError(f"Invalid block_scales shape {tuple(block_scales.shape)} for K={k}, N={n}")
+
+    tm, tn, tk = tile_shape or _select_gemm_tiles(m, group_size=block_size)
+    if block_size % tk != 0:
+        tk = 64 if block_size % 64 == 0 else (32 if block_size % 32 == 0 else block_size)
+
+    a_c = a.contiguous()
+    s_c = block_scales.to(torch.float16).contiguous()
+    c = torch.empty((m, n), device=a.device, dtype=torch.float16)
+
+    grid = (ct.cdiv(m, tm) * ct.cdiv(n, tn), 1, 1)
+    ct.launch(
+        torch.cuda.current_stream(),
+        grid,
+        gemm_nvfp4_dequant_kernel,
+        (a_c, qw_u8, s_c, c, tm, tn, tk, block_size),
+    )
+    if bias is not None:
+        c = c + bias.to(c.dtype).view(1, n)
+    return c

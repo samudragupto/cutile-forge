@@ -11,6 +11,7 @@ from cutile_forge.kernels.gemm_dequant import (
     cutile_gemm_fp8,
     cutile_gemm_fp16,
     fused_gemm_dequant,
+    fused_gemm_nvfp4_dequant,
     gemm_fp8_kernel,
     pack_int4_weights,
     unpack_int4_weights_torch,
@@ -18,6 +19,7 @@ from cutile_forge.kernels.gemm_dequant import (
 from cutile_forge.kernels.gemm_dequant_silu import fused_gemm_dequant_silu, fused_gemm_fp16_silu
 from cutile_forge.kernels.layernorm import cutile_layernorm
 from cutile_forge.kernels.layernorm_residual import fused_layernorm_residual, fused_rmsnorm_residual
+from cutile_forge.kernels.moe_fused import fused_moe_int4_gemm, fused_topk_gating
 from cutile_forge.kernels.rmsnorm import cutile_rmsnorm
 from cutile_forge.kernels.rope import apply_rope, precompute_rope_freqs
 from cutile_forge.kernels.sampling import sample_tokens
@@ -36,8 +38,11 @@ __all__ = [
     "fused_gemm_dequant",
     "fused_gemm_dequant_silu",
     "fused_gemm_fp16_silu",
+    "fused_gemm_nvfp4_dequant",
     "fused_layernorm_residual",
+    "fused_moe_int4_gemm",
     "fused_rmsnorm_residual",
+    "fused_topk_gating",
     "gemm_fp8_kernel",
     "online_softmax",
     "pack_int4_weights",

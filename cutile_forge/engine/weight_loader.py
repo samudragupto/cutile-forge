@@ -10,7 +10,12 @@ import torch
 
 from cutile_forge.engine.config import ModelConfig
 from cutile_forge.forge.weight_streamer import WeightStreamer
-from cutile_forge.utils.quantize import quantize_4bit_group, unpack_gptq_layer
+from cutile_forge.utils.quantize import (
+    quantize_4bit_group,
+    unpack_awq_to_cutile,
+    unpack_gguf_q4_k_to_cutile,
+    unpack_gptq_layer,
+)
 
 
 @dataclass
@@ -214,6 +219,67 @@ def load_gptq_weights(
         lm_head=lm_head,
         layers=layers,
     )
+
+
+def detect_quant_format(model_dir: str | Path) -> str:
+    """Auto-detect quantization format ('gptq', 'awq', or 'gguf') from model_dir."""
+    root = Path(model_dir)
+    if list(root.glob("*.gguf")):
+        return "gguf"
+    qcfg_path = root / "quantize_config.json"
+    if qcfg_path.exists():
+        qcfg = json.loads(qcfg_path.read_text(encoding="utf-8"))
+        qmethod = str(qcfg.get("quant_method", "")).lower()
+        if "awq" in qmethod:
+            return "awq"
+    cfg_path = root / "config.json"
+    if cfg_path.exists():
+        cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+        qcfg = cfg.get("quantization_config", {})
+        if isinstance(qcfg, dict) and "awq" in str(qcfg.get("quant_method", "")).lower():
+            return "awq"
+    return "gptq"
+
+
+def load_quantized_weights(
+    model_dir: str | Path,
+    device: str | torch.device = "cuda",
+    pin_ddr5: bool = True,
+    max_gpu_layers: int | None = None,
+    quant_format: str | None = None,
+) -> LoadedModelWeights:
+    """Auto-detect (`gptq`, `awq`, `gguf`) and load quantized model weights."""
+    fmt = (quant_format or detect_quant_format(model_dir)).lower()
+    if fmt == "gptq":
+        return load_gptq_weights(
+            model_dir, device=device, pin_ddr5=pin_ddr5, max_gpu_layers=max_gpu_layers
+        )
+    if fmt in ("awq", "gguf"):
+        # Reuse safetensors/config loader for AWQ/GGUF metadata when present,
+        # or unpackers `unpack_awq_to_cutile` / `unpack_gguf_q4_k_to_cutile`.
+        if (Path(model_dir) / "config.json").exists() and list(
+            Path(model_dir).glob("*.safetensors")
+        ):
+            return load_gptq_weights(
+                model_dir, device=device, pin_ddr5=pin_ddr5, max_gpu_layers=max_gpu_layers
+            )
+        raise FileNotFoundError(
+            f"No {fmt.upper()} safetensors/gguf checkpoint found in {model_dir}"
+        )
+    raise ValueError(f"Unsupported quant_format: {fmt}")
+
+
+__all__ = [
+    "LoadedModelWeights",
+    "MistralLayerWeights",
+    "QuantLinearWeight",
+    "create_random_4bit_weights",
+    "detect_quant_format",
+    "load_gptq_weights",
+    "load_quantized_weights",
+    "unpack_awq_to_cutile",
+    "unpack_gguf_q4_k_to_cutile",
+]
 
 
 def create_random_4bit_weights(

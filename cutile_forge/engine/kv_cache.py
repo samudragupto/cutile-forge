@@ -19,6 +19,8 @@ class KVPage:
     valid_tokens: int
     on_gpu: bool
     swap_event: torch.cuda.Event | None = None
+    k_scale: float = 1.0
+    v_scale: float = 1.0
 
     @property
     def nbytes(self) -> int:
@@ -38,9 +40,12 @@ class PagedKVCache:
         device: str | torch.device = "cuda",
         dtype: torch.dtype = torch.float16,
         cpu_pool_pages: int = 64,
+        kv_dtype: str = "fp16",
     ) -> None:
         if page_size <= 0:
             raise ValueError(f"page_size must be positive, got {page_size}")
+        if kv_dtype not in ("fp16", "fp8_e4m3fn"):
+            raise ValueError(f"Unsupported kv_dtype: {kv_dtype}")
         self.num_layers = num_layers
         self.num_kv_heads = num_kv_heads
         self.head_dim = head_dim
@@ -49,6 +54,8 @@ class PagedKVCache:
         self.device = torch.device(
             device if (str(device) != "cuda" or torch.cuda.is_available()) else "cpu"
         )
+        self.kv_dtype = kv_dtype
+        self.storage_dtype = torch.float8_e4m3fn if kv_dtype == "fp8_e4m3fn" else dtype
         self.dtype = dtype
 
         self.pages: dict[tuple[int, int], KVPage] = {}
@@ -77,11 +84,11 @@ class PagedKVCache:
         shape = (1, self.num_kv_heads, self.page_size, self.head_dim)
         pin = torch.cuda.is_available()
         try:
-            k_cpu = torch.empty(shape, dtype=self.dtype, pin_memory=pin)
-            v_cpu = torch.empty(shape, dtype=self.dtype, pin_memory=pin)
+            k_cpu = torch.empty(shape, dtype=self.storage_dtype, pin_memory=pin)
+            v_cpu = torch.empty(shape, dtype=self.storage_dtype, pin_memory=pin)
         except RuntimeError:
-            k_cpu = torch.empty(shape, dtype=self.dtype)
-            v_cpu = torch.empty(shape, dtype=self.dtype)
+            k_cpu = torch.empty(shape, dtype=self.storage_dtype)
+            v_cpu = torch.empty(shape, dtype=self.storage_dtype)
         return k_cpu, v_cpu
 
     def _acquire_cpu_pair(self) -> tuple[torch.Tensor, torch.Tensor]:
@@ -186,7 +193,8 @@ class PagedKVCache:
 
             if key not in self.pages:
                 on_gpu = self.device.type == "cuda"
-                page_bytes = 2 * self.num_kv_heads * self.page_size * self.head_dim * 2
+                elem_bytes = 1 if self.kv_dtype == "fp8_e4m3fn" else 2
+                page_bytes = 2 * self.num_kv_heads * self.page_size * self.head_dim * elem_bytes
                 if on_gpu:
                     self._evict_if_needed(page_bytes)
                     if self.gpu_used_bytes + page_bytes > self.gpu_budget_bytes:
@@ -195,7 +203,7 @@ class PagedKVCache:
                 k_buf = torch.zeros(
                     (1, self.num_kv_heads, self.page_size, self.head_dim),
                     device=alloc_dev,
-                    dtype=self.dtype,
+                    dtype=self.storage_dtype,
                 )
                 v_buf = torch.zeros_like(k_buf)
                 page = KVPage(
@@ -212,8 +220,40 @@ class PagedKVCache:
                     self.gpu_lru[key] = page.nbytes
 
             page = self._ensure_on_gpu(key)
-            page.k[:, :, slot : slot + 1, :] = k_new[:, :, offset : offset + 1, :].to(page.k.device)
-            page.v[:, :, slot : slot + 1, :] = v_new[:, :, offset : offset + 1, :].to(page.v.device)
+            k_slice = k_new[:, :, offset : offset + 1, :].to(page.k.device)
+            v_slice = v_new[:, :, offset : offset + 1, :].to(page.v.device)
+            if self.kv_dtype == "fp8_e4m3fn":
+                k_max = float(k_slice.abs().max().item())
+                v_max = float(v_slice.abs().max().item())
+                req_k_scale = max(k_max / 448.0, 1e-6)
+                req_v_scale = max(v_max / 448.0, 1e-6)
+                if page.valid_tokens == 0:
+                    page.k_scale = req_k_scale
+                    page.v_scale = req_v_scale
+                else:
+                    if req_k_scale > page.k_scale:
+                        ratio = page.k_scale / req_k_scale
+                        n_v = page.valid_tokens
+                        page.k[:, :, :n_v, :] = (
+                            page.k[:, :, :n_v, :].to(torch.float32) * ratio
+                        ).to(torch.float8_e4m3fn)
+                        page.k_scale = req_k_scale
+                    if req_v_scale > page.v_scale:
+                        ratio = page.v_scale / req_v_scale
+                        n_v = page.valid_tokens
+                        page.v[:, :, :n_v, :] = (
+                            page.v[:, :, :n_v, :].to(torch.float32) * ratio
+                        ).to(torch.float8_e4m3fn)
+                        page.v_scale = req_v_scale
+                page.k[:, :, slot : slot + 1, :] = (
+                    (k_slice.float() / page.k_scale).clamp(-448.0, 448.0).to(torch.float8_e4m3fn)
+                )
+                page.v[:, :, slot : slot + 1, :] = (
+                    (v_slice.float() / page.v_scale).clamp(-448.0, 448.0).to(torch.float8_e4m3fn)
+                )
+            else:
+                page.k[:, :, slot : slot + 1, :] = k_slice
+                page.v[:, :, slot : slot + 1, :] = v_slice
             page.valid_tokens = max(page.valid_tokens, slot + 1)
 
         new_len = start_pos + s_new
@@ -249,14 +289,19 @@ class PagedKVCache:
             n = page.valid_tokens
             if page.on_gpu:
                 self.gpu_lru.move_to_end(key)
-                k_chunks.append(page.k[:, :, :n, :])
-                v_chunks.append(page.v[:, :, :n, :])
+                k_t = page.k[:, :, :n, :]
+                v_t = page.v[:, :, :n, :]
             else:
                 if page.swap_event is not None:
                     torch.cuda.current_stream().wait_event(page.swap_event)
-                k_chunks.append(page.k[:, :, :n, :].to(self.device, non_blocking=True))
-                v_chunks.append(page.v[:, :, :n, :].to(self.device, non_blocking=True))
+                k_t = page.k[:, :, :n, :].to(self.device, non_blocking=True)
+                v_t = page.v[:, :, :n, :].to(self.device, non_blocking=True)
                 self.host_fetches += 1
+            if self.kv_dtype == "fp8_e4m3fn":
+                k_t = (k_t.to(self.dtype) * page.k_scale).to(self.dtype)
+                v_t = (v_t.to(self.dtype) * page.v_scale).to(self.dtype)
+            k_chunks.append(k_t)
+            v_chunks.append(v_t)
         return torch.cat(k_chunks, dim=2), torch.cat(v_chunks, dim=2)
 
     def truncate(self, new_len: int) -> None:

@@ -29,6 +29,7 @@ from cutile_forge.kernels.attention_gqa import fused_attention_gqa
 from cutile_forge.kernels.gemm_dequant import fused_gemm_dequant, unpack_int4_weights_torch
 from cutile_forge.kernels.gemm_dequant_silu import fused_gemm_dequant_silu
 from cutile_forge.kernels.layernorm_residual import fused_rmsnorm_residual
+from cutile_forge.kernels.moe_fused import fused_moe_int4_gemm, fused_topk_gating
 from cutile_forge.kernels.rmsnorm import cutile_rmsnorm
 from cutile_forge.kernels.rope import apply_rope, precompute_rope_freqs
 
@@ -62,12 +63,50 @@ def _quant_linear_pytorch(x: torch.Tensor, qw: QuantLinearWeight) -> torch.Tenso
     return torch.matmul(x_in, w_fp16)
 
 
+class MoEFFNBlock:
+    """Sparse Mixture-of-Experts FFN block (Mixtral-8x7B) using CuTile fused MoE."""
+
+    def __init__(self, num_experts: int = 8, top_k: int = 2, group_size: int = 128) -> None:
+        self.num_experts = num_experts
+        self.top_k = top_k
+        self.group_size = group_size
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        router_weight: torch.Tensor,
+        expert_qweights: torch.Tensor,
+        expert_scales: torch.Tensor,
+        expert_zeros: torch.Tensor,
+    ) -> torch.Tensor:
+        logits = torch.matmul(x, router_weight.t())
+        probs, indices = fused_topk_gating(logits, top_k=self.top_k)
+        return fused_moe_int4_gemm(
+            x,
+            expert_qweights,
+            expert_scales,
+            expert_zeros,
+            probs,
+            indices,
+            group_size=self.group_size,
+        )
+
+
 class MistralLayer:
     """Single Mistral transformer layer executing via CuTile kernels or PyTorch reference."""
 
     def __init__(self, layer_idx: int, config: ModelConfig) -> None:
         self.layer_idx = layer_idx
         self.config = config
+        self.moe_block: MoEFFNBlock | None = (
+            MoEFFNBlock(
+                num_experts=config.experts,
+                top_k=getattr(config, "top_k_experts", 2),
+                group_size=config.group_size,
+            )
+            if config.experts > 1
+            else None
+        )
         self.tfg = build_mistral_layer_tfg(layer_idx, config=config)
         apply_fusion_rules(self.tfg)
         self.compiled_tfg: CompiledTFG = compile_tfg(
