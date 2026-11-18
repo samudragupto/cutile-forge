@@ -194,13 +194,13 @@ def _bind_live_kernel(node: TileNode) -> Optional[Any]:
 
 
 def _try_compile_cubin(node: TileNode, target: str) -> Tuple[Optional[bytes], Optional[str]]:
-    """Compile a canonical CuTile kernel to cubin/SASS via cuda.tile when CUDA is available."""
+    """Compile a canonical CuTile kernel to cubin/SASS via cuda.tile.compilation."""
     try:
+        import io
+
         import cuda.tile as ct
+        import cuda.tile.compilation as cc
         import torch
-        from cuda.tile._compile import compile_tile
-        from cuda.tile._context import TileContext
-        from cuda.tile._execution import KernelSignature
         from cutile_forge.kernels.gemm_dequant import gemm_fp16_kernel
     except Exception:
         return None, None
@@ -210,20 +210,21 @@ def _try_compile_cubin(node: TileNode, target: str) -> Tuple[Optional[bytes], Op
 
     try:
         tm, tn, tk = node.tile_shape
-        a_dummy = torch.empty((tm, tk), device="cuda", dtype=torch.float16)
-        b_dummy = torch.empty((tk, tn), device="cuda", dtype=torch.float16)
-        c_dummy = torch.empty((tm, tn), device="cuda", dtype=torch.float16)
-        sig = KernelSignature.from_args(gemm_fp16_kernel._annotated_function, (a_dummy, b_dummy, c_dummy, tm, tn, tk))
-        ctx = TileContext()
-        res = compile_tile(
-            gemm_fp16_kernel._annotated_function,
-            (sig,),
-            target,
-            gemm_fp16_kernel._compiler_options,
-            ctx,
+        ac = lambda: cc.ArrayConstraint(  # noqa: E731
+            ct.float16,
+            2,
+            index_dtype=ct.int32,
+            stride_lower_bound_incl=(1, 1),
+            alias_groups=(),
+            may_alias_internally=False,
         )
-        sym = res.kernel_signatures[0].symbol if res.kernel_signatures else None
-        return res.cubin, sym
+        sig = cc.KernelSignature(
+            [ac(), ac(), ac(), tm, tn, tk],
+            cc.CallingConvention.cutile_python_v2(),
+        )
+        buf = io.BytesIO()
+        cc.export_kernel(gemm_fp16_kernel, [sig], buf, gpu_code=target, output_format="cubin")
+        return buf.getvalue(), sig.symbol or f"{node.node_id}_sm89"
     except Exception:
         return None, None
 
