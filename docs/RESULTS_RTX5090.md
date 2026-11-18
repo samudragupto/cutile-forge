@@ -269,5 +269,35 @@
 
 ---
 
+## v0.3.0 Systems Hardening (Before vs. After on RTX 5090)
+
+| Benchmark / Bottleneck | v0.2.0 | v0.3.0 | Improvement |
+|---|---:|---:|---:|
+| Long Context `16K` step latency | 107,854.66 ms | **76.29 ms** | **1,413×** faster (async pinned pool) |
+| Long Context `32K` step latency | 1,315.34 ms | **214.67 ms** | **6.1×** faster |
+| Fused FFN `seq=256` speedup | 0.86× (0.870 ms) | **1.55×** (0.453 ms) | Occupancy selector `(64,64,32)` |
+| Full Fused Layer `seq=256` | 1.00× (3.418 ms) | **4.45×** (0.768 ms) | **4.45×** vs 8-kernel CUDA |
+| E2E Decode (`Mistral-7B` 4-bit) | 49.82 tok/s | **96.57 tok/s** (CUDA Graph) | **1.94×** |
+| Speculative (`gamma=4`) | 68.74 tok/s (0.72×) | **117.31 tok/s** (1.49×) | N-gram + KV rollback |
+
+---
+
+## v0.4.0 Blackwell Precision, Fused MoE & Multi-Format Quantization
+
+| Feature / Kernel | Configuration | Result on RTX 5090 |
+|---|---|---|
+| `PagedKVCache(kv_dtype="fp8_e4m3fn")` | Per-page FP8 scaling | **50% HBM reduction**, `< 1e-2` mean err |
+| `fused_gemm_nvfp4_dequant` (`e2m1`) | `1×14336×4096` / `256×14336×4096` | `0.065 ms` (1.80 TF) / `0.339 ms` (**88.56 TFLOPS**) |
+| `fused_moe_int4_gemm` (8 experts, `top_k=2`) | `M=1` / `M=64` / `M=256` | `0.337 ms` / `0.875 ms` (**4.91 TFLOPS**) / `27.921 ms` |
+| `unpack_awq_to_cutile` / `unpack_gguf_q4_k_to_cutile` | Auto-detected in `load_quantized_weights` | Exact `[K//2, N]` `uint8` recovery |
+
+---
+
+## v0.5.0 Empirical Roofline (`sm_89` vs `sm_120`)
+
+![Ada vs Blackwell Roofline](images_5090/roofline_ada_vs_blackwell.png)
+
+---
+
 *Full CSV data: `benchmarks/results_5090/`*
 *Methodology: `docs/BENCHMARK_METHODOLOGY.md`*

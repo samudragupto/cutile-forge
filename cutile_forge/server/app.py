@@ -1,0 +1,153 @@
+"""OpenAI-compatible `/v1/chat/completions` FastAPI server with SSE streaming."""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import time
+import uuid
+from collections.abc import AsyncIterator
+from typing import Any
+
+from fastapi import FastAPI
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
+
+from cutile_forge import __version__
+
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+
+class ChatCompletionRequest(BaseModel):
+    model: str = "mistral-7b-4bit"
+    messages: list[ChatMessage]
+    max_tokens: int = Field(default=64, ge=1, le=4096)
+    temperature: float = Field(default=0.0, ge=0.0, le=2.0)
+    top_k: int = Field(default=50, ge=1)
+    top_p: float = Field(default=0.9, gt=0.0, le=1.0)
+    stream: bool = False
+
+
+def _format_prompt(messages: list[ChatMessage]) -> str:
+    return "\n".join(f"{m.role}: {m.content}" for m in messages) + "\nassistant:"
+
+
+def create_app(
+    engine: Any, tokenizer: Any | None = None, model_id: str = "mistral-7b-4bit"
+) -> FastAPI:
+    """Create FastAPI app exposing `/health`, `/v1/models`, and `/v1/chat/completions`."""
+    app = FastAPI(title="CuTileForge OpenAI Server", version=__version__)
+    batch_lock = asyncio.Lock()
+
+    @app.get("/health")
+    async def health() -> dict[str, Any]:
+        return {
+            "status": "ok",
+            "version": __version__,
+            "target": getattr(engine, "target", "sm_120"),
+        }
+
+    @app.get("/v1/models")
+    async def list_models() -> dict[str, Any]:
+        return {
+            "object": "list",
+            "data": [
+                {
+                    "id": model_id,
+                    "object": "model",
+                    "created": 1700000000,
+                    "owned_by": "cutile-forge",
+                }
+            ],
+        }
+
+    def _encode_prompt(prompt_text: str) -> Any:
+        import torch
+
+        if tokenizer is not None:
+            return tokenizer.encode(prompt_text, return_tensors="pt")
+        ids = [max(1, ord(c) % max(2, engine.config.vocab_size)) for c in prompt_text[:64]] or [1]
+        return torch.tensor([ids], dtype=torch.long)
+
+    def _decode_tokens(token_ids: list[int]) -> str:
+        if tokenizer is not None:
+            return str(tokenizer.decode(token_ids, skip_special_tokens=True))
+        return " ".join(str(t) for t in token_ids)
+
+    @app.post("/v1/chat/completions")
+    async def chat_completions(req: ChatCompletionRequest) -> Any:
+        prompt_text = _format_prompt(req.messages)
+        prompt_ids = _encode_prompt(prompt_text)
+        req_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
+        created = int(time.time())
+
+        if req.stream:
+
+            async def event_stream() -> AsyncIterator[str]:
+                async with batch_lock:
+                    for tok_id in engine.stream_ids(
+                        prompt_ids,
+                        max_new_tokens=req.max_tokens,
+                        temperature=req.temperature,
+                        top_k=req.top_k,
+                        top_p=req.top_p,
+                    ):
+                        chunk_text = _decode_tokens([tok_id])
+                        payload = {
+                            "id": req_id,
+                            "object": "chat.completion.chunk",
+                            "created": created,
+                            "model": req.model,
+                            "choices": [
+                                {
+                                    "index": 0,
+                                    "delta": {"content": chunk_text},
+                                    "finish_reason": None,
+                                }
+                            ],
+                        }
+                        yield f"data: {json.dumps(payload)}\n\n"
+                    done_payload = {
+                        "id": req_id,
+                        "object": "chat.completion.chunk",
+                        "created": created,
+                        "model": req.model,
+                        "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+                    }
+                    yield f"data: {json.dumps(done_payload)}\n\n"
+                    yield "data: [DONE]\n\n"
+
+            return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+        async with batch_lock:
+            out_ids = engine.generate_ids(
+                prompt_ids,
+                max_new_tokens=req.max_tokens,
+                temperature=req.temperature,
+                top_k=req.top_k,
+                top_p=req.top_p,
+            )
+        text = _decode_tokens(out_ids)
+        return {
+            "id": req_id,
+            "object": "chat.completion",
+            "created": created,
+            "model": req.model,
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {"role": "assistant", "content": text},
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {
+                "prompt_tokens": int(prompt_ids.shape[1]),
+                "completion_tokens": len(out_ids),
+                "total_tokens": int(prompt_ids.shape[1]) + len(out_ids),
+            },
+        }
+
+    return app

@@ -184,6 +184,15 @@ PS C:\Users\user\Desktop\cutile-forge> python -m pytest tests/ benchmarks/correc
 | ![30-Min Sustained](docs/images_5090/sustained_30min.png) | ![Scaling Summary](docs/images_5090/scaling_summary.png) |
 | *30-min sustained decode (94.69 tok/s avg)* | *RTX 5090 vs 4060 speedup summary* |
 
+### Empirical Roofline (`sm_89` vs `sm_120`) & OpenAI Server (v0.5.0)
+
+![Ada vs Blackwell Roofline](docs/images_5090/roofline_ada_vs_blackwell.png)
+
+```bash
+# Start OpenAI-compatible server (/health, /v1/models, /v1/chat/completions with SSE streaming)
+cutile-forge serve --model /home/arrhat/models/mistral_7b_4bit --port 8000 --target sm_120
+```
+
 Full results: [`docs/RESULTS_RTX5090.md`](docs/RESULTS_RTX5090.md)
 
 ---
