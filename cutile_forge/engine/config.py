@@ -91,7 +91,7 @@ class GPUConfig:
     vram_budget_gb: float = 7.2
     smem_per_sm_kb: int = 100
     pcie_gen: int = 4
-    pcie_lanes: int = 16
+    pcie_lanes: int = 8
     pipeline_depth: int = 3
     stream_weights: bool = False  # Stream from pinned DDR5 when True, or keep in 8GB VRAM
 

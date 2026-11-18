@@ -71,7 +71,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the Stage -1 PCIe DMA seque
 
 ## Benchmarks & Telemetry
 
-**Test Rig:** Lenovo LOQ / IdeaPad 15APH8 · NVIDIA GeForce RTX 4060 Laptop (`AD107`, `sm_89`, 24 SMs, 8 GB GDDR6) · AMD Ryzen 7 7735HS · 32 GB DDR5-4800 · PCIe 4.0 · Model: `TheBloke/Mistral-7B-v0.1-GPTQ` (`D:\models\mistral_7b_4bit\`, 4.16 GB).
+**Test Rig:** Lenovo LOQ 15APH8 (`82XT`) · NVIDIA GeForce RTX 4060 Laptop (`AD107`, `sm_89`, 24 SMs, 8 GB GDDR6) · AMD Ryzen 7 7840HS (8C/16T) · 16 GB DDR5-5600 (`2×8 GB` Micron) · PCIe 4.0 x8 · Windows 11 · Model: `TheBloke/Mistral-7B-v0.1-GPTQ` (`D:\models\mistral_7b_4bit\`, 4.16 GB).
 
 ### Windows Terminal Output (Verified Run)
 

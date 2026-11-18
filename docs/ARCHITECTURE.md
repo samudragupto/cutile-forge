@@ -25,8 +25,8 @@ flowchart TD
 
 ```mermaid
 sequenceDiagram
-    participant CPU as Ryzen 7 7735HS
-    participant DDR5 as Pinned DDR5
+    participant CPU as Ryzen 7 7840HS
+    participant DDR5 as Pinned DDR5-5600
     participant DMA as PCIe 4.0 Copy Stream
     participant GPU as RTX 4060 Tensor Cores
 

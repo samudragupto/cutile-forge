@@ -1,6 +1,6 @@
 # CuTileForge Benchmark Results
 
-**Hardware:** Lenovo IdeaPad 15APH8 | RTX 4060 Laptop GPU (AD107, sm_89, 8 GB GDDR6) | AMD Ryzen 7 7735HS | 32 GB DDR5 | PCIe 4.0
+**Hardware:** Lenovo LOQ 15APH8 | RTX 4060 Laptop GPU (AD107, sm_89, 8 GB GDDR6) | AMD Ryzen 7 7840HS | 16 GB DDR5-5600 | PCIe 4.0 x8
 **Model:** Mistral-7B-v0.1 (4-bit GPTQ) | **Engine:** CuTileForge 0.1.0
 
 ## GEMM (FP16, 8 Shapes)
