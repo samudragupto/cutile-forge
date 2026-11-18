@@ -226,7 +226,7 @@ def create_random_4bit_weights(
         )
 
     def _rand_quant(k_dim: int, n_dim: int) -> QuantLinearWeight:
-        w = (torch.randn((k_dim, n_dim), generator=gen, dtype=torch.float32) * 0.05).to(torch.float16)
+        w = (torch.randn((k_dim, n_dim), generator=gen, dtype=torch.float32) * 0.015).to(torch.float16)
         qw, s, z = quantize_4bit_group(w, group_size=config.group_size)
         return QuantLinearWeight(qw.to(dev), s.to(dev), z.to(dev), group_size=config.group_size)
 
@@ -259,3 +259,4 @@ def create_random_4bit_weights(
         lm_head=_rand_fp16((config.vocab_size, h), scale=0.05),
         layers=layers,
     )
+

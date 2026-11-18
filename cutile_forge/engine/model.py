@@ -168,12 +168,12 @@ class MistralLayer:
 
         attn_2d = attn_out.transpose(1, 2).contiguous().view(bsz * seq_len, hidden_dim)
         o_proj = _quant_linear_pytorch(attn_2d, weights.o_proj)
-        residual_mid = x_2d + o_proj
+        residual_mid = (x_2d.float() + o_proj.float()).to(torch.float16)
         post_norm = _pytorch_rmsnorm(
             residual_mid, weights.post_attention_layernorm, eps=self.config.rms_norm_eps
         )
 
-        gate = F.silu(_quant_linear_pytorch(post_norm, weights.gate_proj))
+        gate = F.silu(_quant_linear_pytorch(post_norm, weights.gate_proj).float()).to(torch.float16)
         up = _quant_linear_pytorch(post_norm, weights.up_proj)
         ffn_out = _quant_linear_pytorch(gate * up, weights.down_proj)
         return (residual_mid + ffn_out).view(bsz, seq_len, hidden_dim)
@@ -281,3 +281,4 @@ class Mistral7B:
         # Only compute logits for all tokens when needed; matmul with lm_head^T
         logits = torch.matmul(normed, self.weights.lm_head.t())
         return logits.view(bsz, seq_len, self.config.vocab_size)
+
