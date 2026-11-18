@@ -1,49 +1,140 @@
-# CuTileForge v0.2.0 — NVIDIA GeForce RTX 5090 (`sm_120`) Benchmark Report (Stub)
+# CuTileForge Benchmark Results — NVIDIA RTX 5090 (`sm_120`)
 
-## 1. Target Hardware & Compiler Configuration
-
-| Parameter | RTX 5090 (`sm_120`) Configuration | Lenovo LOQ 15APH8 (`sm_89`) Baseline |
-| --- | --- | --- |
-| **Preset** | `cutile_forge.engine.config.RTX5090` | `cutile_forge.engine.config.LOQ_RTX4060` |
-| **Architecture** | Blackwell `sm_120` (`sm=120`, `170` SMs) | Ada Lovelace `sm_89` (`sm=89`, `24` SMs) |
-| **VRAM Capacity** | **32 GB GDDR7** (`vram_budget_gb=28.8`) | **8 GB GDDR6** (`vram_budget_gb=7.2`) |
-| **Host Interconnect** | PCIe 5.0 x16 (`pcie_gen=5`) | PCIe 4.0 x8 (`13.30 GB/s` sustained H2D) |
-| **TFG Codegen Defaults** | `target="sm_120"`, `pipeline_depth=4` (`latency=4`) | `target="sm_89"`, `pipeline_depth=3` (`latency=3`) |
-| **FP8 Tensor Core Path** | Enabled (`GPUConfig.fp8=True`, `gemm_fp8_kernel` / `cutile.float8`) | Disabled (`GPUConfig.fp8=False`, falls back to FP16/INT4) |
-| **Stage -1 Weight Streamer** | **Auto-disabled for 7B** (`4.16 GB <= 32 GB * 0.85 = 27.2 GB`; 100% HBM-resident) | Enabled when model exceeds `85%` VRAM budget (`93.8–100%` overlap) |
-| **Large-Model Configs** | `MISTRAL_8x7B_4BIT` (`experts=8, d_model=4096`), `LLAMA_34B_4BIT` (`d_model=8192, n_layers=48`) | `Mistral-7B-v0.1` 4-bit GPTQ (`d_model=4096, n_layers=32`) |
+**Hardware:** NVIDIA GeForce RTX 5090 (Blackwell, `sm_120`, 170 SMs, 32 GB GDDR7, 1,792 GB/s, PCIe 5.0 x16)  
+**Software:** `cuda-tile` 1.8.1, PyTorch 2.15+cu132 (`sm_120` native), Mistral-7B-v0.1 4-bit GPTQ  
+**Raw CSVs & Charts:** [`benchmarks/results_5090/`](../benchmarks/results_5090/)
 
 ---
 
-## 2. Architectural Highlights (`v0.2.0`)
+## GEMM (Micro 1/8)
+| Shape | CuTile TFLOPS | CUDA TFLOPS | cuBLAS TFLOPS | PyTorch TFLOPS |
+|-------|--------------|-------------|---------------|----------------|
+| 1x12288x4096 | 2.36 | 1.37 | 1.98 | 1.45 |
+| 256x12288x4096 | 107.91 | 120.77 | 269.20 | 177.65 |
+| 1x14336x4096 | 1.57 | 1.43 | 1.44 | 1.53 |
+| 256x14336x4096 | 136.14 | 122.24 | 288.91 | 186.12 |
+| 1x4096x14336 | 1.60 | 0.53 | 1.52 | 1.52 |
+| 256x4096x14336 | 73.10 | 126.74 | 289.08 | 163.47 |
+| 1x4096x4096 | 1.94 | 0.52 | 2.40 | 0.83 |
+| 512x4096x4096 | 150.26 | 130.90 | 312.68 | 169.01 |
 
-1. **4-Stage Software Pipelining (`sm_120`)**:
-   `compile_tfg()` now defaults to `target="sm_120"` and `pipeline_depth=4`, emitting `latency=4` hints on `ct.load` across all 3 fused TFG kernels (`FUSED_QKV_ATTN`, `FUSED_O_LAYERNORM`, `FUSED_FFN_NORM`).
-2. **FP8 Tensor Core Kernel (`gemm_fp8_kernel`)**:
-   `cutile_forge/kernels/gemm_dequant.py` adds `gemm_fp8_kernel` (`dtype=cutile.float8` / `ct.float8_e4m3fn`) and `cutile_gemm_fp8()`, guarded by `GPUConfig.fp8`. On `sm_89` configurations where `fp8=False`, `cutile_gemm_fp8()` automatically falls back to `cutile_gemm_fp16()`.
-3. **32 GB Resident Execution (Zero PCIe Streaming Overhead for 7B–34B)**:
-   `WeightStreamer` automatically sets `self.enabled = (model_gb > gpu_vram_gb * 0.85)`. On the 32 GB RTX 5090 (`threshold = 27.2 GB`), `Mistral-7B-v0.1` (`4.16 GB`), `Mixtral-8x7B` 4-bit (`~23.5 GB`), and `Llama-34B` 4-bit (`~18.5 GB`) remain resident in GDDR7 HBM without PCIe DMA streaming.
+## GEMM Dequant (Micro 2/8)
+| Shape | Fused ms | Fused TFLOPS | Separate ms | Speedup |
+|-------|----------|-------------|-------------|---------|
+| 1x12288x4096 | 0.035 | 2.92 | 0.162 | 4.69x |
+| 256x12288x4096 | 0.229 | 112.52 | 0.311 | 1.36x |
+| 1x14336x4096 | 0.036 | 3.22 | 0.188 | 5.15x |
+| 256x14336x4096 | 0.227 | 132.58 | 0.366 | 1.62x |
+
+## Fused FFN (Micro 3/8)
+| Seq | Fused ms | Separate ms | Speedup |
+|-----|----------|-------------|---------|
+| 1 | 0.064 | 0.518 | 8.04x |
+| 64 | 0.204 | 0.553 | 2.70x |
+| 256 | 0.870 | 0.745 | 0.86x (regression) |
+| 512 | 0.903 | 3.556 | 3.94x |
+
+## Attention GQA (Micro 4/8)
+| Seq | CuTile TFLOPS | CUDA TFLOPS | PyTorch TFLOPS |
+|-----|--------------|-------------|----------------|
+| 64 | 3.85 | 1.28 | 0.77 |
+| 256 | 19.63 | 4.78 | 21.12 |
+| 512 | 59.05 | 5.74 | 50.82 |
+| 1024 | 101.62 | 2.35 | 75.51 |
+
+## LayerNorm (Micro 5/8)
+| Seq | CuTile ms | CuTile GB/s | CUDA ms | PyTorch ms |
+|-----|-----------|-------------|---------|------------|
+| 1 | 0.0038 | 4.3 | 0.0078 | 0.0078 |
+| 64 | 0.0038 | 278.9 | 0.0082 | 0.0078 |
+| 256 | 0.0058 | 724.1 | 0.0081 | 0.0078 |
+| 1024 | 0.0118 | 1426.6 | 0.0140 | 0.0099 |
+
+## SiLU Fusion (Micro 6/8)
+| Seq | Fused ms | Separate ms | Speedup |
+|-----|----------|-------------|---------|
+| 1 | 0.0376 | 0.0385 | 1.02x |
+| 64 | 0.0795 | 0.0787 | 0.99x |
+| 256 | 0.2680 | 0.2609 | 0.97x |
+| 512 | 0.4063 | 0.4008 | 0.99x |
+
+## Full Fused Layer (Micro 7/8)
+| Seq | TFG(3k) ms | CUDA(8k) ms | PyTorch ms | Speedup |
+|-----|-----------|-------------|------------|---------|
+| 1 | 0.133 | 0.745 | 0.262 | 5.58x |
+| 64 | 0.336 | 0.777 | 0.243 | 2.31x |
+| 256 | 3.418 | 3.407 | 0.485 | 1.00x |
+| 512 | 3.543 | 4.466 | 0.886 | 1.26x |
+
+## Weight Streaming (Micro 8/8)
+| Tile | Serial ms | Overlap ms | Overlap % | PCIe GB/s |
+|------|-----------|------------|-----------|-----------|
+| 32 MB | 1.158 | 1.345 | 0.0% | 49.09 |
+| 64 MB | 1.814 | 1.802 | 2.6% | 49.09 |
+| 115 MB | 2.796 | 2.595 | 93.2% | 49.09 |
+
+## E2E Prefill
+| Prompt | Prefill ms | tok/s | VRAM GB |
+|--------|-----------|-------|---------|
+| 128 | 99.65 | 1284.5 | 4.29 |
+| 512 | 142.89 | 3583.2 | 4.35 |
+| 2048 | 380.86 | 5377.3 | 4.66 |
+| 4096 | 726.18 | 5640.5 | 5.07 |
+
+## E2E Decode
+49.82 tok/s, 20.07 ms/tok, 4.32 GB VRAM
+
+## E2E Long Context
+| Ctx | Step ms | Evictions | VRAM GB |
+|-----|---------|-----------|---------|
+| 4096 | 17.96 | 0 | 4.83 |
+| 8192 | 33.85 | 0 | 5.36 |
+| 16384 | 107854.66 | 10240 | 5.93 |
+| 32768 | 1315.34 | 26624 | 6.00 |
+
+## E2E Batch
+| Batch | Latency ms | tok/s | VRAM GB |
+|-------|-----------|-------|---------|
+| 1 | 24.19 | 1322.9 | 4.28 |
+| 2 | 24.49 | 2613.5 | 4.29 |
+| 4 | 48.23 | 2653.8 | 4.29 |
+| 8 | 51.46 | 4974.8 | 4.30 |
+| 16 | 60.54 | 8457.1 | 4.35 |
+
+## Speculative (gamma=4)
+accept=0.30, base=95.33 tok/s, spec=68.74 tok/s
+
+## Scaling Table (4060 vs 5090)
+| Metric | 4060 Laptop (sm_89) | 5090 (sm_120) | Speedup |
+|--------|--------------------|--------------------|---------|
+| SMs | 24 | 170 | 7.1x |
+| VRAM | 8 GB | 32 GB | 4x |
+| Mem BW | 272 GB/s | 1792 GB/s | 6.6x |
+| PCIe | 4.0 x8 (13 GB/s) | 5.0 x16 (49 GB/s) | 3.7x |
+| GEMM 256x14336x4096 | 25 TFLOPS | 136 TFLOPS | 5.4x |
+| Decode 7B-4bit | 32.43 tok/s | 49.82 tok/s | 1.54x |
+| Prefill 4096 | 1476 tok/s | 5640 tok/s | 3.8x |
+| Batch=16 | 1440 tok/s | 8457 tok/s | 5.9x |
+| Attention seq=1024 | 21.76 TFLOPS | 101.62 TFLOPS | 4.7x |
+| Full layer seq=1 | 5.47x | 5.58x | - |
+| Peak VRAM | 4.30 GB | 4.32 GB | - |
 
 ---
 
-## 3. Running the RTX 5090 Benchmark Suite
+## Known Issues
 
-```bash
-python benchmarks/run_all.py \
-  --target sm_120 \
-  --gpu rtx5090 \
-  --model ~/models/mistral_7b_4bit/
-```
+1. **Fused FFN at `seq=256`: 0.86x (regression vs 4060's 1.46x).**
+   - **Cause:** The RTX 5090's 1,792 GB/s memory bandwidth makes the separate kernels' HBM round-trip cheap, while the fused kernel's larger shared-memory footprint hurts occupancy across 170 SMs.
+   - **Fix:** Retune tile sizes for FFN at `seq=256` on `sm_120`.
 
-All CSV outputs are written to `benchmarks/results_5090/`:
+2. **SiLU fusion: ~1.0x (no speedup).**
+   - **Cause:** Expected on `sm_120` — 1,792 GB/s bandwidth makes the separate SiLU kernel's memory traffic negligible. Not a bug.
 
-| Benchmark Suite | Output CSV | Status on RTX 5090 (`sm_120`) | Lenovo LOQ 15APH8 (`sm_89`) Reference |
-| --- | --- | --- | --- |
-| **FP16 & FP8 GEMM** | `benchmarks/results_5090/gemm.csv` | *Pending benchmark* | `28.18 TFLOPS` (`256×14336×4096`) |
-| **INT4 Dequant + GEMM** | `benchmarks/results_5090/gemm_dequant.csv` | *Pending benchmark* | `23.37 TFLOPS` (`2.15×` vs CUDA at `seq=256`, `7.12×` at `seq=1`) |
-| **Fused FFN (1k vs 3k)** | `benchmarks/results_5090/ffn.csv` | *Pending benchmark* | `5.48×` (`seq=1`), `1.78×` (`seq=512`) |
-| **GQA FlashAttention-2** | `benchmarks/results_5090/attention.csv` | *Pending benchmark* | `21.76 TFLOPS` vs `13.23 TFLOPS` PyTorch SDPA (`seq=1024`) |
-| **Full TFG Layer (3k vs 8k)** | `benchmarks/results_5090/layer.csv` | *Pending benchmark* | `5.47×` (`seq=1`), `2.22×` (`64`), `1.64×` (`256`), `1.96×` (`512`) |
-| **E2E Decode (256 tok)** | `benchmarks/results_5090/decode.csv` | *Pending benchmark* | `32.43 tok/s` (`30.83 ms/tok`, `4.30 GB` peak VRAM) |
-| **30-Min Sustained Thermal** | `benchmarks/results_5090/sustained/` | *Pending benchmark* | `31.16 tok/s` avg, `83.0 °C` max, `4.62%` avg throttle |
+3. **Long context 16K: 107,854.66 ms/step (bug) vs 32K at 1,315.34 ms/step.**
+   - **Investigation (`cutile_forge/engine/kv_cache.py`):** No off-by-one error in page indexing or budget accounting (`page_idx = pos // page_size`, `page_bytes = 2 * num_kv_heads * page_size * head_dim * 2`). However, `get_kv(layer_idx)` calls `_ensure_on_gpu(key)` on every page, which triggers `_evict_if_needed()` and synchronous `.cpu().pin_memory()` calls inside the forward pass. At 16K (the first context exceeding the 1.5 GB budget), this causes an eviction storm (10,240 evictions / 8,192 host fetches) and a host memory-pinning stall.
 
+4. **Speculative decoding: 68.74 tok/s < base 95.33 tok/s.**
+   - **Cause:** Acceptance rate (`0.30`) is too low because the draft model equals the verify model. Requires a smaller draft model.
+
+5. **CuTile GEMM (136 TFLOPS) is below cuBLAS (289 TFLOPS).**
+   - **Cause:** Expected — cuBLAS uses FP16-accumulate (2x Tensor Core throughput), whereas CuTile uses FP32-accumulate for numerical precision. CuTile's advantage is kernel fusion, not raw standalone GEMM.

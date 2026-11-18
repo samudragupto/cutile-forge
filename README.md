@@ -120,17 +120,18 @@ PS C:\Users\user\Desktop\cutile-forge> python -m pytest tests/ benchmarks/correc
 
 #### Dual-Hardware Target Comparison (v0.2.0)
 
-| Metric / Capability | Lenovo LOQ 15APH8 (`RTX 4060 Laptop`, Verified) | Desktop Workstation (`RTX 5090`, v0.2.0 Target) |
+| Metric / Capability | Lenovo LOQ 15APH8 (`RTX 4060 Laptop`, Verified) | Desktop Workstation (`RTX 5090`, Verified) |
 | --- | --- | --- |
 | **GPU Architecture & SMs** | Ada Lovelace (`AD107`, `sm_89`, 24 SMs) | Blackwell (`GB202`, `sm_120`, 170 SMs) |
-| **VRAM & Host Link** | 8 GB GDDR6 · PCIe 4.0 x8 (`13.30 GB/s` H2D) | 32 GB GDDR7 · PCIe 5.0 x16 |
+| **VRAM & Host Link** | 8 GB GDDR6 · PCIe 4.0 x8 (`13.30 GB/s` H2D) | 32 GB GDDR7 · PCIe 5.0 x16 (`49.09 GB/s` H2D) |
 | **CPU & System RAM** | AMD Ryzen 7 7840HS · 16 GB DDR5-5600 | Desktop Host · 64+ GB DDR5 |
 | **TFG Software Pipeline** | 3-stage (`latency=3`) + Stage -1 PCIe DMA | 4-stage (`latency=4`), auto-disabled DMA for 7B (`4.16 GB < 27.2 GB`) |
-| **Quantized GEMM Path** | Fused INT4 Dequant + FP16 MMA (`23.37 TFLOPS`) | Fused INT4 + Native FP8 Tensor Core (`cutile.float8`, `GPUConfig.fp8=True`) |
+| **Quantized GEMM Path** | Fused INT4 Dequant + FP16 MMA (`23.37 TFLOPS`) | **136.14 TFLOPS** (`256x14336x4096`), **132.58 TFLOPS** INT4 Dequant (`1.62×` vs separate) |
 | **Supported Model Presets** | `Mistral-7B-v0.1` 4-bit GPTQ (`4.16 GB`) | `Mistral-7B`, `MISTRAL_8x7B_4BIT` (`experts=8`), `LLAMA_34B_4BIT` (`48L, d=8192`) |
-| **TFG Layer Fusion (8→3 Kernels)** | **5.47×** (`seq=1`), **1.96×** (`seq=512`) | 8→3 fused `sm_120` tiles (*pending benchmark*) |
-| **E2E Decode (`Mistral-7B` 4-bit)** | **32.43 tok/s** (`30.83 ms/tok`, **4.30 GB** VRAM) | 32 GB resident HBM (*pending benchmark*) |
-| **30-Min Sustained Thermal** | **31.16 tok/s** avg (`83.0 °C` max, `4.62%` throttle) | *Pending benchmark* ([docs/RESULTS_RTX5090.md](docs/RESULTS_RTX5090.md)) |
+| **TFG Layer Fusion (8→3 Kernels)** | **5.47×** (`seq=1`), **1.96×** (`seq=512`) | **5.58×** (`seq=1`), **1.26×** (`seq=512`) |
+| **E2E Decode (`Mistral-7B` 4-bit)** | **32.43 tok/s** (`30.83 ms/tok`, **4.30 GB** VRAM) | **49.82 tok/s** (`20.07 ms/tok`, **4.32 GB** VRAM) |
+| **Prefill (4096) / Batch (16)** | **1,476 tok/s** prefill · **1,440 tok/s** batch=16 | **5,640.5 tok/s** prefill (`3.8×`) · **8,457.1 tok/s** batch=16 (`5.9×`) |
+| **Attention GQA (`seq=1024`)** | **21.76 TFLOPS** | **101.62 TFLOPS** (`4.7×`) · full results in [docs/RESULTS_RTX5090.md](docs/RESULTS_RTX5090.md) |
 
 #### End-to-End Inference (`Mistral-7B-v0.1` 4-bit GPTQ on Lenovo LOQ 15APH8)
 
@@ -221,7 +222,7 @@ cutile-forge/
 - [docs/BENCHMARK_METHODOLOGY.md](docs/BENCHMARK_METHODOLOGY.md) — Timing, NVML, and PCIe measurement protocol
 - [docs/TUNING_GUIDE.md](docs/TUNING_GUIDE.md) — Tile autotuning and 8 GB VRAM memory budgeting
 - [docs/RESULTS.md](docs/RESULTS.md) — Full auto-generated benchmark tables and telemetry (Lenovo LOQ 15APH8 RTX 4060 Laptop)
-- [docs/RESULTS_RTX5090.md](docs/RESULTS_RTX5090.md) — RTX 5090 (`sm_120`, 32 GB VRAM, FP8 Tensor Core) target configuration and benchmark stub
+- [docs/RESULTS_RTX5090.md](docs/RESULTS_RTX5090.md) — Verified RTX 5090 (`sm_120`, 32 GB VRAM) benchmark suite, scaling comparison, and known issues
 
 ## License
 
