@@ -31,11 +31,12 @@ def test_unpack_gptq_layer() -> None:
     qw_i32 = torch.randint(-2**31, 2**31 - 1, (k // 8, n), dtype=torch.int32)
     qz_i32 = torch.zeros((k // gs, n // 8), dtype=torch.int32)
     scales = torch.ones((k // gs, n), dtype=torch.float16) * 0.1
-    qw_u8, s_out, z_out = unpack_gptq_layer(qw_i32, qz_i32, scales, group_size=gs)
+    qw_u8, s_out, z_out, perm = unpack_gptq_layer(qw_i32, qz_i32, scales, group_size=gs)
     assert qw_u8.shape == (k // 2, n)
     assert qw_u8.dtype == torch.uint8
     assert s_out.shape == (1, n)
     assert torch.all(z_out == 1.0)
+    assert perm is None
 
 
 def test_quantize_invalid_k_raises() -> None:

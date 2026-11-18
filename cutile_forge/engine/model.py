@@ -49,12 +49,14 @@ def _pytorch_rope(
 
 
 def _quant_linear_cutile(x: torch.Tensor, qw: QuantLinearWeight) -> torch.Tensor:
-    return fused_gemm_dequant(x, qw.qweight, qw.scales, qw.zeros, group_size=qw.group_size)
+    x_in = x[:, qw.perm] if qw.perm is not None else x
+    return fused_gemm_dequant(x_in, qw.qweight, qw.scales, qw.zeros, group_size=qw.group_size)
 
 
 def _quant_linear_pytorch(x: torch.Tensor, qw: QuantLinearWeight) -> torch.Tensor:
+    x_in = x[:, qw.perm] if qw.perm is not None else x
     w_fp16 = unpack_int4_weights_torch(qw.qweight, qw.scales, qw.zeros, group_size=qw.group_size)
-    return torch.matmul(x, w_fp16)
+    return torch.matmul(x_in, w_fp16)
 
 
 class MistralLayer:
@@ -110,8 +112,9 @@ class MistralLayer:
             o_proj, x_2d, weights.post_attention_layernorm, eps=self.config.rms_norm_eps
         )
 
+        gate_in = post_norm[:, weights.gate_proj.perm] if weights.gate_proj.perm is not None else post_norm
         gate_act = fused_gemm_dequant_silu(
-            post_norm,
+            gate_in,
             weights.gate_proj.qweight,
             weights.gate_proj.scales,
             weights.gate_proj.zeros,

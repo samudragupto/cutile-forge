@@ -54,28 +54,36 @@ def unpack_gptq_layer(
     scales: torch.Tensor,
     group_size: int = 128,
     g_idx: torch.Tensor | None = None,
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor | None]:
     """Convert HuggingFace AutoGPTQ int32 `(K//8, N)` / `(K//gs, N//8)` to CuTileForge uint8 format.
 
     AutoGPTQ stores `qzeros` as `(val - 1)` packed 8x int4 in `int32` along N.
+    When `desc_act=True` (`g_idx` is non-sequential), rows are sorted by `g_idx` so
+    each contiguous `group_size` block shares one scale/zero, and `perm` is returned
+    so callers reorder input columns `x[:, perm]` before matmul.
     """
     k_div8, n_dim = qweight_i32.shape
     device = qweight_i32.device
 
     shifts = torch.arange(0, 32, 4, device=device, dtype=torch.int32)
-    # Unpack qweight: (K//8, N) -> (K, N) uint8
     qw_unpacked = ((qweight_i32.unsqueeze(1) >> shifts.view(1, 8, 1)) & 0xF).to(torch.uint8)
     qw_unpacked = qw_unpacked.reshape(k_div8 * 8, n_dim)
 
-    # Unpack qzeros: (G, N//8) -> (G, N) float16 (+1 per GPTQ v1/v2 convention)
     g_dim, n_div8 = qzeros_i32.shape
     qz_unpacked = ((qzeros_i32.unsqueeze(2) >> shifts.view(1, 1, 8)) & 0xF) + 1
     zeros_fp16 = qz_unpacked.reshape(g_dim, n_div8 * 8).to(torch.float16)
 
+    perm: torch.Tensor | None = None
     if g_idx is not None:
-        # Reorder rows to group order if act-order permutation was used
-        perm = torch.argsort(g_idx)
-        inv_perm = torch.argsort(perm)
-        _ = inv_perm  # Keep contiguous ordering if sequential; act-order handled at load if needed
+        expected = torch.arange(qw_unpacked.shape[0], device=device) // group_size
+        if not torch.equal(g_idx.to(device=device, dtype=expected.dtype), expected):
+            perm = torch.argsort(g_idx.to(device), stable=True)
+            qw_unpacked = qw_unpacked[perm]
 
-    return pack_int4_weights(qw_unpacked), scales.to(torch.float16).contiguous(), zeros_fp16.contiguous()
+    return (
+        pack_int4_weights(qw_unpacked),
+        scales.to(torch.float16).contiguous(),
+        zeros_fp16.contiguous(),
+        perm,
+    )
+

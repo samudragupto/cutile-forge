@@ -22,6 +22,7 @@ class QuantLinearWeight:
     scales: torch.Tensor   # (K // group_size, N) float16
     zeros: torch.Tensor    # (K // group_size, N) float16
     group_size: int = 128
+    perm: Optional[torch.Tensor] = None  # optional act-order row permutation (K,) int64
 
     def to(self, device: torch.device | str) -> "QuantLinearWeight":
         return QuantLinearWeight(
@@ -29,6 +30,7 @@ class QuantLinearWeight:
             scales=self.scales.to(device, non_blocking=True),
             zeros=self.zeros.to(device, non_blocking=True),
             group_size=self.group_size,
+            perm=self.perm.to(device, non_blocking=True) if self.perm is not None else None,
         )
 
     @property
@@ -162,18 +164,24 @@ def load_gptq_weights(
         qz_i32 = raw[f"{prefix}.qzeros"]
         sc = raw[f"{prefix}.scales"]
         g_idx = raw.get(f"{prefix}.g_idx")
-        qw_u8, scales_fp16, zeros_fp16 = unpack_gptq_layer(
+        qw_u8, scales_fp16, zeros_fp16, perm = unpack_gptq_layer(
             qw_i32, qz_i32, sc, group_size=config.group_size, g_idx=g_idx
         )
         if str(target) == "cpu" and pin_ddr5:
             qw_u8 = WeightStreamer.pin_tensor(qw_u8)
             scales_fp16 = WeightStreamer.pin_tensor(scales_fp16)
             zeros_fp16 = WeightStreamer.pin_tensor(zeros_fp16)
+            if perm is not None:
+                perm = WeightStreamer.pin_tensor(perm)
         else:
             qw_u8 = qw_u8.to(target)
             scales_fp16 = scales_fp16.to(target)
             zeros_fp16 = zeros_fp16.to(target)
-        return QuantLinearWeight(qw_u8, scales_fp16, zeros_fp16, group_size=config.group_size)
+            if perm is not None:
+                perm = perm.to(target)
+        return QuantLinearWeight(
+            qw_u8, scales_fp16, zeros_fp16, group_size=config.group_size, perm=perm
+        )
 
     for idx in range(config.num_hidden_layers):
         p = f"model.layers.{idx}"
