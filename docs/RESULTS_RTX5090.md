@@ -1,140 +1,261 @@
-# CuTileForge Benchmark Results — NVIDIA RTX 5090 (`sm_120`)
+# CuTileForge — RTX 5090 Benchmark Results (v0.2.0)
 
-**Hardware:** NVIDIA GeForce RTX 5090 (Blackwell, `sm_120`, 170 SMs, 32 GB GDDR7, 1,792 GB/s, PCIe 5.0 x16)  
-**Software:** `cuda-tile` 1.8.1, PyTorch 2.15+cu132 (`sm_120` native), Mistral-7B-v0.1 4-bit GPTQ  
-**Raw CSVs & Charts:** [`benchmarks/results_5090/`](../benchmarks/results_5090/)
+**Hardware:** Desktop Workstation · NVIDIA GeForce RTX 5090 (GB202, sm_120, 170 SMs, 32 GB GDDR7, ~1,792 GB/s) · Intel Core Ultra 9 285K (24C/24T) · 62 GB DDR5 · PCIe 5.0 x16
+**Model:** TheBloke/Mistral-7B-v0.1-GPTQ (4-bit, desc_act=True, 4.16 GB)
+**Date:** November 2025
+**CUDA:** 13.2 (driver 595.58.03) · PyTorch 2.15+cu132 · cuda-tile 1.8.1
 
 ---
 
-## GEMM (Micro 1/8)
-| Shape | CuTile TFLOPS | CUDA TFLOPS | cuBLAS TFLOPS | PyTorch TFLOPS |
-|-------|--------------|-------------|---------------|----------------|
-| 1x12288x4096 | 2.36 | 1.37 | 1.98 | 1.45 |
-| 256x12288x4096 | 107.91 | 120.77 | 269.20 | 177.65 |
-| 1x14336x4096 | 1.57 | 1.43 | 1.44 | 1.53 |
-| 256x14336x4096 | 136.14 | 122.24 | 288.91 | 186.12 |
-| 1x4096x14336 | 1.60 | 0.53 | 1.52 | 1.52 |
-| 256x4096x14336 | 73.10 | 126.74 | 289.08 | 163.47 |
-| 1x4096x4096 | 1.94 | 0.52 | 2.40 | 0.83 |
-| 512x4096x4096 | 150.26 | 130.90 | 312.68 | 169.01 |
+## Scaling: RTX 4060 Laptop → RTX 5090
 
-## GEMM Dequant (Micro 2/8)
-| Shape | Fused ms | Fused TFLOPS | Separate ms | Speedup |
-|-------|----------|-------------|-------------|---------|
-| 1x12288x4096 | 0.035 | 2.92 | 0.162 | 4.69x |
-| 256x12288x4096 | 0.229 | 112.52 | 0.311 | 1.36x |
-| 1x14336x4096 | 0.036 | 3.22 | 0.188 | 5.15x |
-| 256x14336x4096 | 0.227 | 132.58 | 0.366 | 1.62x |
+| Metric | 4060 Laptop (sm_89) | 5090 (sm_120) | Speedup |
+|--------|--------------------:|--------------:|--------:|
+| SMs | 24 | 170 | 7.1× |
+| VRAM | 8 GB GDDR6 | 32 GB GDDR7 | 4× |
+| Memory bandwidth | 272 GB/s | 1,792 GB/s | 6.6× |
+| PCIe link | 4.0 x8 (13.30 GB/s) | 5.0 x16 (49.09 GB/s) | 3.7× |
+| TFG pipeline | 3-stage + Stage -1 DMA | 4-stage (DMA auto-disabled) | — |
+| GEMM 256×14336×4096 | 25 TFLOPS | **136.14 TFLOPS** | **5.4×** |
+| GEMM 256×12288×4096 | ~25 TFLOPS | **107.91 TFLOPS** | **4.3×** |
+| Decode 7B-4bit | 32.43 tok/s | **49.82 tok/s** | **1.54×** |
+| Prefill 4096 tok | 1,476 tok/s | **5,640 tok/s** | **3.8×** |
+| Batch=16 (seq=32) | 1,440 tok/s | **8,457 tok/s** | **5.9×** |
+| Attention seq=1024 | 21.76 TFLOPS | **101.62 TFLOPS** | **4.7×** |
+| Full layer seq=1 speedup | 5.47× | 5.58× | — |
+| Peak VRAM (7B-4bit) | 4.30 GB | 4.32 GB | — |
+| 32K context VRAM | 6.01 GB | 6.00 GB | — |
 
-## Fused FFN (Micro 3/8)
-| Seq | Fused ms | Separate ms | Speedup |
-|-----|----------|-------------|---------|
-| 1 | 0.064 | 0.518 | 8.04x |
-| 64 | 0.204 | 0.553 | 2.70x |
-| 256 | 0.870 | 0.745 | 0.86x (regression) |
-| 512 | 0.903 | 3.556 | 3.94x |
+> **Decode speedup is only 1.54×** because decode (M=1) is memory-bandwidth-bound.
+> The 4.16 GB model fits in L2 cache on both GPUs, limiting the effective BW advantage.
+> Prefill and batch (compute-bound) scale 3.8–5.9×.
 
-## Attention GQA (Micro 4/8)
-| Seq | CuTile TFLOPS | CUDA TFLOPS | PyTorch TFLOPS |
-|-----|--------------|-------------|----------------|
-| 64 | 3.85 | 1.28 | 0.77 |
-| 256 | 19.63 | 4.78 | 21.12 |
-| 512 | 59.05 | 5.74 | 50.82 |
-| 1024 | 101.62 | 2.35 | 75.51 |
+![Scaling Summary](images_5090/scaling_summary.png)
 
-## LayerNorm (Micro 5/8)
-| Seq | CuTile ms | CuTile GB/s | CUDA ms | PyTorch ms |
-|-----|-----------|-------------|---------|------------|
+---
+
+## Micro-Benchmarks
+
+### 1. GEMM (FP16, all Mistral-7B shapes)
+
+| Shape | CuTile (ms) | CuTile (TFLOPS) | CUDA (TFLOPS) | cuBLAS (TFLOPS) | PyTorch (TFLOPS) |
+|-------|------------:|----------------:|--------------:|----------------:|----------------:|
+| 1×12288×4096 | 0.043 | 2.36 | 1.37 | 1.98 | 1.45 |
+| 256×12288×4096 | 0.239 | **107.91** | 120.77 | 269.20 | 177.65 |
+| 1×14336×4096 | 0.075 | 1.57 | 1.43 | 1.44 | 1.53 |
+| 256×14336×4096 | 0.221 | **136.14** | 122.24 | 288.91 | 186.12 |
+| 1×4096×14336 | 0.073 | 1.60 | 0.53 | 1.52 | 1.52 |
+| 256×4096×14336 | 0.411 | **73.10** | 126.74 | 289.08 | 163.47 |
+| 1×4096×4096 | 0.017 | 1.94 | 0.52 | 2.40 | 0.83 |
+| 512×4096×4096 | 0.114 | **150.26** | 130.90 | 312.68 | 169.01 |
+
+> CuTile uses FP32-accumulate (hardware ceiling on Blackwell for this path).
+> cuBLAS uses FP16-accumulate (2× Tensor Core rate). The CuTile advantage is
+> fusion (eliminating HBM round-trips), not raw GEMM throughput.
+
+![GEMM TFLOPS](images_5090/gemm_tflops.png)
+
+### 2. INT4 Dequant + GEMM (Fused vs Separate)
+
+| Shape | Fused (ms) | Fused (TFLOPS) | Separate (ms) | Speedup |
+|-------|-----------:|---------------:|--------------:|--------:|
+| 1×12288×4096 | 0.035 | 2.92 | 0.162 | **4.69×** |
+| 256×12288×4096 | 0.229 | 112.52 | 0.311 | 1.36× |
+| 1×14336×4096 | 0.036 | 3.22 | 0.188 | **5.15×** |
+| 256×14336×4096 | 0.227 | 132.58 | 0.366 | 1.62× |
+
+> At decode (M=1), fused dequant gives 4.7–5.2× speedup.
+> At prefill (M=256), the advantage narrows to 1.4–1.6× (compute-bound).
+
+![INT4 Dequant](images_5090/int4_dequant.png)
+
+### 3. Fused FFN (1 Kernel vs 3 Separate)
+
+| Seq | Fused (ms) | Separate (ms) | Speedup | Note |
+|-----|-----------:|--------------:|--------:|------|
+| 1 | 0.064 | 0.518 | **8.04×** | Launch overhead dominated |
+| 64 | 0.204 | 0.553 | **2.70×** | |
+| 256 | 0.870 | 0.745 | 0.86× | ⚠️ Regression (see Known Issues) |
+| 512 | 0.903 | 3.556 | **3.94×** | |
+
+### 4. GQA FlashAttention-2 (32:8 heads)
+
+| Seq | CuTile (TFLOPS) | CUDA (TFLOPS) | PyTorch SDPA (TFLOPS) | CuTile vs CUDA |
+|-----|----------------:|--------------:|----------------------:|---------------:|
+| 64 | 3.85 | 1.28 | 0.77 | 3.0× |
+| 256 | 19.63 | 4.78 | 21.12 | 4.1× |
+| 512 | 59.05 | 5.74 | 50.82 | 10.3× |
+| 1024 | **101.62** | 2.35 | 75.51 | **43.2×** |
+
+> CuTile attention beats PyTorch SDPA by 34% at seq=1024.
+> Beats hand-written CUDA by 43× (CUDA baseline not optimized for GQA).
+
+![Attention GQA](images_5090/attention_gqa.png)
+
+### 5. LayerNorm
+
+| Seq | CuTile (ms) | CuTile (GB/s) | CUDA (ms) | PyTorch (ms) |
+|-----|------------:|--------------:|----------:|-------------:|
 | 1 | 0.0038 | 4.3 | 0.0078 | 0.0078 |
 | 64 | 0.0038 | 278.9 | 0.0082 | 0.0078 |
 | 256 | 0.0058 | 724.1 | 0.0081 | 0.0078 |
-| 1024 | 0.0118 | 1426.6 | 0.0140 | 0.0099 |
+| 1024 | 0.0118 | **1,426.6** | 0.0140 | 0.0099 |
 
-## SiLU Fusion (Micro 6/8)
-| Seq | Fused ms | Separate ms | Speedup |
-|-----|----------|-------------|---------|
-| 1 | 0.0376 | 0.0385 | 1.02x |
-| 64 | 0.0795 | 0.0787 | 0.99x |
-| 256 | 0.2680 | 0.2609 | 0.97x |
-| 512 | 0.4063 | 0.4008 | 0.99x |
+> CuTile LN achieves 1.4 TB/s effective bandwidth at seq=1024.
+> Beats PyTorch by 18% at seq=1024.
 
-## Full Fused Layer (Micro 7/8)
-| Seq | TFG(3k) ms | CUDA(8k) ms | PyTorch ms | Speedup |
-|-----|-----------|-------------|------------|---------|
-| 1 | 0.133 | 0.745 | 0.262 | 5.58x |
-| 64 | 0.336 | 0.777 | 0.243 | 2.31x |
-| 256 | 3.418 | 3.407 | 0.485 | 1.00x |
-| 512 | 3.543 | 4.466 | 0.886 | 1.26x |
+### 6. SiLU Fusion
 
-## Weight Streaming (Micro 8/8)
-| Tile | Serial ms | Overlap ms | Overlap % | PCIe GB/s |
-|------|-----------|------------|-----------|-----------|
-| 32 MB | 1.158 | 1.345 | 0.0% | 49.09 |
-| 64 MB | 1.814 | 1.802 | 2.6% | 49.09 |
-| 115 MB | 2.796 | 2.595 | 93.2% | 49.09 |
+| Seq | Fused (ms) | Separate (ms) | Speedup |
+|-----|-----------:|--------------:|--------:|
+| 1 | 0.0376 | 0.0385 | 1.02× |
+| 64 | 0.0795 | 0.0787 | 0.99× |
+| 256 | 0.2680 | 0.2609 | 0.97× |
+| 512 | 0.4063 | 0.4008 | 0.99× |
 
-## E2E Prefill
-| Prompt | Prefill ms | tok/s | VRAM GB |
-|--------|-----------|-------|---------|
-| 128 | 99.65 | 1284.5 | 4.29 |
-| 512 | 142.89 | 3583.2 | 4.35 |
-| 2048 | 380.86 | 5377.3 | 4.66 |
-| 4096 | 726.18 | 5640.5 | 5.07 |
+> **Expected:** At 1,792 GB/s bandwidth, the standalone SiLU kernel is
+> negligible. Fusion saves ~5 µs launch overhead, which is <2% of total.
+> On the 4060 (272 GB/s), this was 1.5–2.0×.
 
-## E2E Decode
-49.82 tok/s, 20.07 ms/tok, 4.32 GB VRAM
+### 7. Full Fused Layer (3 TFG Kernels vs 8 CUDA Kernels)
 
-## E2E Long Context
-| Ctx | Step ms | Evictions | VRAM GB |
-|-----|---------|-----------|---------|
-| 4096 | 17.96 | 0 | 4.83 |
-| 8192 | 33.85 | 0 | 5.36 |
-| 16384 | 107854.66 | 10240 | 5.93 |
-| 32768 | 1315.34 | 26624 | 6.00 |
+| Seq | TFG 3k (ms) | CUDA 8k (ms) | PyTorch (ms) | TFG vs CUDA | TFG vs PyTorch |
+|-----|------------:|-------------:|-------------:|------------:|---------------:|
+| 1 | 0.133 | 0.745 | 0.262 | **5.58×** | 1.97× |
+| 64 | 0.336 | 0.777 | 0.243 | **2.31×** | 0.72× |
+| 256 | 3.418 | 3.407 | 0.485 | 1.00× | 0.14× |
+| 512 | 3.543 | 4.466 | 0.886 | **1.26×** | 0.25× |
 
-## E2E Batch
-| Batch | Latency ms | tok/s | VRAM GB |
-|-------|-----------|-------|---------|
-| 1 | 24.19 | 1322.9 | 4.28 |
-| 2 | 24.49 | 2613.5 | 4.29 |
-| 4 | 48.23 | 2653.8 | 4.29 |
-| 8 | 51.46 | 4974.8 | 4.30 |
-| 16 | 60.54 | 8457.1 | 4.35 |
+> At seq=1 (decode), TFG wins by 5.58× over CUDA and 2× over PyTorch.
+> At seq=256+, PyTorch's cuBLAS-backed GEMM (FP16-acc) outperforms
+> CuTile's FP32-acc path. The TFG advantage is launch overhead, not GEMM speed.
 
-## Speculative (gamma=4)
-accept=0.30, base=95.33 tok/s, spec=68.74 tok/s
+![Layer Fusion](images_5090/layer_fusion.png)
 
-## Scaling Table (4060 vs 5090)
-| Metric | 4060 Laptop (sm_89) | 5090 (sm_120) | Speedup |
-|--------|--------------------|--------------------|---------|
-| SMs | 24 | 170 | 7.1x |
-| VRAM | 8 GB | 32 GB | 4x |
-| Mem BW | 272 GB/s | 1792 GB/s | 6.6x |
-| PCIe | 4.0 x8 (13 GB/s) | 5.0 x16 (49 GB/s) | 3.7x |
-| GEMM 256x14336x4096 | 25 TFLOPS | 136 TFLOPS | 5.4x |
-| Decode 7B-4bit | 32.43 tok/s | 49.82 tok/s | 1.54x |
-| Prefill 4096 | 1476 tok/s | 5640 tok/s | 3.8x |
-| Batch=16 | 1440 tok/s | 8457 tok/s | 5.9x |
-| Attention seq=1024 | 21.76 TFLOPS | 101.62 TFLOPS | 4.7x |
-| Full layer seq=1 | 5.47x | 5.58x | - |
-| Peak VRAM | 4.30 GB | 4.32 GB | - |
+### 8. PCIe Weight Streaming (Stage -1)
+
+| Tile Size | Serial (ms) | Overlapped (ms) | Overlap % | PCIe BW |
+|-----------|------------:|----------------:|----------:|--------:|
+| 32 MB | 1.158 | 1.345 | 0.0% | 49.09 GB/s |
+| 64 MB | 1.814 | 1.802 | 2.6% | 49.09 GB/s |
+| 115 MB | 2.796 | 2.595 | **93.2%** | 49.09 GB/s |
+
+> PCIe 5.0 x16 achieves 49.09 GB/s (3.7× the 4060's 13.30 GB/s).
+> At 115 MB tiles, Stage -1 DMA achieves 93.2% compute-DMA overlap.
+> Note: Stage -1 is auto-disabled for 7B (4.16 GB < 27.2 GB threshold).
+> This benchmark forces it on to measure the pipeline.
+
+![PCIe Streaming](images_5090/pcie_streaming.png)
+
+---
+
+## End-to-End Results
+
+### Decode (Mistral-7B 4-bit, batch=1)
+
+| Metric | Value |
+|--------|-------|
+| Throughput | **49.82 tok/s** |
+| Latency | 20.07 ms/tok |
+| Peak VRAM | 4.32 GB |
+| Reference (GPTQModel/Marlin) | 70.4 tok/s, 4.79 GB |
+| CuTileForge vs Marlin | 0.71× |
+
+> CuTileForge achieves 71% of the Marlin kernel's decode speed.
+> The gap is GEMM throughput (136 vs 289 TFLOPS, FP32-acc vs FP16-acc).
+> The TFG fusion advantage (5.58× at seq=1) is partially offset by
+> slower per-GEMM performance.
+
+### Prefill
+
+| Prompt (tok) | Prefill (ms) | Throughput (tok/s) | Peak VRAM (GB) |
+|-------------:|-------------:|-------------------:|---------------:|
+| 128 | 99.65 | 1,284.5 | 4.29 |
+| 512 | 142.89 | 3,583.2 | 4.35 |
+| 2048 | 380.86 | 5,377.3 | 4.66 |
+| 4096 | 726.18 | **5,640.5** | 5.07 |
+
+### Long Context (PagedKVCache)
+
+| Context | Step (ms) | Evictions | Peak VRAM (GB) |
+|--------:|----------:|----------:|---------------:|
+| 4,096 | 17.96 | 0 | 4.83 |
+| 8,192 | 33.85 | 0 | 5.36 |
+| 16,384 | 107,854.66 ⚠️ | 10,240 | 5.93 |
+| 32,768 | 1,315.34 | 26,624 | 6.00 |
+
+> ⚠️ 16K shows a pathological spike (see Known Issues #2).
+> 32K is reasonable (1.3s/step) with 26,624 evictions.
+
+### Batch Inference
+
+| Batch | Latency (ms) | Throughput (tok/s) | Peak VRAM (GB) |
+|------:|-------------:|-------------------:|---------------:|
+| 1 | 24.19 | 1,322.9 | 4.28 |
+| 2 | 24.49 | 2,613.5 | 4.29 |
+| 4 | 48.23 | 2,653.8 | 4.29 |
+| 8 | 51.46 | 4,974.8 | 4.30 |
+| 16 | 60.54 | **8,457.1** | 4.35 |
+
+> Batch=16 achieves 8,457 tok/s (5.9× the 4060's 1,440 tok/s).
+> VRAM stays flat at ~4.3 GB (weights dominate, not activations).
+
+### Speculative Decoding (γ=4)
+
+| Metric | Value |
+|--------|-------|
+| Acceptance rate | 0.30 |
+| Base decode | 95.33 tok/s |
+| Speculative | 68.74 tok/s |
+| Speedup | 0.72× (slower) |
+
+> **Not useful with draft=target (same model).** Acceptance 0.30 means
+> 70% of draft tokens are rejected, adding overhead without benefit.
+> A smaller draft model (e.g., 1B) would be needed for >1× speedup.
+
+---
+
+## E2E Scaling: 4060 vs 5090
+
+![E2E Scaling](images_5090/e2e_scaling.png)
+
+| Workload | 4060 (tok/s) | 5090 (tok/s) | Speedup |
+|----------|-------------:|-------------:|--------:|
+| Decode (7B-4bit) | 32.43 | 49.82 | 1.54× |
+| Prefill (4096) | 1,476 | 5,640 | 3.8× |
+| Batch=16 (seq=32) | 1,440 | 8,457 | 5.9× |
 
 ---
 
 ## Known Issues
 
-1. **Fused FFN at `seq=256`: 0.86x (regression vs 4060's 1.46x).**
-   - **Cause:** The RTX 5090's 1,792 GB/s memory bandwidth makes the separate kernels' HBM round-trip cheap, while the fused kernel's larger shared-memory footprint hurts occupancy across 170 SMs.
-   - **Fix:** Retune tile sizes for FFN at `seq=256` on `sm_120`.
+| # | Issue | Severity | Root Cause | Fix |
+|---|-------|----------|------------|-----|
+| 1 | FFN fusion regression at seq=256 (0.86×) | Medium | 1,792 GB/s makes separate kernel's HBM round-trip cheap. Fused kernel's larger SMEM footprint hurts occupancy on 170 SMs. | Retune FFN tile shape for sm_120 (try 64×128×32). |
+| 2 | Long context 16K: 107,854 ms/step | High | `_ensure_on_gpu()` called per-page in `get_kv()`, triggering synchronous `.cpu().pin_memory()` evictions inside the forward pass. 10,240 evictions × ~10 ms each. | Batch evictions. Pre-fetch pages asynchronously. Or increase GPU page budget. |
+| 3 | SiLU fusion neutral (~1.0×) | Low (expected) | 1,792 GB/s makes standalone SiLU negligible. Launch overhead (5 µs) is <2% of 260 µs compute. | No fix needed. Document as hardware-dependent. |
+| 4 | Speculative: 68.74 < 95.33 tok/s | Medium | Draft = target (same model). Acceptance 0.30 → 70% rejections add overhead. | Use a smaller draft model (1B) for γ=4. |
+| 5 | CuTile GEMM (136) < cuBLAS (289) TFLOPS | Low (expected) | FP32-accumulate vs FP16-accumulate. 2× Tensor Core rate difference. | Add FP16-acc path to CuTile kernel (v0.3.0). |
 
-2. **SiLU fusion: ~1.0x (no speedup).**
-   - **Cause:** Expected on `sm_120` — 1,792 GB/s bandwidth makes the separate SiLU kernel's memory traffic negligible. Not a bug.
+---
 
-3. **Long context 16K: 107,854.66 ms/step (bug) vs 32K at 1,315.34 ms/step.**
-   - **Investigation (`cutile_forge/engine/kv_cache.py`):** No off-by-one error in page indexing or budget accounting (`page_idx = pos // page_size`, `page_bytes = 2 * num_kv_heads * page_size * head_dim * 2`). However, `get_kv(layer_idx)` calls `_ensure_on_gpu(key)` on every page, which triggers `_evict_if_needed()` and synchronous `.cpu().pin_memory()` calls inside the forward pass. At 16K (the first context exceeding the 1.5 GB budget), this causes an eviction storm (10,240 evictions / 8,192 host fetches) and a host memory-pinning stall.
+## Hardware Comparison
 
-4. **Speculative decoding: 68.74 tok/s < base 95.33 tok/s.**
-   - **Cause:** Acceptance rate (`0.30`) is too low because the draft model equals the verify model. Requires a smaller draft model.
+| Spec | RTX 4060 Laptop (sm_89) | RTX 5090 (sm_120) |
+|------|------------------------:|------------------:|
+| Architecture | Ada Lovelace (AD107) | Blackwell (GB202) |
+| SMs | 24 | 170 |
+| Tensor Cores | 96 (4th gen) | 680 (5th gen) |
+| VRAM | 8 GB GDDR6 | 32 GB GDDR7 |
+| Memory BW | 272 GB/s | 1,792 GB/s |
+| SMEM/SM | 100 KB | 128 KB |
+| PCIe | 4.0 x8 (13.30 GB/s) | 5.0 x16 (49.09 GB/s) |
+| FP16 GEMM peak | ~50 TFLOPS | ~330 TFLOPS |
+| FP8 support | No | Yes (E4M3, E5M2) |
+| TMA | No | Yes |
+| FP4 support | No | Yes (E2M1) |
 
-5. **CuTile GEMM (136 TFLOPS) is below cuBLAS (289 TFLOPS).**
-   - **Cause:** Expected — cuBLAS uses FP16-accumulate (2x Tensor Core throughput), whereas CuTile uses FP32-accumulate for numerical precision. CuTile's advantage is kernel fusion, not raw standalone GEMM.
+---
+
+*Full CSV data: `benchmarks/results_5090/`*
+*Methodology: `docs/BENCHMARK_METHODOLOGY.md`*

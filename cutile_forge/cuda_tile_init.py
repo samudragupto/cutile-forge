@@ -11,4 +11,3 @@ if hasattr(ct, "init"):
         ct.init(arch=os.environ.get("CUTILE_ARCH", "sm_120"))
     except Exception:
         pass
-

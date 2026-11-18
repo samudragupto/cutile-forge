@@ -156,6 +156,35 @@ PS C:\Users\user\Desktop\cutile-forge> python -m pytest tests/ benchmarks/correc
 | **GQA Attention (`32:8`)** | `seq = 256 / 512 / 1024` | **11.92 / 17.77 / 21.76 TFLOPS** | PyTorch SDPA **5.02 / 10.38 / 13.23 TFLOPS** |
 | **Stage -1 PCIe Overlap** | `32 / 64 / 115 MB` weight tiles | **100.0% / 100.0% / 93.8%** overlap | **13.30 GB/s** (`84.4%` PCIe utilization) |
 
+---
+
+### RTX 5090 (sm_120, 32 GB) — v0.2.0
+
+**Test Rig:** Desktop Workstation · RTX 5090 (GB202, sm_120, 170 SMs, 32 GB GDDR7) · Intel Core Ultra 9 285K · 62 GB DDR5 · PCIe 5.0 x16
+
+| Metric | 4060 Laptop | 5090 | Speedup |
+|--------|------------|------|---------|
+| Decode (7B-4bit) | 32.43 tok/s | **49.82 tok/s** | 1.54× |
+| GEMM prefill (256×14336×4096) | 25 TFLOPS | **136 TFLOPS** | 5.4× |
+| Attention (seq=1024) | 21.76 TFLOPS | **101.62 TFLOPS** | 4.7× |
+| Prefill (4096 tok) | 1,476 tok/s | **5,640 tok/s** | 3.8× |
+| Batch=16 | 1,440 tok/s | **8,457 tok/s** | 5.9× |
+| PCIe bandwidth | 13.30 GB/s | **49.09 GB/s** | 3.7× |
+| Peak VRAM | 4.30 GB | 4.32 GB | — |
+
+| | |
+|:---:|:---:|
+| ![GEMM](docs/images_5090/gemm_tflops.png) | ![INT4 Dequant](docs/images_5090/int4_dequant.png) |
+| *GEMM TFLOPS (sm_120)* | *INT4 Dequant+GEMM fusion speedup* |
+| ![Layer Fusion](docs/images_5090/layer_fusion.png) | ![Attention](docs/images_5090/attention_gqa.png) |
+| *Full layer: 3k TFG vs 8k CUDA* | *GQA FlashAttention-2 (32:8)* |
+| ![E2E Scaling](docs/images_5090/e2e_scaling.png) | ![PCIe](docs/images_5090/pcie_streaming.png) |
+| *E2E: 4060 vs 5090* | *PCIe 5.0 weight streaming* |
+
+Full results: [`docs/RESULTS_RTX5090.md`](docs/RESULTS_RTX5090.md)
+
+---
+
 Full CSV tables and methodology are in [docs/RESULTS.md](docs/RESULTS.md) and [docs/BENCHMARK_METHODOLOGY.md](docs/BENCHMARK_METHODOLOGY.md).
 
 ---
