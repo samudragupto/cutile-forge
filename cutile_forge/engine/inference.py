@@ -68,7 +68,11 @@ class InferenceEngine:
 
         t_pre0 = time.perf_counter()
         logits = self.model.forward(
-            prompt_ids, kv_cache=self.kv_cache, pos_offset=0, backend=backend
+            prompt_ids,
+            kv_cache=self.kv_cache,
+            pos_offset=0,
+            backend=backend,
+            last_token_only=True,
         )
         if self.model.device.type == "cuda":
             torch.cuda.synchronize()
@@ -153,3 +157,4 @@ class InferenceEngine:
             pos += 1
             if eos_token_id is not None and tok_id == eos_token_id:
                 break
+

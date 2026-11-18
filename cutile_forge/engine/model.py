@@ -256,8 +256,9 @@ class Mistral7B:
         kv_cache: Optional[PagedKVCache] = None,
         pos_offset: int = 0,
         backend: str = "cutile",
+        last_token_only: bool = False,
     ) -> torch.Tensor:
-        """Run a forward pass over `input_ids` of shape `(B, S)` -> logits `(B, S, vocab)`."""
+        """Run a forward pass over `input_ids` of shape `(B, S)` -> logits."""
         hidden = F.embedding(input_ids.to(self.device), self.weights.embed_tokens)
 
         for idx, layer in enumerate(self.layers):
@@ -274,6 +275,9 @@ class Mistral7B:
             if lw is not self.weights.layers[idx]:
                 self.streamer.release_layer(idx)
 
+        if last_token_only:
+            hidden = hidden[:, -1:, :]
+
         bsz, seq_len, h_dim = hidden.shape
         h_2d = hidden.view(bsz * seq_len, h_dim)
         if backend == "cutile" and self.device.type == "cuda":
@@ -281,7 +285,6 @@ class Mistral7B:
         else:
             normed = _pytorch_rmsnorm(h_2d, self.weights.norm, eps=self.config.rms_norm_eps)
 
-        # Only compute logits for all tokens when needed; matmul with lm_head^T
         logits = torch.matmul(normed, self.weights.lm_head.t())
         return logits.view(bsz, seq_len, self.config.vocab_size)
 
