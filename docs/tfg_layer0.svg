@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="386" viewBox="0 0 640 386">
+<rect width="100%" height="100%" fill="#0f172a"/>
+<text x="320" y="28" text-anchor="middle" fill="#f8fafc" font-family="sans-serif" font-size="16" font-weight="bold">mistral_layer_0 (3 nodes)</text>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 1 L 10 5 L 0 9 z" fill="#94a3b8"/></marker></defs>
+<rect x="90" y="48" width="460" height="68" rx="10" fill="#2563eb" stroke="#cbd5e1" stroke-width="1.5"/>
+<text x="320" y="74" text-anchor="middle" fill="#ffffff" font-family="sans-serif" font-size="13" font-weight="bold">Fused QKV+Attention [fused_qkv_attn]</text>
+<text x="320" y="96" text-anchor="middle" fill="#e2e8f0" font-family="monospace" font-size="11">tile=(128, 128, 32) | stages=3 | ops: qkv_gemm + attention_gqa</text>
+<rect x="90" y="154" width="460" height="68" rx="10" fill="#0d9488" stroke="#cbd5e1" stroke-width="1.5"/>
+<text x="320" y="180" text-anchor="middle" fill="#ffffff" font-family="sans-serif" font-size="13" font-weight="bold">Fused O-GEMM+LayerNorm [fused_o_layernorm]</text>
+<text x="320" y="202" text-anchor="middle" fill="#e2e8f0" font-family="monospace" font-size="11">tile=(128, 128, 32) | stages=3 | ops: o_gemm + layernorm</text>
+<rect x="90" y="260" width="460" height="68" rx="10" fill="#7c3aed" stroke="#cbd5e1" stroke-width="1.5"/>
+<text x="320" y="286" text-anchor="middle" fill="#ffffff" font-family="sans-serif" font-size="13" font-weight="bold">Fused FFN+LayerNorm+Residual [fused_ffn_norm]</text>
+<text x="320" y="308" text-anchor="middle" fill="#e2e8f0" font-family="monospace" font-size="11">tile=(128, 128, 32) | stages=3 | ops: ffn_up_gemm + silu + ffn_down_gemm + layernorm_residual</text>
+<line x1="320" y1="116" x2="320" y2="152" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+<line x1="320" y1="222" x2="320" y2="258" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+<line x1="320" y1="222" x2="320" y2="258" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+</svg>
