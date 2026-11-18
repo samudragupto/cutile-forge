@@ -127,6 +127,7 @@ PS C:\Users\user\Desktop\cutile-forge> python -m pytest tests/ benchmarks/correc
 | **Prefill (`2048` / `4096` tok)** | `CuTileForge` | **1,499.0 tok/s** / **1,475.7 tok/s** | **4.67 GB** / **5.08 GB** |
 | **Batched Forward (`batch=16`)** | `seq=32` | **1,439.7 tok/s** (`355.63 ms`) | **4.36 GB** |
 | **Long Context (`16K` / `32K`)** | `PagedKVCache` (1.5 GB GPU budget) | `1,862 ms` / `3,875 ms` step | **5.94 GB** / **6.01 GB** (`26,624` evictions) |
+| **Speculative Decoding (`γ=4`)** | Draft 4-layer proxy + target verify | `21.77 tok/s` (`0.302` accept rate) | `33.13 tok/s` standard decode baseline |
 | **30-Min Sustained Decode** | `361` samples, `54,976` tokens | **31.16 tok/s** avg | **83.0 °C** max (`78.7 °C` avg), **85.6 W**, `4.62%` avg throttle |
 
 #### Micro-Benchmarks (CuTile vs Hand-Written CUDA C++ vs cuBLAS vs PyTorch)
