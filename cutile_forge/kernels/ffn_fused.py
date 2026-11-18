@@ -281,11 +281,23 @@ def fused_ffn_dequant_up_silu_down(
     group_size: int = 128,
     workspace: torch.Tensor | None = None,
 ) -> torch.Tensor:
-    """Single-kernel 4-bit quantized FFN: SiLU(x @ dequant(qw_up)) @ dequant(qw_down)."""
+    """4-bit quantized FFN: SiLU(x @ dequant(qw_up)) @ dequant(qw_down).
+
+    Uses single-kernel tile fusion for small/medium sequences (m <= 256) to
+    eliminate intermediate HBM roundtrips, and switches to 2-stage fused
+    dequant+SiLU -> dequant for larger batches to bound 8 GB VRAM footprint.
+    """
     m, _ = x.shape
+    if m > 256:
+        from cutile_forge.kernels.gemm_dequant import fused_gemm_dequant
+        from cutile_forge.kernels.gemm_dequant_silu import fused_gemm_dequant_silu
+
+        h_act = fused_gemm_dequant_silu(x, qw_up, s_up, z_up, group_size=group_size)
+        return fused_gemm_dequant(h_act, qw_down, s_down, z_down, group_size=group_size)
+
     h = qw_down.shape[0] * 2
     d = qw_down.shape[1]
-    tm = 16 if m <= 16 else 64
+    tm = 16 if m <= 16 else (64 if m <= 64 else 128)
     th = 128 if group_size >= 128 else 64
     tk = 64
     td = 128
@@ -320,3 +332,4 @@ def fused_ffn_dequant_up_silu_down(
         ),
     )
     return y_part.view(nh, m_pad, d)[:, :m, :].sum(dim=0)
+
