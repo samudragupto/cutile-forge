@@ -1,0 +1,123 @@
+"""Per-GPU tile shape autotuner across 12 candidate CuTile configurations."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Dict, List, Tuple
+
+import torch
+
+from cutile_forge.forge.tile_pipeliner import SM89_MAX_SMEM_BYTES, estimate_smem_bytes
+
+
+@dataclass(frozen=True)
+class TileConfig:
+    """Candidate CuTile kernel configuration."""
+
+    tm: int
+    tn: int
+    tk: int
+    occupancy: int
+    pipeline_stages: int
+
+    @property
+    def shape(self) -> Tuple[int, int, int]:
+        return (self.tm, self.tn, self.tk)
+
+
+# 12 tuned candidate configurations targeting Ada (sm_89) and Ampere+ GPUs
+CANDIDATE_TILE_CONFIGS: List[TileConfig] = [
+    TileConfig(16, 64, 64, occupancy=4, pipeline_stages=3),
+    TileConfig(16, 128, 64, occupancy=4, pipeline_stages=3),
+    TileConfig(32, 64, 64, occupancy=4, pipeline_stages=3),
+    TileConfig(32, 128, 64, occupancy=2, pipeline_stages=3),
+    TileConfig(64, 64, 64, occupancy=4, pipeline_stages=3),
+    TileConfig(64, 128, 32, occupancy=2, pipeline_stages=3),
+    TileConfig(64, 128, 64, occupancy=2, pipeline_stages=3),
+    TileConfig(128, 64, 32, occupancy=2, pipeline_stages=3),
+    TileConfig(128, 64, 64, occupancy=2, pipeline_stages=3),
+    TileConfig(128, 128, 32, occupancy=2, pipeline_stages=3),
+    TileConfig(128, 128, 64, occupancy=2, pipeline_stages=2),
+    TileConfig(128, 128, 64, occupancy=1, pipeline_stages=3),
+]
+
+
+class TileAutotuner:
+    """Searches 12 tile configs for a given (M, N, K) shape and target GPU."""
+
+    def __init__(self, target: str = "sm_89", smem_limit_bytes: int = SM89_MAX_SMEM_BYTES) -> None:
+        self.target = target
+        self.smem_limit_bytes = smem_limit_bytes
+        self._cache: Dict[Tuple[int, int, int, bool], TileConfig] = {}
+
+    def valid_configs(self, quantized: bool = False) -> List[TileConfig]:
+        """Return candidate configs that fit within target shared-memory budget."""
+        return [
+            cfg
+            for cfg in CANDIDATE_TILE_CONFIGS
+            if estimate_smem_bytes(cfg.shape, cfg.pipeline_stages, quantized)
+            <= self.smem_limit_bytes
+        ]
+
+    @staticmethod
+    def _heuristic_score(cfg: TileConfig, m: int, n: int, k: int) -> float:
+        """Score a config analytically: lower is better (waste + wave quantization)."""
+        m_tiles = (m + cfg.tm - 1) // cfg.tm
+        n_tiles = (n + cfg.tn - 1) // cfg.tn
+        padded_m = m_tiles * cfg.tm
+        padded_n = n_tiles * cfg.tn
+        waste = float(padded_m * padded_n) / max(1.0, float(m * n))
+        # Prefer >= 24 CTAs on RTX 4060 (24 SMs) and higher arithmetic intensity
+        num_ctas = m_tiles * n_tiles
+        sm_underfill = max(1.0, 24.0 / max(1, num_ctas))
+        arith_intensity = (2.0 * cfg.tm * cfg.tn) / max(1.0, float(cfg.tm + cfg.tn))
+        return (waste * sm_underfill) / (arith_intensity * (1.0 + 0.05 * cfg.pipeline_stages))
+
+    def autotune(
+        self,
+        m: int,
+        n: int,
+        k: int,
+        quantized: bool = False,
+        benchmark_on_gpu: bool = False,
+        warmup: int = 2,
+        iters: int = 10,
+    ) -> TileConfig:
+        """Select the best TileConfig for `(m, n, k)` via GPU benchmarking or analytical model."""
+        key = (m, n, k, quantized)
+        if key in self._cache:
+            return self._cache[key]
+
+        candidates = self.valid_configs(quantized=quantized)
+        if not candidates:
+            candidates = [CANDIDATE_TILE_CONFIGS[0]]
+
+        if benchmark_on_gpu and torch.cuda.is_available():
+            from cutile_forge.bench.harness import benchmark
+            from cutile_forge.kernels.gemm_dequant import cutile_gemm_fp16
+
+            a = torch.randn((m, k), device="cuda", dtype=torch.float16) * 0.1
+            b = torch.randn((k, n), device="cuda", dtype=torch.float16) * 0.1
+            best_cfg = candidates[0]
+            best_ms = float("inf")
+            # Filter candidates that don't waste huge M padding when M is tiny
+            filtered = [c for c in candidates if c.tm <= max(16, m * 2)] or candidates[:4]
+            for cfg in filtered:
+                try:
+                    st = benchmark(
+                        lambda a=a, b=b, cfg=cfg: cutile_gemm_fp16(a, b, tile_shape=cfg.shape),
+                        warmup=warmup,
+                        iters=iters,
+                        name=f"{cfg.tm}x{cfg.tn}x{cfg.tk}",
+                    )
+                    if st.p50_ms < best_ms:
+                        best_ms = st.p50_ms
+                        best_cfg = cfg
+                except Exception:
+                    continue
+            self._cache[key] = best_cfg
+            return best_cfg
+
+        best_cfg = min(candidates, key=lambda c: self._heuristic_score(c, m, n, k))
+        self._cache[key] = best_cfg
+        return best_cfg
