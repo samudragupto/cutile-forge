@@ -6,7 +6,7 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776ab.svg)](https://www.python.org/downloads/)
 [![CUDA sm_89 | sm_120](https://img.shields.io/badge/CUDA-sm__89%20%7C%20sm__120%20%7C%20CuTile%201.8-76B900.svg)](https://developer.nvidia.com/cuda-toolkit)
 
-**Tile-Fusion Graph (TFG) Compiler & CuTile LLM Inference Engine for 8 GB-VRAM GPUs.**
+**Tile-Fusion Graph (TFG) Compiler & CuTile LLM Inference Engine for GPUs from 8 GB laptop to 32 GB Blackwell.**
 
 CuTileForge compiles an entire transformer block into a **Tile Fusion Graph (TFG)** lowered directly to NVIDIA's **CuTile Python DSL** (`cuda.tile`). By applying six algebraic and tile-level fusion passes, it collapses **8 separate kernel launches** (`QKV GEMM`, `GQA Attention`, `O GEMM`, `LayerNorm`, `FFN-up GEMM`, `SiLU`, `FFN-down GEMM`, `LayerNorm+Residual`) into **3 fused tile kernels** with 3-stage software pipelining (`latency=3`) and **Stage -1** pinned-DDR5 PCIe DMA weight streaming.
 
