@@ -8,28 +8,29 @@ on:
 
 jobs:
   lint:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
       - run: pip install ruff black mypy
-      - run: ruff check cutile_forge/ benchmarks/ tests/
-      - run: black --check cutile_forge/ benchmarks/ tests/
+      - run: ruff check cutile_forge/ benchmarks/ tests/ examples/
+      - run: black --check cutile_forge/ benchmarks/ tests/ examples/
       - run: mypy cutile_forge/ --ignore-missing-imports
 
   unit-tests:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install -e ".[dev]" --no-build-isolation
+      - run: pip install -e ".[cuda,dev]"
       - run: pytest tests/ -v --tb=short --timeout=120
 
   correctness-tests:
+    if: false # Requires self-hosted RTX 4060 GPU runner with D:\models\mistral_7b_4bit\
     runs-on: [self-hosted, gpu]
     steps:
       - uses: actions/checkout@v4

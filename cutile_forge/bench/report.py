@@ -168,6 +168,7 @@ def generate_report(input_dir: str | Path, output_md: str | Path) -> Path:
         ("Stage -1 PCIe Weight Streaming Overlap", "weight_stream.csv"),
         ("End-to-End Prefill", "prefill.csv"),
         ("End-to-End Decode (256 Tokens)", "decode.csv"),
+        ("vLLM Baseline (256 Tokens)", "vllm_baseline.csv"),
         ("Long Context (4K-32K KV-Cache Paging)", "long_context.csv"),
         ("Batched Inference (Batch 1-16)", "batch.csv"),
         ("Speculative Decoding (gamma=4)", "speculative.csv"),

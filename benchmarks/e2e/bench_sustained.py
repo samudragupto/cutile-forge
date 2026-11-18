@@ -61,7 +61,8 @@ def run_sustained_benchmark(
                 f"power={row['power_w']:5.1f}W | clk={row['sm_clock_mhz']} MHz | "
                 f"tok/s={row['tok_s']:.2f}"
             )
-            next_log = now_elapsed + log_interval_s
+            while next_log <= now_elapsed:
+                next_log += log_interval_s
 
         if now_elapsed >= duration_s:
             break

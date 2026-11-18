@@ -93,6 +93,12 @@
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | CuTileForge | 6 | 256 | 37.58 | 7862.88 | 32.43 | 30.83 | 4.296 | 13.41 | 85.12 |
 
+## vLLM Baseline (256 Tokens)
+
+| engine | tok_per_sec | ms_per_token | peak_vram_gb | tokens | notes |
+| --- | --- | --- | --- | --- | --- |
+| vllm-0.34.0 | N/A | N/A | N/A | 0 | ValidationError: GPTQ desc_act=True unsupported in vLLM 0.34.0 (CuTileForge supports desc_act=True natively) |
+
 ## Long Context (4K-32K KV-Cache Paging)
 
 | context_len | decode_step_ms | kv_evictions | kv_host_fetches | peak_vram_gb |
@@ -122,11 +128,11 @@
 
 | Metric | Value |
 | --- | --- |
-| Samples | 9 |
-| Avg tok/s | 33.07 |
-| Max GPU temp | 73.0 C |
-| Avg power | 91.9 W |
-| Avg clock throttle | 0.00% |
+| Samples | 361 |
+| Avg tok/s | 31.16 |
+| Max GPU temp | 83.0 C |
+| Avg power | 85.6 W |
+| Avg clock throttle | 4.62% |
 
 ## Generated Plots
 
