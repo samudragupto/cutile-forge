@@ -1,5 +1,6 @@
-"""CuTileForge — Tile-Fusion Graph Compiler for 8 GB-VRAM LLM Inference."""
+"""CuTileForge — Tile-Fusion Graph Compiler for 8 GB-VRAM & 32 GB-VRAM LLM Inference."""
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
+version = __version__
 
-__all__ = ["__version__"]
+__all__ = ["__version__", "version"]

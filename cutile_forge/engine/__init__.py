@@ -1,6 +1,15 @@
 """LLM inference engine package."""
 
-from cutile_forge.engine.config import BenchConfig, GPUConfig, MistralConfig, ModelConfig
+from cutile_forge.engine.config import (
+    LLAMA_34B_4BIT,
+    LOQ_RTX4060,
+    RTX5090,
+    BenchConfig,
+    GPUConfig,
+    MISTRAL_8x7B_4BIT,
+    MistralConfig,
+    ModelConfig,
+)
 from cutile_forge.engine.inference import GenerationStats, InferenceEngine
 from cutile_forge.engine.kv_cache import KVPage, PagedKVCache
 from cutile_forge.engine.model import Mistral7B, MistralLayer
@@ -20,7 +29,10 @@ __all__ = [
     "GenerationStats",
     "InferenceEngine",
     "KVPage",
+    "LLAMA_34B_4BIT",
+    "LOQ_RTX4060",
     "LoadedModelWeights",
+    "MISTRAL_8x7B_4BIT",
     "Mistral7B",
     "MistralConfig",
     "MistralLayer",
@@ -28,6 +40,7 @@ __all__ = [
     "ModelConfig",
     "PagedKVCache",
     "QuantLinearWeight",
+    "RTX5090",
     "SpeculativeDecoder",
     "SpeculativeStats",
     "TokenGenerator",

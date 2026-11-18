@@ -28,9 +28,12 @@ def run_all(
     micro_only: bool = False,
     warmup: int = 5,
     iters: int = 100,
+    target: str = "sm_89",
+    gpu: str = "rtx4060",
 ) -> None:
     """Execute all micro-benchmarks and (unless `micro_only`) end-to-end benchmarks."""
     output_dir.mkdir(parents=True, exist_ok=True)
+    print(f"=== CuTileForge Benchmark Suite (target={target}, gpu={gpu}, output={output_dir}) ===")
 
     print("=== [Micro 1/8] GEMM ===")
     write_csv(output_dir / "gemm.csv", run_gemm_benchmark(warmup=warmup, iters=iters))
@@ -93,7 +96,9 @@ def run_all(
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run full CuTileForge benchmark suite")
     parser.add_argument("--model", type=Path, default=Path(r"D:\models\mistral_7b_4bit"))
-    parser.add_argument("--output", type=Path, default=Path("benchmarks/results"))
+    parser.add_argument("--output", type=Path, default=None)
+    parser.add_argument("--target", type=str, default="sm_89")
+    parser.add_argument("--gpu", type=str, default="rtx4060")
     parser.add_argument("--micro-only", action="store_true")
     parser.add_argument("--warmup", type=int, default=5)
     parser.add_argument("--iters", type=int, default=50)
@@ -101,12 +106,20 @@ def main() -> None:
     parser.add_argument("--pcie-logging", action="store_true")
     args = parser.parse_args()
 
+    if args.output is None:
+        is_5090 = args.gpu.lower() == "rtx5090" or args.target.lower() == "sm_120"
+        output_dir = Path("benchmarks/results_5090") if is_5090 else Path("benchmarks/results")
+    else:
+        output_dir = args.output
+
     run_all(
         model_dir=args.model,
-        output_dir=args.output,
+        output_dir=output_dir,
         micro_only=args.micro_only,
         warmup=args.warmup,
         iters=args.iters,
+        target=args.target,
+        gpu=args.gpu,
     )
 
 

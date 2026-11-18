@@ -59,3 +59,4 @@ Key technical pieces:
 3. **Baselines & Verification**: Hand-written CUDA C++ (`cp.async` + WMMA 3-stage GEMM, FlashAttention-2, LayerNorm, SiLU) and `cublasHgemm` pybind11 baselines, plus 76/76 passing unit and GPU correctness tests (token-exact greedy decode vs PyTorch and WikiText-2 PPL within 5%).
 
 Repo + arXiv-style writeup + benchmark CSVs/plots: https://github.com/samudragupto/cutile-forge
+

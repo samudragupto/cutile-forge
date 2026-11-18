@@ -1,9 +1,14 @@
-"""CuTile kernels for FP16 GEMM and fused INT4-dequant GEMM."""
+"""CuTile kernels for FP16 GEMM, FP8 Tensor Core GEMM (sm_120), and fused INT4-dequant GEMM."""
 
 from __future__ import annotations
 
+from typing import Any
+
 import cuda.tile as ct
 import torch
+
+ct.float8 = getattr(ct, "float8", ct.float8_e4m3fn)
+cutile = ct
 
 
 @ct.kernel(occupancy=2)
@@ -46,6 +51,57 @@ def gemm_fp16_kernel(
         )
         acc = ct.mma(tile_a, tile_b, acc)
     ct.store(c_ptr, index=(pid_m, pid_n), tile=ct.astype(acc, ct.float16))
+
+
+@ct.kernel(occupancy=2)
+def gemm_fp8_kernel(
+    a_ptr,
+    b_ptr,
+    scale_a: float,
+    scale_b: float,
+    c_ptr,
+    tm: ct.Constant[int],
+    tn: ct.Constant[int],
+    tk: ct.Constant[int],
+) -> None:
+    """Tiled FP8 (dtype=cutile.float8) Tensor Core GEMM with 4-stage software pipelining (sm_120)."""
+    group_m: ct.Constant[int] = 8
+    pid = ct.bid(0)
+    num_m = ct.num_tiles(a_ptr, axis=0, shape=(tm, tk))
+    num_n = ct.num_tiles(b_ptr, axis=1, shape=(tk, tn))
+    num_pid_in_group = group_m * num_n
+    group_id = pid // num_pid_in_group
+    first_pid_m = group_id * group_m
+    group_size_m = min(num_m - first_pid_m, group_m)
+    pid_m = first_pid_m + (pid % group_size_m)
+    pid_n = (pid % num_pid_in_group) // group_size_m
+
+    num_k = ct.num_tiles(a_ptr, axis=1, shape=(tm, tk))
+    acc = ct.zeros((tm, tn), dtype=ct.float32)
+    for k in range(num_k):
+        tile_a = ct.astype(
+            ct.load(
+                a_ptr,
+                index=(pid_m, k),
+                shape=(tm, tk),
+                padding_mode=ct.PaddingMode.ZERO,
+                latency=4,
+            ),
+            cutile.float8,
+        )
+        tile_b = ct.astype(
+            ct.load(
+                b_ptr,
+                index=(k, pid_n),
+                shape=(tk, tn),
+                padding_mode=ct.PaddingMode.ZERO,
+                latency=4,
+            ),
+            cutile.float8,
+        )
+        acc = ct.mma(tile_a, tile_b, acc)
+    out = acc * (scale_a * scale_b)
+    ct.store(c_ptr, index=(pid_m, pid_n), tile=ct.astype(out, ct.float16))
 
 
 @ct.kernel(occupancy=2)
@@ -179,6 +235,44 @@ def cutile_gemm_fp16(
     tm, tn, tk = tile_shape or _select_gemm_tiles(m)
     grid = (ct.cdiv(m, tm) * ct.cdiv(n, tn), 1, 1)
     ct.launch(torch.cuda.current_stream(), grid, gemm_fp16_kernel, (a_c, b_c, c, tm, tn, tk))
+    return c
+
+
+def cutile_gemm_fp8(
+    a: torch.Tensor,
+    b: torch.Tensor,
+    scale_a: float = 1.0,
+    scale_b: float = 1.0,
+    gpu_config: Any | None = None,
+    tile_shape: tuple[int, int, int] | None = None,
+) -> torch.Tensor:
+    """Run tiled FP8 Tensor Core GEMM guarded by `GPUConfig.fp8` (falls back to FP16 if fp8=False)."""
+    if a.ndim != 2 or b.ndim != 2:
+        raise ValueError(f"Expected 2D tensors, got {a.shape} and {b.shape}")
+    m, k = a.shape
+    k_b, n = b.shape
+    if k != k_b:
+        raise ValueError(f"Shape mismatch: {a.shape} vs {b.shape}")
+
+    if gpu_config is not None and not getattr(gpu_config, "fp8", False):
+        return cutile_gemm_fp16(
+            a.to(torch.float16) * scale_a,
+            b.to(torch.float16) * scale_b,
+            tile_shape=tile_shape,
+        )
+
+    a_fp8 = a.to(torch.float8_e4m3fn).contiguous()
+    b_fp8 = b.to(torch.float8_e4m3fn).contiguous()
+    c = torch.empty((m, n), device=a.device, dtype=torch.float16)
+
+    tm, tn, tk = tile_shape or _select_gemm_tiles(m)
+    grid = (ct.cdiv(m, tm) * ct.cdiv(n, tn), 1, 1)
+    ct.launch(
+        torch.cuda.current_stream(),
+        grid,
+        gemm_fp8_kernel,
+        (a_fp8, b_fp8, float(scale_a), float(scale_b), c, tm, tn, tk),
+    )
     return c
 
 

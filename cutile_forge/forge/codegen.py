@@ -226,8 +226,8 @@ def _try_compile_cubin(node: TileNode, target: str) -> tuple[bytes | None, str |
 
 def compile_tfg(
     graph: FusionGraph,
-    target: str = "sm_89",
-    pipeline_depth: int = 3,
+    target: str = "sm_120",
+    pipeline_depth: int = 4,
     autotune: bool = True,
     compile_cubin: bool = False,
 ) -> CompiledTFG:

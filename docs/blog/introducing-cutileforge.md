@@ -116,3 +116,4 @@ All benchmarks were measured using CUDA events (`warmup=5`, median `p50`) on the
 ## Try It Yourself
 
 CuTileForge is MIT-licensed and available at **[github.com/samudragupto/cutile-forge](https://github.com/samudragupto/cutile-forge)**. If you have an 8 GB Ada or Ampere GPU and want to experiment with Python-native tile fusion without writing raw PTX, clone `v0.1.0`, run `pytest`, and inspect the generated TFG graphs in `docs/`.
+

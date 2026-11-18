@@ -26,8 +26,24 @@ class ModelConfig:
     group_size: int = 128
     bos_token_id: int = 1
     eos_token_id: int = 2
+    experts: int = 1
+    d_model: int | None = None
+    n_layers: int | None = None
 
     def __post_init__(self) -> None:
+        if self.d_model is not None:
+            self.hidden_size = self.d_model
+            if (
+                self.hidden_size != self.num_attention_heads * self.head_dim
+                and self.hidden_size % self.head_dim == 0
+            ):
+                self.num_attention_heads = self.hidden_size // self.head_dim
+        else:
+            self.d_model = self.hidden_size
+        if self.n_layers is not None:
+            self.num_hidden_layers = self.n_layers
+        else:
+            self.n_layers = self.num_hidden_layers
         if self.hidden_size <= 0 or self.num_hidden_layers <= 0:
             raise ValueError("hidden_size and num_hidden_layers must be positive")
         if self.num_attention_heads % self.num_key_value_heads != 0:
@@ -94,10 +110,44 @@ class GPUConfig:
     pcie_lanes: int = 8
     pipeline_depth: int = 3
     stream_weights: bool = False  # Stream from pinned DDR5 when True, or keep in 8GB VRAM
+    sm: int | None = None
+    fp8: bool = False
+    sm_count: int | None = None
 
     def __post_init__(self) -> None:
+        if self.sm is not None:
+            self.arch = f"sm_{self.sm}"
+        else:
+            tail = self.arch.split("_")[-1]
+            self.sm = int(tail) if tail.isdigit() else 89
+        if self.sm_count is not None:
+            self.num_sms = self.sm_count
+        else:
+            self.sm_count = self.num_sms
+        if self.vram_gb > 8.0 and self.vram_budget_gb == 7.2:
+            self.vram_budget_gb = round(self.vram_gb * 0.9, 2)
         if self.vram_budget_gb > self.vram_gb:
             raise ValueError("vram_budget_gb cannot exceed total vram_gb")
+
+
+LOQ_RTX4060 = GPUConfig()
+RTX5090 = GPUConfig(
+    name="RTX 5090",
+    sm=120,
+    vram_gb=32,
+    fp8=True,
+    pcie_gen=5,
+    sm_count=170,
+    pipeline_depth=4,
+)
+MISTRAL_8x7B_4BIT = ModelConfig(experts=8, d_model=4096)
+LLAMA_34B_4BIT = ModelConfig(
+    d_model=8192,
+    n_layers=48,
+    intermediate_size=22016,
+    num_attention_heads=64,
+    num_key_value_heads=8,
+)
 
 
 @dataclass

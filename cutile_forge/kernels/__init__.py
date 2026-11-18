@@ -7,8 +7,10 @@ from cutile_forge.kernels.ffn_fused import (
     fused_ffn_up_silu_down,
 )
 from cutile_forge.kernels.gemm_dequant import (
+    cutile_gemm_fp8,
     cutile_gemm_fp16,
     fused_gemm_dequant,
+    gemm_fp8_kernel,
     pack_int4_weights,
     unpack_int4_weights_torch,
 )
@@ -22,6 +24,7 @@ from cutile_forge.kernels.softmax import online_softmax
 
 __all__ = [
     "apply_rope",
+    "cutile_gemm_fp8",
     "cutile_gemm_fp16",
     "cutile_layernorm",
     "cutile_rmsnorm",
@@ -34,6 +37,7 @@ __all__ = [
     "fused_gemm_fp16_silu",
     "fused_layernorm_residual",
     "fused_rmsnorm_residual",
+    "gemm_fp8_kernel",
     "online_softmax",
     "pack_int4_weights",
     "precompute_rope_freqs",

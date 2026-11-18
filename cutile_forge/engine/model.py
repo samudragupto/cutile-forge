@@ -7,7 +7,12 @@ from pathlib import Path
 import torch
 import torch.nn.functional as F
 
-from cutile_forge.engine.config import GPUConfig, ModelConfig
+from cutile_forge.engine.config import (
+    LLAMA_34B_4BIT,
+    GPUConfig,
+    MISTRAL_8x7B_4BIT,
+    ModelConfig,
+)
 from cutile_forge.engine.kv_cache import PagedKVCache
 from cutile_forge.engine.weight_loader import (
     LoadedModelWeights,
@@ -214,7 +219,20 @@ class Mistral7B:
         self.layers: list[MistralLayer] = [
             MistralLayer(i, self.config) for i in range(self.config.num_hidden_layers)
         ]
-        self.streamer = WeightStreamer(num_slots=2, device=self.device)
+        est_model_gb = (
+            self.config.num_hidden_layers
+            * self.config.hidden_size
+            * self.config.intermediate_size
+            * 3
+            * (self.config.bits / 8.0)
+            * max(1, self.config.experts)
+        ) / (1024.0**3)
+        self.streamer = WeightStreamer(
+            num_slots=2,
+            device=self.device,
+            model_gb=max(4.16, est_model_gb),
+            gpu_vram_gb=self.gpu_config.vram_gb,
+        )
         max_pos = min(self.config.max_position_embeddings, 32768)
         self.cos, self.sin = precompute_rope_freqs(
             max_pos, self.config.head_dim, theta=self.config.rope_theta, device=self.device
@@ -299,3 +317,11 @@ class Mistral7B:
 
         logits = torch.matmul(normed, self.weights.lm_head.t())
         return logits.view(bsz, seq_len, self.config.vocab_size)
+
+
+__all__ = [
+    "LLAMA_34B_4BIT",
+    "MISTRAL_8x7B_4BIT",
+    "Mistral7B",
+    "MistralLayer",
+]

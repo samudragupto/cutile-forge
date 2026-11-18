@@ -99,3 +99,4 @@ Tensor compilers such as TVM, Triton, and TorchInductor generate fused GPU kerne
 ## 8. Conclusion & Reproducibility
 
 CuTileForge demonstrates that a Python-native TFG compiler targeting NVIDIA CuTile achieves competitive Tensor Core utilization, up to **5.47×** full-layer speedup over unfused CUDA C++, and **32.43 tok/s** 7B inference within 4.30 GB VRAM on a Lenovo LOQ 15APH8 laptop. All code, tests, CSVs, and plots are open-sourced under the MIT license.
+

@@ -22,8 +22,17 @@ class PrefetchSlot:
 class WeightStreamer:
     """Stage -1 asynchronous PCIe DMA streamer using pinned host memory and double buffering."""
 
-    def __init__(self, num_slots: int = 2, device: str | torch.device = "cuda") -> None:
+    def __init__(
+        self,
+        num_slots: int = 2,
+        device: str | torch.device = "cuda",
+        model_gb: float = 4.16,
+        gpu_vram_gb: float = 8.0,
+    ) -> None:
         self.num_slots = max(1, num_slots)
+        self.model_gb = model_gb
+        self.gpu_vram_gb = gpu_vram_gb
+        self.enabled: bool = model_gb > gpu_vram_gb * 0.85
         self.device = torch.device(device)
         self.use_cuda = self.device.type == "cuda" and torch.cuda.is_available()
         self.copy_stream = torch.cuda.Stream(device=self.device) if self.use_cuda else None
