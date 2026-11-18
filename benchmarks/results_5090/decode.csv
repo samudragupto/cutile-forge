@@ -1,2 +1,2 @@
 engine,prompt_tokens,generated_tokens,prefill_ms,decode_ms,tokens_per_sec,ms_per_token,peak_vram_gb,pcie_gb_s,pcie_util_pct
-CuTileForge,6,256,24.85,5118.23,49.82,20.07,4.32,46.48,100.0
+CuTileForge,6,256,24.52,5193.33,49.1,20.37,4.289,49.15,100.0

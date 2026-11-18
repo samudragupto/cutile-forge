@@ -1,2 +1,2 @@
 gamma,tokens_generated,acceptance_rate,baseline_tok_s,speculative_tok_s,speedup
-4,64,0.302,95.33,68.74,0.721
+4,64,0.206,40.14,55.43,1.381

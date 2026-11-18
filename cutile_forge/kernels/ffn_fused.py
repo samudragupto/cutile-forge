@@ -283,20 +283,33 @@ def fused_ffn_dequant_up_silu_down(
 ) -> torch.Tensor:
     """4-bit quantized FFN: SiLU(x @ dequant(qw_up)) @ dequant(qw_down).
 
-    Uses single-kernel tile fusion for small/medium sequences (m <= 256) to
-    eliminate intermediate HBM roundtrips, and switches to 2-stage fused
-    dequant+SiLU -> dequant for larger batches to bound 8 GB VRAM footprint.
+    Uses an occupancy & roofline cost model (`select_ffn_execution_strategy`):
+    single-kernel 3-op tile fusion for small sequences (m <= 64) and pipelined
+    2-stage high-occupancy dispatch for larger sequences on high-SM GPUs.
     """
-    m, _ = x.shape
-    if m > 256:
+    import os
+
+    from cutile_forge.forge.tile_autotuner import select_ffn_execution_strategy
+
+    m, k = x.shape
+    h = qw_down.shape[0] * 2
+    d = qw_down.shape[1]
+    arch = os.environ.get("CUTILE_ARCH", "sm_120")
+    sm_count = (
+        torch.cuda.get_device_properties(x.device).multi_processor_count if x.is_cuda else None
+    )
+    strategy = select_ffn_execution_strategy(m, d, k, arch=arch, sm_count=sm_count)
+
+    if strategy.mode == "pipelined_2stage":
         from cutile_forge.kernels.gemm_dequant import fused_gemm_dequant
         from cutile_forge.kernels.gemm_dequant_silu import fused_gemm_dequant_silu
 
-        h_act = fused_gemm_dequant_silu(x, qw_up, s_up, z_up, group_size=group_size)
-        return fused_gemm_dequant(h_act, qw_down, s_down, z_down, group_size=group_size)
-
-    h = qw_down.shape[0] * 2
-    d = qw_down.shape[1]
+        h_act = fused_gemm_dequant_silu(
+            x, qw_up, s_up, z_up, group_size=group_size, tile_shape=strategy.tile_shape
+        )
+        return fused_gemm_dequant(
+            h_act, qw_down, s_down, z_down, group_size=group_size, tile_shape=strategy.tile_shape
+        )
     tm = 16 if m <= 16 else (64 if m <= 64 else 128)
     th = 128 if group_size >= 128 else 64
     tk = 64

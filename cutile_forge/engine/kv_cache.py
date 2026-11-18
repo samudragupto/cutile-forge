@@ -18,6 +18,7 @@ class KVPage:
     v: torch.Tensor
     valid_tokens: int
     on_gpu: bool
+    swap_event: torch.cuda.Event | None = None
 
     @property
     def nbytes(self) -> int:
@@ -36,6 +37,7 @@ class PagedKVCache:
         gpu_budget_bytes: int = 2 * 1024 * 1024 * 1024,
         device: str | torch.device = "cuda",
         dtype: torch.dtype = torch.float16,
+        cpu_pool_pages: int = 64,
     ) -> None:
         if page_size <= 0:
             raise ValueError(f"page_size must be positive, got {page_size}")
@@ -51,36 +53,112 @@ class PagedKVCache:
 
         self.pages: dict[tuple[int, int], KVPage] = {}
         self.gpu_lru: OrderedDict[tuple[int, int], int] = OrderedDict()
+        self._layer_lens: dict[int, int] = {}
         self.gpu_used_bytes: int = 0
         self.seq_len: int = 0
         self.evictions: int = 0
         self.host_fetches: int = 0
+        self.runtime_pin_allocs: int = 0
+
+        self.swap_stream: torch.cuda.Stream | None = (
+            torch.cuda.Stream()
+            if self.device.type == "cuda" and torch.cuda.is_available()
+            else None
+        )
+        self._cpu_pool: list[tuple[torch.Tensor, torch.Tensor]] = []
+        self._prefetched: dict[
+            tuple[int, int], tuple[torch.Tensor, torch.Tensor, torch.cuda.Event]
+        ] = {}
+        if self.device.type == "cuda" and torch.cuda.is_available() and cpu_pool_pages > 0:
+            for _ in range(cpu_pool_pages):
+                self._cpu_pool.append(self._alloc_pinned_pair())
+
+    def _alloc_pinned_pair(self) -> tuple[torch.Tensor, torch.Tensor]:
+        shape = (1, self.num_kv_heads, self.page_size, self.head_dim)
+        pin = torch.cuda.is_available()
+        try:
+            k_cpu = torch.empty(shape, dtype=self.dtype, pin_memory=pin)
+            v_cpu = torch.empty(shape, dtype=self.dtype, pin_memory=pin)
+        except RuntimeError:
+            k_cpu = torch.empty(shape, dtype=self.dtype)
+            v_cpu = torch.empty(shape, dtype=self.dtype)
+        return k_cpu, v_cpu
+
+    def _acquire_cpu_pair(self) -> tuple[torch.Tensor, torch.Tensor]:
+        if self._cpu_pool:
+            return self._cpu_pool.pop()
+        self.runtime_pin_allocs += 1
+        return self._alloc_pinned_pair()
+
+    def _release_cpu_pair(self, k_cpu: torch.Tensor, v_cpu: torch.Tensor) -> None:
+        if k_cpu.device.type == "cpu":
+            self._cpu_pool.append((k_cpu, v_cpu))
 
     def _evict_if_needed(self, required_bytes: int) -> None:
+        if self.gpu_used_bytes + required_bytes <= self.gpu_budget_bytes or not self.gpu_lru:
+            return
+        if self.swap_stream is not None:
+            self.swap_stream.wait_stream(torch.cuda.current_stream())
         while self.gpu_used_bytes + required_bytes > self.gpu_budget_bytes and self.gpu_lru:
             evict_key, _ = self.gpu_lru.popitem(last=False)
             page = self.pages[evict_key]
             if page.on_gpu:
-                k_cpu = page.k.detach().cpu()
-                v_cpu = page.v.detach().cpu()
-                if torch.cuda.is_available():
-                    try:
-                        k_cpu = k_cpu.pin_memory()
-                        v_cpu = v_cpu.pin_memory()
-                    except RuntimeError:
-                        pass
+                k_cpu, v_cpu = self._acquire_cpu_pair()
+                if self.swap_stream is not None:
+                    page.k.record_stream(self.swap_stream)
+                    page.v.record_stream(self.swap_stream)
+                    with torch.cuda.stream(self.swap_stream):
+                        k_cpu.copy_(page.k, non_blocking=True)
+                        v_cpu.copy_(page.v, non_blocking=True)
+                    page.swap_event = self.swap_stream.record_event()
+                else:
+                    k_cpu.copy_(page.k)
+                    v_cpu.copy_(page.v)
+                    page.swap_event = None
                 self.gpu_used_bytes -= page.nbytes
                 page.k = k_cpu
                 page.v = v_cpu
                 page.on_gpu = False
                 self.evictions += 1
 
+    def prefetch_page_async(self, page_id: tuple[int, int]) -> None:
+        """Asynchronously prefetch an offloaded CPU page onto GPU on `swap_stream`."""
+        page = self.pages.get(page_id)
+        if page is None or page.on_gpu or self.device.type != "cuda" or page_id in self._prefetched:
+            return
+        if page.swap_event is not None and self.swap_stream is not None:
+            self.swap_stream.wait_event(page.swap_event)
+        if self.swap_stream is not None:
+            with torch.cuda.stream(self.swap_stream):
+                k_gpu = page.k.to(self.device, non_blocking=True)
+                v_gpu = page.v.to(self.device, non_blocking=True)
+            ev = self.swap_stream.record_event()
+            self._prefetched[page_id] = (k_gpu, v_gpu, ev)
+
     def _ensure_on_gpu(self, key: tuple[int, int]) -> KVPage:
         page = self.pages[key]
         if not page.on_gpu and self.device.type == "cuda":
             self._evict_if_needed(page.nbytes)
-            page.k = page.k.to(self.device, non_blocking=True)
-            page.v = page.v.to(self.device, non_blocking=True)
+            old_k, old_v = page.k, page.v
+            if key in self._prefetched:
+                k_gpu, v_gpu, ev = self._prefetched.pop(key)
+                torch.cuda.current_stream().wait_event(ev)
+            else:
+                if page.swap_event is not None:
+                    torch.cuda.current_stream().wait_event(page.swap_event)
+                if self.swap_stream is not None:
+                    with torch.cuda.stream(self.swap_stream):
+                        k_gpu = old_k.to(self.device, non_blocking=True)
+                        v_gpu = old_v.to(self.device, non_blocking=True)
+                    ev = self.swap_stream.record_event()
+                    torch.cuda.current_stream().wait_event(ev)
+                else:
+                    k_gpu = old_k.to(self.device, non_blocking=True)
+                    v_gpu = old_v.to(self.device, non_blocking=True)
+            self._release_cpu_pair(old_k, old_v)
+            page.k = k_gpu
+            page.v = v_gpu
+            page.swap_event = None
             page.on_gpu = True
             self.gpu_used_bytes += page.nbytes
             self.host_fetches += 1
@@ -139,11 +217,14 @@ class PagedKVCache:
             page.valid_tokens = max(page.valid_tokens, slot + 1)
 
         new_len = start_pos + s_new
+        self._layer_lens[layer_idx] = new_len
         if layer_idx == 0:
             self.seq_len = new_len
         return new_len
 
     def _layer_seq_len(self, layer_idx: int) -> int:
+        if layer_idx in self._layer_lens:
+            return self._layer_lens[layer_idx]
         layer_pages = [p for (l_idx, _), p in self.pages.items() if l_idx == layer_idx]
         if not layer_pages:
             return 0
@@ -164,15 +245,49 @@ class PagedKVCache:
         k_chunks: list[torch.Tensor] = []
         v_chunks: list[torch.Tensor] = []
         for key in layer_keys:
-            page = self._ensure_on_gpu(key)
+            page = self.pages[key]
             n = page.valid_tokens
-            k_chunks.append(page.k[:, :, :n, :].to(self.device))
-            v_chunks.append(page.v[:, :, :n, :].to(self.device))
+            if page.on_gpu:
+                self.gpu_lru.move_to_end(key)
+                k_chunks.append(page.k[:, :, :n, :])
+                v_chunks.append(page.v[:, :, :n, :])
+            else:
+                if page.swap_event is not None:
+                    torch.cuda.current_stream().wait_event(page.swap_event)
+                k_chunks.append(page.k[:, :, :n, :].to(self.device, non_blocking=True))
+                v_chunks.append(page.v[:, :, :n, :].to(self.device, non_blocking=True))
+                self.host_fetches += 1
         return torch.cat(k_chunks, dim=2), torch.cat(v_chunks, dim=2)
 
+    def truncate(self, new_len: int) -> None:
+        """Truncate all layers back to `new_len` tokens (used by speculative rollback)."""
+        if new_len < 0:
+            new_len = 0
+        max_page_idx = (new_len - 1) // self.page_size if new_len > 0 else -1
+        last_valid = ((new_len - 1) % self.page_size) + 1 if new_len > 0 else 0
+        to_del = [k for k in self.pages if k[1] > max_page_idx]
+        for k in to_del:
+            page = self.pages.pop(k)
+            self.gpu_lru.pop(k, None)
+            if page.on_gpu:
+                self.gpu_used_bytes -= page.nbytes
+            else:
+                self._release_cpu_pair(page.k, page.v)
+        for k, page in self.pages.items():
+            if k[1] == max_page_idx:
+                page.valid_tokens = min(page.valid_tokens, last_valid)
+        for l_idx in list(self._layer_lens):
+            self._layer_lens[l_idx] = min(self._layer_lens[l_idx], new_len)
+        self.seq_len = new_len
+
     def reset(self) -> None:
+        for page in self.pages.values():
+            if not page.on_gpu:
+                self._release_cpu_pair(page.k, page.v)
+        self._prefetched.clear()
         self.pages.clear()
         self.gpu_lru.clear()
+        self._layer_lens.clear()
         self.gpu_used_bytes = 0
         self.seq_len = 0
         self.evictions = 0

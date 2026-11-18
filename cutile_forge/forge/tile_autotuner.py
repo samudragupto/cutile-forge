@@ -41,6 +41,61 @@ CANDIDATE_TILE_CONFIGS: list[TileConfig] = [
 ]
 
 
+@dataclass(frozen=True)
+class FFNExecutionStrategy:
+    """Selected FFN execution strategy and tile shape from the occupancy cost model."""
+
+    mode: str  # "single_kernel_3op" or "pipelined_2stage"
+    tile_shape: tuple[int, int, int]
+    estimated_occupancy: float
+
+
+def select_ffn_execution_strategy(
+    m: int,
+    n: int,
+    k: int,
+    arch: str = "sm_120",
+    sm_count: int | None = None,
+) -> FFNExecutionStrategy:
+    """Occupancy & roofline cost model selecting 3-op vs 2-stage pipelined FFN."""
+    if sm_count is None:
+        if arch == "sm_120":
+            sm_count = 170
+        elif torch.cuda.is_available():
+            sm_count = torch.cuda.get_device_properties(0).multi_processor_count
+        else:
+            sm_count = 24
+
+    if m <= 64:
+        tm = 16 if m <= 16 else 64
+        return FFNExecutionStrategy(
+            mode="single_kernel_3op",
+            tile_shape=(tm, 128, 64),
+            estimated_occupancy=0.5,
+        )
+
+    if m >= 128 and (arch == "sm_120" or sm_count >= 100):
+        # High-occupancy 64x64x32 tile keeps SM utilization high across 170 SMs
+        return FFNExecutionStrategy(
+            mode="pipelined_2stage",
+            tile_shape=(64, 64, 32),
+            estimated_occupancy=0.75,
+        )
+
+    if m > 256:
+        return FFNExecutionStrategy(
+            mode="pipelined_2stage",
+            tile_shape=(128, 128, 32),
+            estimated_occupancy=0.5,
+        )
+
+    return FFNExecutionStrategy(
+        mode="single_kernel_3op",
+        tile_shape=(128, 128, 64),
+        estimated_occupancy=0.5,
+    )
+
+
 class TileAutotuner:
     """Searches 12 tile configs for a given (M, N, K) shape and target GPU."""
 
