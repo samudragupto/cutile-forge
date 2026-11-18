@@ -80,4 +80,3 @@ def test_roofline_plot_generation(tmp_path: Path) -> None:
     p = generate_roofline_plot(output_path=out)
     assert p.exists()
     assert p.stat().st_size > 10_000
-
