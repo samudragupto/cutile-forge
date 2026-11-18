@@ -308,6 +308,11 @@ def fused_gemm_dequant(
         qw_u8 = qweight.contiguous()
 
     n = qw_u8.shape[1]
+    assert qw_u8.shape == (k // 2, n), f"Weight B must be [K//2, N], got {tuple(qw_u8.shape)}"
+    assert scales.shape == (
+        k // group_size,
+        n,
+    ), f"Scale S must be [K//{group_size}, N], got {tuple(scales.shape)}"
     if qw_u8.shape[0] * 2 != k:
         raise ValueError(f"Weight K mismatch: {qw_u8.shape[0] * 2} vs {k}")
 

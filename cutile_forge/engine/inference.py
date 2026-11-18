@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -35,7 +36,10 @@ class InferenceEngine:
         model: Mistral7B,
         page_size: int = 16,
         kv_gpu_budget_bytes: int = 2 * 1024 * 1024 * 1024,
+        target: str = "sm_120",
     ) -> None:
+        os.environ.setdefault("CUTILE_ARCH", target)
+        self.target = target
         self.model = model
         self.config = model.config
         self.kv_cache = PagedKVCache(

@@ -3,23 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
-
-from benchmarks.micro.bench_attention import run_attention_benchmark  # noqa: E402
-from benchmarks.micro.bench_ffn_fused import run_ffn_benchmark  # noqa: E402
-from benchmarks.micro.bench_fused_layer import run_fused_layer_benchmark  # noqa: E402
-from benchmarks.micro.bench_gemm import run_gemm_benchmark  # noqa: E402
-from benchmarks.micro.bench_gemm_dequant import run_gemm_dequant_benchmark  # noqa: E402
-from benchmarks.micro.bench_layernorm import run_layernorm_benchmark  # noqa: E402
-from benchmarks.micro.bench_silu_fusion import run_silu_fusion_benchmark  # noqa: E402
-from benchmarks.micro.bench_weight_stream import run_weight_stream_benchmark  # noqa: E402
-from cutile_forge.bench.harness import write_csv  # noqa: E402
-from cutile_forge.bench.report import generate_report  # noqa: E402
 
 
 def run_all(
@@ -28,10 +18,23 @@ def run_all(
     micro_only: bool = False,
     warmup: int = 5,
     iters: int = 100,
-    target: str = "sm_89",
-    gpu: str = "rtx4060",
+    target: str = "sm_120",
+    gpu: str = "rtx5090",
 ) -> None:
     """Execute all micro-benchmarks and (unless `micro_only`) end-to-end benchmarks."""
+    os.environ.setdefault("CUTILE_ARCH", target)
+
+    from benchmarks.micro.bench_attention import run_attention_benchmark
+    from benchmarks.micro.bench_ffn_fused import run_ffn_benchmark
+    from benchmarks.micro.bench_fused_layer import run_fused_layer_benchmark
+    from benchmarks.micro.bench_gemm import run_gemm_benchmark
+    from benchmarks.micro.bench_gemm_dequant import run_gemm_dequant_benchmark
+    from benchmarks.micro.bench_layernorm import run_layernorm_benchmark
+    from benchmarks.micro.bench_silu_fusion import run_silu_fusion_benchmark
+    from benchmarks.micro.bench_weight_stream import run_weight_stream_benchmark
+    from cutile_forge.bench.harness import write_csv
+    from cutile_forge.bench.report import generate_report
+
     output_dir.mkdir(parents=True, exist_ok=True)
     print(f"=== CuTileForge Benchmark Suite (target={target}, gpu={gpu}, output={output_dir}) ===")
 
@@ -97,14 +100,15 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run full CuTileForge benchmark suite")
     parser.add_argument("--model", type=Path, default=Path(r"D:\models\mistral_7b_4bit"))
     parser.add_argument("--output", type=Path, default=None)
-    parser.add_argument("--target", type=str, default="sm_89")
-    parser.add_argument("--gpu", type=str, default="rtx4060")
+    parser.add_argument("--target", type=str, default="sm_120")
+    parser.add_argument("--gpu", type=str, default="rtx5090")
     parser.add_argument("--micro-only", action="store_true")
     parser.add_argument("--warmup", type=int, default=5)
     parser.add_argument("--iters", type=int, default=50)
     parser.add_argument("--thermal-logging", action="store_true")
     parser.add_argument("--pcie-logging", action="store_true")
     args = parser.parse_args()
+    os.environ["CUTILE_ARCH"] = args.target
 
     if args.output is None:
         is_5090 = args.gpu.lower() == "rtx5090" or args.target.lower() == "sm_120"

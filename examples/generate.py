@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
-
-from cutile_forge.engine import InferenceEngine, Mistral7B, ModelConfig, TokenGenerator
 
 
 def main() -> None:
@@ -16,7 +15,12 @@ def main() -> None:
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--top-k", type=int, default=50)
     parser.add_argument("--top-p", type=float, default=0.9)
+    parser.add_argument("--target", default="sm_120")
     args = parser.parse_args()
+
+    os.environ["CUTILE_ARCH"] = args.target
+
+    from cutile_forge.engine import InferenceEngine, Mistral7B, ModelConfig, TokenGenerator
 
     if (args.model / "config.json").exists():
         model = Mistral7B.from_pretrained(args.model, device="cuda")
@@ -26,7 +30,7 @@ def main() -> None:
         model = Mistral7B.from_random(ModelConfig(num_hidden_layers=4), device="cuda")
         tok_path = None
 
-    engine = InferenceEngine(model)
+    engine = InferenceEngine(model, target=args.target)
     if tok_path is not None:
         gen = TokenGenerator(engine, tokenizer_path=tok_path)
         text = gen.generate(

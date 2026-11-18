@@ -1,5 +1,6 @@
 """CuTile Python DSL kernels for LLM inference."""
 
+from cutile_forge.cuda_tile_init import ct  # noqa: F401
 from cutile_forge.kernels.attention_gqa import fused_attention_gqa
 from cutile_forge.kernels.ffn_fused import (
     fused_ffn_dequant_up_silu_down,

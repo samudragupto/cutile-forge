@@ -1,0 +1,5 @@
+name,M,N,K,pytorch_ms,pytorch_tflops,cutile_ms,cutile_tflops
+QKV_dec,1,12288,4096,0.1475,0.68,,
+QKV_pre,256,12288,4096,0.3003,85.80,,
+FFNup_dec,1,14336,4096,0.1667,0.70,,
+FFNup_pre,256,14336,4096,0.3267,92.02,,
