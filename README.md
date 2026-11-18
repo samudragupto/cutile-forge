@@ -165,6 +165,7 @@ PS C:\Users\user\Desktop\cutile-forge> python -m pytest tests/ benchmarks/correc
 | Metric | 4060 Laptop | 5090 | Speedup |
 |--------|------------|------|---------|
 | Decode (7B-4bit) | 32.43 tok/s | **49.82 tok/s** | 1.54× |
+| 30-Min Sustained (avg) | 31.16 tok/s | **94.69 tok/s** | 3.04× |
 | GEMM prefill (256×14336×4096) | 25 TFLOPS | **136 TFLOPS** | 5.4× |
 | Attention (seq=1024) | 21.76 TFLOPS | **101.62 TFLOPS** | 4.7× |
 | Prefill (4096 tok) | 1,476 tok/s | **5,640 tok/s** | 3.8× |
@@ -180,6 +181,8 @@ PS C:\Users\user\Desktop\cutile-forge> python -m pytest tests/ benchmarks/correc
 | *Full layer: 3k TFG vs 8k CUDA* | *GQA FlashAttention-2 (32:8)* |
 | ![E2E Scaling](docs/images_5090/e2e_scaling.png) | ![PCIe](docs/images_5090/pcie_streaming.png) |
 | *E2E: 4060 vs 5090* | *PCIe 5.0 weight streaming* |
+| ![30-Min Sustained](docs/images_5090/sustained_30min.png) | ![Scaling Summary](docs/images_5090/scaling_summary.png) |
+| *30-min sustained decode (94.69 tok/s avg)* | *RTX 5090 vs 4060 speedup summary* |
 
 Full results: [`docs/RESULTS_RTX5090.md`](docs/RESULTS_RTX5090.md)
 

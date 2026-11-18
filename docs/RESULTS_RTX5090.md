@@ -215,6 +215,8 @@
 
 ### 30-Min Sustained (RTX 5090)
 
+![30-Min Sustained](images_5090/sustained_30min.png)
+
 | Metric | Value |
 |--------|-------|
 | Duration / Tokens | 1,800.6 s (30.0 min) · 170,240 tokens |
