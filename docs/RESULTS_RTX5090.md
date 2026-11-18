@@ -213,6 +213,15 @@
 > 70% of draft tokens are rejected, adding overhead without benefit.
 > A smaller draft model (e.g., 1B) would be needed for >1× speedup.
 
+### 30-Min Sustained (RTX 5090)
+
+| Metric | Value |
+|--------|-------|
+| Duration / Tokens | 1,800.6 s (30.0 min) · 170,240 tokens |
+| Samples | 361 (5.0 s interval, `benchmarks/results_5090/sustained/thermal.csv`) |
+| Avg Throughput | **94.69 tok/s** (min `45.25`, max `101.16` tok/s; steady-state ~`101.0` tok/s) |
+| Max Temp / Power | `0.0 °C` / `0.0 W` (NVML sensor telemetry unavailable in container) |
+
 ---
 
 ## E2E Scaling: 4060 vs 5090
@@ -222,6 +231,7 @@
 | Workload | 4060 (tok/s) | 5090 (tok/s) | Speedup |
 |----------|-------------:|-------------:|--------:|
 | Decode (7B-4bit) | 32.43 | 49.82 | 1.54× |
+| 30-Min Sustained (RTX 5090) | 31.16 | **94.69** (361 samples, max `0.0 °C` NVML N/A) | **3.04×** |
 | Prefill (4096) | 1,476 | 5,640 | 3.8× |
 | Batch=16 (seq=32) | 1,440 | 8,457 | 5.9× |
 
