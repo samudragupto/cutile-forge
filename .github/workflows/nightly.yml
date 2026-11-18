@@ -1,0 +1,26 @@
+name: Nightly Sustained
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  sustained-30min:
+    runs-on: [self-hosted, gpu]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e ".[dev]" --no-build-isolation
+      - run: |
+          python benchmarks/e2e/bench_sustained.py \
+            --model /mnt/d/models/mistral_7b_4bit/ \
+            --duration-minutes 30 \
+            --output benchmarks/results/nightly/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nightly-thermal
+          path: benchmarks/results/nightly/
+
