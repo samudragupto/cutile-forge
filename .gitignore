@@ -1,0 +1,44 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pyd
+*.dll
+*.lib
+*.exp
+*.obj
+
+# Build / Distribution
+build/
+dist/
+*.egg-info/
+.eggs/
+cutile_forge/baselines/build/
+cutile_forge/baselines/*.so
+cutile_forge/baselines/*.pyd
+
+# Environments
+.venv/
+venv/
+ENV/
+env/
+
+# Caches & Logs
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.log
+
+# Benchmark outputs (keep .gitkeep)
+benchmarks/results/*.csv
+benchmarks/results/*.png
+benchmarks/results/*.svg
+benchmarks/results/sustained/
+benchmarks/results/nightly/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

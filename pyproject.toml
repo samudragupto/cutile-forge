@@ -1,0 +1,78 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel", "pybind11>=2.11"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cutile-forge"
+version = "0.1.0"
+description = "Tile-Fusion Graph Compiler and CuTile Inference Engine for 8 GB-VRAM LLMs"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+authors = [
+    { name = "CuTileForge Contributors" },
+]
+keywords = ["cuda", "cutile", "llm", "inference", "tile-fusion", "compiler", "mistral"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "numpy>=1.24",
+    "torch>=2.3",
+    "safetensors>=0.4",
+    "huggingface_hub>=0.23",
+    "transformers>=4.40",
+    "tokenizers>=0.19",
+    "matplotlib>=3.8",
+    "nvidia-ml-py>=12.535",
+    "graphviz>=0.20",
+]
+
+[project.optional-dependencies]
+cuda = [
+    "cuda-tile>=1.0.0",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-timeout>=2.3",
+    "ruff>=0.4",
+    "black>=24.0",
+    "mypy>=1.10",
+    "pybind11>=2.11",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["cutile_forge*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = ["E501"]
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+warn_unused_configs = true
+check_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "benchmarks/correctness"]
+addopts = "-v --tb=short"
+markers = [
+    "gpu: tests requiring a CUDA GPU",
+    "slow: slow integration or model tests",
+]
