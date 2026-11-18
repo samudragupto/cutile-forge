@@ -139,4 +139,5 @@
 - `benchmarks/results/gemm_tflops.png`
 - `benchmarks/results/layer_latency.png`
 - `benchmarks/results/ffn_speedup.png`
+- `benchmarks/results/attention_tflops.png`
 - `benchmarks/results/thermal_sustained.png`

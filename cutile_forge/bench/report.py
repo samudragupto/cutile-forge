@@ -124,6 +124,41 @@ def generate_plots(input_dir: Path) -> list[Path]:
         plt.close(fig)
         plots.append(out)
 
+    attn_rows = _read_csv(input_dir / "attention.csv")
+    if attn_rows:
+        fig, ax = plt.subplots(figsize=(7.5, 4.2))
+        seqs = [r["seq_len"] for r in attn_rows]
+        x = list(range(len(seqs)))
+        w = 0.25
+        ax.bar(
+            [i - w for i in x],
+            [float(r["cutile_tflops"]) for r in attn_rows],
+            w,
+            label="CuTile FlashAttn-2 (GQA 32:8)",
+        )
+        ax.bar(
+            x,
+            [float(r["pytorch_tflops"]) for r in attn_rows],
+            w,
+            label="PyTorch SDPA",
+        )
+        ax.bar(
+            [i + w for i in x],
+            [float(r["cuda_tflops"]) for r in attn_rows],
+            w,
+            label="Hand-written CUDA",
+        )
+        ax.set_xticks(x)
+        ax.set_xticklabels([f"seq={s}" for s in seqs])
+        ax.set_ylabel("TFLOPS (median)")
+        ax.set_title("Grouped-Query Attention (32:8) Throughput")
+        ax.legend()
+        fig.tight_layout()
+        out = input_dir / "attention_tflops.png"
+        fig.savefig(out, dpi=150)
+        plt.close(fig)
+        plots.append(out)
+
     thermal_path = input_dir / "sustained" / "thermal.csv"
     if not thermal_path.exists():
         thermal_path = input_dir / "thermal.csv"

@@ -1,0 +1,19 @@
+name: GPU Correctness
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  correctness-tests:
+    runs-on: [self-hosted, gpu]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: |
+          pip install -e ".[cuda,dev]"
+          python -m cutile_forge.baselines.build
+          python models/download.py --output /mnt/d/models/mistral_7b_4bit/
+      - run: pytest benchmarks/correctness/ -v --tb=short --timeout=600
+      - run: pytest tests/ -v --tb=short
