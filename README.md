@@ -6,7 +6,7 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776ab.svg)](https://www.python.org/downloads/)
 [![CUDA sm_89 | sm_120](https://img.shields.io/badge/CUDA-sm__89%20%7C%20sm__120%20%7C%20CuTile%201.8-76B900.svg)](https://developer.nvidia.com/cuda-toolkit)
 
-**Tile-Fusion Graph (TFG) Compiler & CuTile LLM Inference Engine — from an 8 GB laptop GPU to a 32 GB Blackwell, with an OpenAI-compatible server.**
+**Tile-Fusion Graph (TFG) Compiler & CuTile LLM Inference Engine — from an 8 GB laptop GPU to a 72B-class hybrid on a single 32 GB Blackwell, with continuous batching and a `torch.compile` backend.**
 
 CuTileForge compiles an entire transformer block into a **Tile Fusion Graph (TFG)** lowered directly to NVIDIA's **CuTile Python DSL** (`cuda.tile`). By applying six algebraic and tile-level fusion passes, it collapses **8 separate kernel launches** (`QKV GEMM`, `GQA Attention`, `O GEMM`, `LayerNorm`, `FFN-up GEMM`, `SiLU`, `FFN-down GEMM`, `LayerNorm+Residual`) into **3 fused tile kernels** with software pipelining (`latency=3/4`) and **Stage -1** pinned-DDR5 PCIe DMA weight streaming.
 
@@ -14,10 +14,10 @@ CuTileForge compiles an entire transformer block into a **Tile Fusion Graph (TFG
 
 ## Why CuTileForge?
 
-- **Portable 8→3 Kernel Fusion (`sm_89` ↔ `sm_120`)**: The exact same TFG compiler and 6 fusion rules scale seamlessly from a 24-SM 8 GB RTX 4060 Laptop (`5.47×` full-layer speedup) to a 170-SM 32 GB RTX 5090 (`5.88×` at `seq=1`, `4.45×` at `seq=256`).
-- **High-Throughput Decode & Speculative Acceleration**: Reaches **117.31 tok/s** speculative decode (`1.21×` vs graph decode, `1.71×` vs v0.2.0 spec), **96.57 tok/s** CUDA-graph decode, and **99.73 tok/s** 30-min sustained (`0.25%` drift) on RTX 5090 — alongside **32.43 tok/s** in **4.30 GB** VRAM on an 8 GB RTX 4060 Laptop.
-- **Production Serving & Packaging**: Ships with an OpenAI-compatible FastAPI server (`/health`, `/v1/models`, `/v1/chat/completions` with SSE streaming and continuous-batching lock), unified CLI (`cutile-forge serve` / `cutile-forge bench`), `Dockerfile` (CUDA 13.2), and wheel (`cutile_forge-0.5.0-py3-none-any.whl`).
-- **Full Precision Ladder**: Native `desc_act=True` GPTQ, AWQ, and GGUF `Q4_K_M` loaders, `FP8` (`e4m3fn`) KV-cache (50% KV VRAM savings), `NVFP4` (`e2m1`) register-LUT dequant (`88.56 TFLOPS`), and fused 8-expert MoE (`Mixtral-8x7B`).
+- **Real Large-Model Proof on One 32 GB GPU**: Runs **Llama-2-70B-Chat-GPTQ** (`35.3 GB`, 80 layers) on a single 32 GB RTX 5090 via **55 HBM-resident + 25 Stage -1 PCIe-5.0-streamed layers** (`3.90–4.07 tok/s`, `27.44 GB` peak VRAM, `84–88%` PCIe overlap, zero OOM), and **Mixtral-8x7B-Instruct-v0.1-GPTQ** (`23.8 GB`) 100% resident at **`41.83 tok/s`** (`25.26 GB` VRAM).
+- **Production Serving**: OpenAI-compatible FastAPI server (`/health`, `/v1/models`, `/v1/chat/completions`) with async `DynamicBatcher` (**4-way concurrent p99 `363.1 → 113.6 ms`**, `3.20×`), `RadixPrefixCache`, SSE streaming, `Dockerfile`, and wheel.
+- **Zero-Code-Change Speedup**: `@torch.compile(backend="cutile_forge")` lowers PyTorch FX/Dynamo graphs (`linear+silu+linear`, `add+layer_norm`, `scaled_dot_product_attention`) through the 6 TFG fusion rules into fused CuTile kernels (`atol < 1e-2`).
+- **Portable 8→3 Fusion (`sm_89` ↔ `sm_120`) & Full Precision Ladder**: Scales from an 8 GB RTX 4060 Laptop (`32.43 tok/s` in `4.30 GB` VRAM) to a 32 GB RTX 5090 (`96.57 tok/s` CUDA-graph decode, `99.73 tok/s` 30-min sustained, `117.31 tok/s` speculative), with GPTQ (`desc_act` + `group_size=-1`), AWQ, GGUF, `FP8` KV-cache, and `NVFP4`.
 
 ---
 
@@ -175,12 +175,16 @@ PS C:\Users\user\Desktop\cutile-forge> python -m pytest tests/ benchmarks/correc
 
 ---
 
-### Real Large-Model Checkpoint Evaluation on RTX 5090 (Mixtral-8x7B MoE & Llama-70B Hybrid)
+### Large-Model Evaluation (Real Checkpoints, RTX 5090)
 
-| Model | Placement | Decode (`tok/s`) | Peak VRAM | Host RSS | PCIe Overlap | Perplexity |
+| Model / Mode | Placement | Decode (`tok/s`) | Peak VRAM | Host RSS | PCIe Overlap | Perplexity |
 |---|---|---:|---:|---:|---:|---:|
-| **Mixtral-8x7B-Instruct-v0.1-GPTQ (Real, 23.8 GB)** | 32 HBM / 0 PCIe | **41.83 tok/s** (`2,786.7` prefill) | **25.26 GB** | 1.93 GB | 0% (100% HBM) | **7.48** |
-| **Llama-2-70B-Chat-GPTQ (Real, 35.3 GB)** | 55 HBM / 25 PCIe 5.0 | **3.90–4.07 tok/s** | **27.44 GB** | 9.08 GB | **84.4–88.1%** | — |
+| **Mixtral-8x7B (Synthetic `v0.7.0`)** | 32 HBM / 0 PCIe | — (`42.13 TF` @ M=256) | — | — | 0% | N/A |
+| **Mixtral-8x7B-Instruct-v0.1-GPTQ (Real, 23.8 GB)** | **32 HBM / 0 PCIe** | **41.83 tok/s** (`2,786.7` prefill) | **25.26 GB** | 1.93 GB | 0% (100% HBM) | **7.48** *(44-tok GPU-arch passage)* |
+| **LLAMA3_70B_4BIT (Synthetic `v0.8.0`)** | 57 HBM / 23 PCIe 5.0 | 4.66 tok/s | 27.43 GB | — | 99.5% | N/A |
+| **Llama-2-70B-Chat-GPTQ (Real, 35.3 GB)** | **55 HBM / 25 PCIe 5.0** | **3.90–4.07 tok/s** | **27.44 GB** | 9.08 GB | **84.4–88.1%** | — |
+
+*Footnote: Synthetic rows = architecture-matched random weights (capacity/streaming validation); Real rows = TheBloke GPTQ checkpoints, greedy decode, coherent output verified. Perplexity (`7.48`) measured via teacher-forced cross-entropy on a 44-token GPU shared-memory technical passage (`ctx=44`, `benchmarks/e2e/bench_real_large_models.py`).*
 
 > **Mixtral-8x7B-GPTQ (verbatim, 64 tok):** *"A GPU (Graphics Processing Unit) consists of many small processing cores called CUDA cores, which can execute instructions in parallel. Each CUDA core has its own set of registers and a small amount of fast memory called shared memory. Shared memory is a user-managed cache that is physically close"*  
 > **Llama-2-70B-Chat-GPTQ (verbatim, `"The capital of France is"`):** *"Paris"*
@@ -235,9 +239,11 @@ Full results: [`docs/RESULTS_RTX5090.md`](docs/RESULTS_RTX5090.md)
 
 ### Known Issues & Honest Notes
 
+- **MoE `M=1` Decode Headroom**: Mixtral-8x7B decode (`41.83 tok/s`) uses the per-expert gather path; the persistent grouped-GEMM kernel (`42.13 TFLOPS` at `M=256`) is tuned for `M >= 64`, making `M=1` fused expert dispatch the next optimization target.
 - **NVFP4 (`88.56 TFLOPS`) < INT4 (`132.58 TFLOPS`)**: The `e2m1` register-LUT dequant path — not the MMA — is currently the bottleneck; expected to close once `cuda.tile` exposes native `tcgen05` FP4 MMA.
 - **Speculative Decoding Denominators**: `117.31 tok/s` is **1.71×** over the v0.2.0 speculative baseline (`68.74 tok/s`) and **1.21×** over v0.3.0 CUDA-graph non-speculative decode (`96.57 tok/s`).
 - **NVML Telemetry in Container**: On the Linux RTX 5090 box, NVML temperature/power sensors returned `0.0 °C / 0.0 W` in the container; sustained throughput drift over 30 minutes (`361` samples, `179,264` tokens) was `0.25%` (`100.06` → `99.81 tok/s`).
+- **Large-Model Storage Location**: Downloaded 47B/70B checkpoints in `/var/tmp/arrhat_models` are ephemeral (subject to `systemd-tmpfiles` cleanup); use persistent storage (e.g. `/mnt/shared_storage` when writable) via `STORAGE_ROOT` or `--mixtral` / `--llama70b` flags.
 - **Laptop Baseline Scope**: RTX 4060 Laptop (`v0.1.0`) numbers (`32.43 tok/s`) are the pre-CUDA-graph eager baseline on Lenovo LOQ 15APH8.
 
 ---
@@ -271,8 +277,9 @@ python models/download.py --output ~/models/mistral_7b_4bit/
 # 3. Run all 87 unit + GPU correctness tests (0 skipped)
 python -m pytest tests/ benchmarks/correctness/ -v
 
-# 4. Serve OpenAI-compatible API or run CLI generation
+# 4. Serve OpenAI-compatible API or compile any PyTorch module
 cutile-forge serve --model ~/models/mistral_7b_4bit --port 8000 --target sm_120
+python -c 'import torch, cutile_forge; compiled = torch.compile(torch.nn.Linear(64, 64), backend="cutile_forge")'
 curl -N http://127.0.0.1:8000/v1/chat/completions \
   -H 'Content-Type: application/json' \
   -d '{"model":"mistral_7b_4bit","messages":[{"role":"user","content":"Count from 1 to 5"}],"max_tokens":32,"stream":true}'
@@ -308,7 +315,7 @@ cutile-forge/
 
 ## Testing & CI
 
-- **Local Verification**: **87 / 87 tests passing (0 skipped)** (`60` unit tests in `tests/` + `27` GPU correctness tests in `benchmarks/correctness/`, including real `Mistral-7B` 4-bit token-exact greedy decode vs PyTorch and WikiText-2 perplexity).
+- **Local Verification**: **102 / 102 tests passing (0 skipped)** (`75` unit tests in `tests/` + `27` GPU correctness tests in `benchmarks/correctness/`, including real `Mistral-7B` 4-bit token-exact greedy decode vs PyTorch and WikiText-2 perplexity).
 - **Lint & Static Analysis**: `ruff`, `black --check`, and `mypy` pass with `0` errors.
 - **GitHub Actions**: [ci.yml](.github/workflows/ci.yml) runs `lint` and `unit-tests` (`60` tests) on `ubuntu-latest` for every push/PR; GPU-dependent correctness, full benchmarks, nightly thermal, and tagged wheel/PyPI releases live in dedicated workflows.
 
