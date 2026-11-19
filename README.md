@@ -2,14 +2,15 @@
 
 ### *Tile-Fusion Graph Compiler, Hybrid PCIe-Streaming Runtime & `torch.compile` Backend on NVIDIA CuTile (`sm_89` Ada & `sm_120` Blackwell)*
 
-**Author:** [Arrhat Nag](https://github.com/samudragupto) (`@samudragupto`)
-
 [![CI](https://github.com/samudragupto/cutile-forge/actions/workflows/ci.yml/badge.svg)](https://github.com/samudragupto/cutile-forge/actions/workflows/ci.yml)
-[![Docker GHCR](https://img.shields.io/badge/GHCR-v1.0.0--cu132-0ea5e9?logo=docker&logoColor=white)](https://github.com/samudragupto/cutile-forge/pkgs/container/cutile-forge)
 [![Release](https://img.shields.io/github/v/release/samudragupto/cutile-forge?color=1b365d)](https://github.com/samudragupto/cutile-forge/releases/tag/v1.0.0)
-[![Tests](https://img.shields.io/badge/tests-102%2F102%20passed%20%7C%200%20skipped-16a34a)](tests/)
-[![CUDA Targets](https://img.shields.io/badge/CUDA-sm__89%20Ada%20%7C%20sm__120%20Blackwell-76B900)](https://developer.nvidia.com/cuda-toolkit)
 [![License: MIT](https://img.shields.io/badge/License-MIT-6c757d.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](pyproject.toml)
+[![CUDA Targets](https://img.shields.io/badge/CUDA-sm__89%20%7C%20sm__120-76B900)](https://developer.nvidia.com/cuda-toolkit)
+[![GHCR](https://img.shields.io/badge/ghcr-cutile--forge-blue)](https://github.com/samudragupto/cutile-forge/pkgs/container/cutile-forge)
+[![Tests](https://img.shields.io/badge/tests-102%2F102%20passed%20%7C%200%20skipped-16a34a)](tests/)
+
+**Author:** [Arrhat Nag](https://github.com/samudragupto) (`@samudragupto`)
 
 <p align="center">
   <a href="#abstract">Abstract</a> ·
@@ -291,12 +292,15 @@ Evaluated real trained 4-bit GPTQ checkpoints (`TheBloke/Mistral-7B-v0.1-GPTQ`, 
 ```sh
 # Option A: Pull prebuilt CUDA 13.2 container from GitHub Container Registry
 docker pull ghcr.io/samudragupto/cutile-forge:v1.0.0-cu132
+docker run --rm --gpus all ghcr.io/samudragupto/cutile-forge:v1.0.0-cu132 \
+    cutile-forge --help
 
 # Option B: Editable source install (dash/bash compatible)
 git clone https://github.com/samudragupto/cutile-forge.git
 cd cutile-forge
+python3 -m venv .venv
 . .venv/bin/activate
-export CUTILE_ARCH=sm_120   # or sm_89 for Ada Lovelace (RTX 4060)
+export CUTILE_ARCH=sm_120   # or sm_89 for Ada (RTX 4060)
 pip install -e ".[cuda,dev,serve]" --no-build-isolation
 ```
 
