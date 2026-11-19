@@ -1,7 +1,7 @@
 # CuTileForge
 
 [![CI](https://github.com/samudragupto/cutile-forge/actions/workflows/ci.yml/badge.svg)](https://github.com/samudragupto/cutile-forge/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/samudragupto/cutile-forge?color=2563eb)](https://github.com/samudragupto/cutile-forge/releases/tag/v0.5.0)
+[![Release](https://img.shields.io/github/v/release/samudragupto/cutile-forge?color=2563eb)](https://github.com/samudragupto/cutile-forge/releases/tag/v1.0.0)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776ab.svg)](https://www.python.org/downloads/)
 [![CUDA sm_89 | sm_120](https://img.shields.io/badge/CUDA-sm__89%20%7C%20sm__120%20%7C%20CuTile%201.8-76B900.svg)](https://developer.nvidia.com/cuda-toolkit)
@@ -159,16 +159,19 @@ PS C:\Users\user\Desktop\cutile-forge> python -m pytest tests/ benchmarks/correc
 
 ---
 
-### Release Progression (`v0.1.0` → `v0.5.0`)
+### Release Progression (`v0.1.0` → `v1.0.0`)
 
-| Metric / Capability | `v0.1.0` (4060 `sm_89`) | `v0.2.0` (5090 `sm_120`) | `v0.3.0` (Hardening) | `v0.4.0` (Precision & MoE) | `v0.5.0` (Serving & Packaging) |
-|---|---|---|---|---|---|
-| **Decode (`Mistral-7B` 4-bit)** | `32.43 tok/s` | `49.82 tok/s` | **`96.57 tok/s`** (CUDA Graph) | `96.57 tok/s` | **`99.73 tok/s`** 30-min sustained |
-| **Speculative (`gamma=4`)** | — | `68.74 tok/s` | **`117.31 tok/s`** (`1.21×` vs graph) | `117.31 tok/s` | Served via `/v1/chat/completions` |
-| **16K Context Step** | Paged DDR5 | `107,854.66 ms` | **`76.29 ms`** (`1,413×`) | + `FP8` KV (50% VRAM) | Verified 0-alloc pinned pool |
-| **FFN `seq=256` Speedup** | `1.46×` | `0.86×` (reg.) | **`1.55×`** (`64×64×32` occ.) | `1.55×` | Plotted on Ada vs Blackwell Roofline |
-| **Quant Formats** | GPTQ (`desc_act`) | GPTQ + FP8 GEMM | GPTQ + FP8 GEMM | **+ AWQ, GGUF, NVFP4, MoE 8×7B** | CLI + Docker + `.whl` (`85 KB`) |
-| **Test Gate** | `76/76` (4060) | `49` CI + GPU | `53` CI + GPU | `57` CI + GPU | **`87/87`** (`60` CI + `27` GPU, 0 skipped) |
+| Release | Focus | Key Verified Result (RTX 5090 `sm_120` / 4060 `sm_89`) |
+|---|---|---|
+| **v0.1.0** | TFG Compiler + 8 GB Laptop | `32.43 tok/s` Mistral-7B 4-bit in `4.30 GB` VRAM (`5.47×` 8→3 layer fusion) |
+| **v0.2.0** | Blackwell `sm_120` Port | `49.82 tok/s` decode, `136.14 TFLOPS` GEMM, `49.09 GB/s` PCIe 5.0 |
+| **v0.3.0** | Systems Hardening | `96.57 tok/s` CUDA-Graph decode, `117.31 tok/s` N-gram spec, `16K` ctx `107,854 ms → 76.29 ms`, `seq=256` FFN `0.86× → 1.55×` |
+| **v0.4.0** | Precision, MoE & Quant | `FP8` KV-cache (`50%` VRAM), `NVFP4` (`88.56 TF`), Fused MoE 8×7B, AWQ + GGUF loaders |
+| **v0.5.0** | Serving, Roofline & Wheel | OpenAI FastAPI server + SSE (`33` chunks), Ada vs Blackwell Roofline, `99.73 tok/s` 30-min sustained (`0.25%` drift) |
+| **v0.6.0** | Dynamic Batching & Radix | `DynamicBatcher` 4-way concurrent p99 **`113.6 ms`** (down from `363.1 ms` — **3.20×**), `RadixPrefixCache` |
+| **v0.7.0** | Grouped MoE & FlashDecoding | Persistent Grouped MoE **`42.13 TFLOPS`** (`M=256`, **68×** vs v0.4.0), Split-KV FlashDecoding `16K` **`59.20 ms`** |
+| **v0.8.0** | 70B Hybrid 32 GB Engine | `LLAMA3_70B_4BIT` (`57` HBM + `23` PCIe 5.0): **`4.66 tok/s`**, **`27.43 GB`** VRAM (zero OOM), **`99.5%`** overlap |
+| **v1.0.0** | `torch.compile` FX Backend | `@torch.compile(backend="cutile_forge")` lowers `FFN`, `LN+Res`, and `SDPA` to fused CuTile kernels (`101/101` tests) |
 
 ---
 

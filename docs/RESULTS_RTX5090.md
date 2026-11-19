@@ -313,5 +313,18 @@
 
 ---
 
+## v0.6.0 → v1.0.0 Benchmarks (RTX 5090, `sm_120`)
+
+| Release | Capability / Benchmark | Measured Result on RTX 5090 |
+|---|---|---|
+| **v0.6.0** | `DynamicBatcher` (`max_batch_size=16`, `batch_wait_ms=8.0`, 4 concurrent requests) | p99 latency **`113.6 ms`** (down from `363.1 ms` in v0.5.0 — **3.20×** reduction) |
+| **v0.6.0** | `RadixPrefixCache` shared prompt prefix reuse | Zero-recompute prefill on exact/partial hits (`prefix_cache_hit_rate` tracked) |
+| **v0.7.0** | Persistent Grouped MoE (`moe_grouped_gemm_int4_kernel`, 8 experts, `top_k=2`) | `M=64`: **`19.73 TFLOPS`** (`0.218 ms`, 4.0× vs v0.4.0); `M=256`: **`42.13 TFLOPS`** (`0.408 ms`, 68.4× vs v0.4.0) |
+| **v0.7.0** | FlashDecoding Split-KV (`num_splits=16`, `seq_q<=4, seq_kv>=2048`) | `8K`: **`21.46 ms`** (was `33.00 ms`); `16K`: **`59.20 ms`** (was `76.29 ms`) |
+| **v0.8.0** | `LLAMA3_70B_4BIT` Hybrid HBM + Stage -1 PCIe 5.0 (`57` HBM + `23` PCIe layers) | **`4.66 tok/s`** (`214.4 ms/tok`), Peak VRAM **`27.43 GB`** (`< 30.5 GB`, zero OOM), **`99.5%`** PCIe overlap (`benchmarks/results_5090/hybrid_70b.csv`) |
+| **v1.0.0** | `torch.compile(backend="cutile_forge")` FX/Dynamo lowering | Fuses `linear+silu+linear`, `add+layer_norm`, and `scaled_dot_product_attention` into CuTile kernels (`atol < 1e-2`) |
+
+---
+
 *Full CSV data: `benchmarks/results_5090/`*
 *Methodology: `docs/BENCHMARK_METHODOLOGY.md`*
