@@ -1,9 +1,16 @@
-# CuTileForge — RTX 5090 Benchmark Results (v0.2.0)
+# CuTileForge — RTX 5090 Benchmark Results (v1.0.0)
 
-**Hardware:** Desktop Workstation · NVIDIA GeForce RTX 5090 (GB202, sm_120, 170 SMs, 32 GB GDDR7, ~1,792 GB/s) · Intel Core Ultra 9 285K (24C/24T) · 62 GB DDR5 · PCIe 5.0 x16
-**Model:** TheBloke/Mistral-7B-v0.1-GPTQ (4-bit, desc_act=True, 4.16 GB)
-**Date:** November 2025
-**CUDA:** 13.2 (driver 595.58.03) · PyTorch 2.15+cu132 · cuda-tile 1.8.1
+**Hardware:** Desktop Workstation · NVIDIA GeForce RTX 5090 (GB202, sm_120, 170 SMs, 32 GB GDDR7, ~1,792 GB/s) · Intel Core Ultra 9 285K (24C/24T) · 62 GB DDR5 · PCIe 5.0 x16  
+**Models:** `Mistral-7B-v0.1-GPTQ` (4.16 GB) · `Mixtral-8x7B-Instruct-v0.1-GPTQ` (23.8 GB) · `Llama-2-70B-Chat-GPTQ` (35.3 GB)  
+**CUDA:** 13.2 (driver 595.58.03) · PyTorch 2.15+cu132 · `cuda-tile` 1.8.1
+
+---
+
+## Publication Figures (300 DPI — `scripts/generate_publication_figures.py`)
+
+![Figure 1: Executive Overview](images_5090/fig1_executive_overview.png)
+![Figure 3: Micro-Benchmark Suite](images_5090/fig3_microbenchmark_suite.png)
+![Figure 4: Systems Telemetry](images_5090/fig4_systems_telemetry.png)
 
 ---
 
