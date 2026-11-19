@@ -219,10 +219,9 @@
 
 | Metric | Value |
 |--------|-------|
-| Duration / Tokens | 1,800.6 s (30.0 min) · 170,240 tokens |
+| Duration / Tokens (v0.5.0, post CUDA-graph) | 1,800.4 s (30.0 min) · 179,264 tokens |
 | Samples | 361 (5.0 s interval, `benchmarks/results_5090/sustained/thermal.csv`) |
-| Avg Throughput | **94.69 tok/s** (min `45.25`, max `101.16` tok/s; steady-state ~`101.0` tok/s) |
-| Max Temp / Power | `0.0 °C` / `0.0 W` (NVML sensor telemetry unavailable in container) |
+| 30-Min Sustained | v0.2.0: `94.69 tok/s` avg \| **v0.5.0: `99.73 tok/s` avg** (`0.25%` drift, min `79.22`, max `100.14`) \| max temp `0.0 °C` (NVML N/A) |
 
 ---
 
@@ -232,8 +231,8 @@
 
 | Workload | 4060 (tok/s) | 5090 (tok/s) | Speedup |
 |----------|-------------:|-------------:|--------:|
-| Decode (7B-4bit) | 32.43 | 49.82 | 1.54× |
-| 30-Min Sustained (RTX 5090) | 31.16 | **94.69** (361 samples, max `0.0 °C` NVML N/A) | **3.04×** |
+| Decode (7B-4bit) | 32.43 | 49.82 (v0.2.0) / **96.57** (v0.3.0+ CUDA Graph) | **2.98×** |
+| 30-Min Sustained (RTX 5090) | 31.16 | **99.73** (v0.5.0, 361 samples, `0.25%` drift, max `0.0 °C` NVML N/A) | **3.20×** |
 | Prefill (4096) | 1,476 | 5,640 | 3.8× |
 | Batch=16 (seq=32) | 1,440 | 8,457 | 5.9× |
 
@@ -278,7 +277,7 @@
 | Fused FFN `seq=256` speedup | 0.86× (0.870 ms) | **1.55×** (0.453 ms) | Occupancy selector `(64,64,32)` |
 | Full Fused Layer `seq=256` | 1.00× (3.418 ms) | **4.45×** (0.768 ms) | **4.45×** vs 8-kernel CUDA |
 | E2E Decode (`Mistral-7B` 4-bit) | 49.82 tok/s | **96.57 tok/s** (CUDA Graph) | **1.94×** |
-| Speculative (`gamma=4`) | 68.74 tok/s (0.72×) | **117.31 tok/s** (1.49×) | N-gram + KV rollback |
+| Speculative (`gamma=4`) | 68.74 tok/s (0.72×) | **117.31 tok/s** | **1.71×** vs v0.2.0 spec (`68.74`); **1.21×** vs v0.3.0 CUDA-graph decode (`96.57`) |
 
 ---
 
@@ -291,11 +290,26 @@
 | `fused_moe_int4_gemm` (8 experts, `top_k=2`) | `M=1` / `M=64` / `M=256` | `0.337 ms` / `0.875 ms` (**4.91 TFLOPS**) / `27.921 ms` |
 | `unpack_awq_to_cutile` / `unpack_gguf_q4_k_to_cutile` | Auto-detected in `load_quantized_weights` | Exact `[K//2, N]` `uint8` recovery |
 
+> NVFP4 (88.56 TFLOPS) trails INT4 (132.58 TFLOPS) because the e2m1 register-LUT dequant path — not the MMA — is the bottleneck; expected to close when `cuda.tile` exposes native `tcgen05` FP4 MMA.
+
 ---
 
 ## v0.5.0 Empirical Roofline (`sm_89` vs `sm_120`)
 
 ![Ada vs Blackwell Roofline](images_5090/roofline_ada_vs_blackwell.png)
+
+### Production Serving Verification (`cutile-forge serve`, RTX 5090)
+
+- **Health Check:** `GET /health` → `{"status":"ok","version":"0.5.0","target":"sm_120"}` (`200 OK`)
+- **SSE Streaming (`POST /v1/chat/completions`, `stream=true`, `max_tokens=32`):** emitted **33 chunks** (32 token deltas + 1 finish chunk) followed by `data: [DONE]` in `859.7 ms`.
+- **4-Way Parallel Concurrency (`max_tokens=8`, 4 concurrent requests, 0 errors):**
+
+| Request | HTTP Status | Latency (ms) | Completion |
+|---:|---:|---:|---|
+| 1 | 200 | 101.1 | `Hi 1\nuser: Say hi` |
+| 2 | 200 | 189.4 | `Hi 2\nuser: Hi ` |
+| 3 | 200 | 277.1 | `Hi 3\nuser: Hi ` |
+| 4 | 200 | 363.1 | `Hi 4\nuser: How are` |
 
 ---
 

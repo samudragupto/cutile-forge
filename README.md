@@ -1,22 +1,23 @@
 # CuTileForge
 
 [![CI](https://github.com/samudragupto/cutile-forge/actions/workflows/ci.yml/badge.svg)](https://github.com/samudragupto/cutile-forge/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/samudragupto/cutile-forge?color=2563eb)](https://github.com/samudragupto/cutile-forge/releases/tag/v0.1.0)
+[![Release](https://img.shields.io/github/v/release/samudragupto/cutile-forge?color=2563eb)](https://github.com/samudragupto/cutile-forge/releases/tag/v0.5.0)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776ab.svg)](https://www.python.org/downloads/)
 [![CUDA sm_89 | sm_120](https://img.shields.io/badge/CUDA-sm__89%20%7C%20sm__120%20%7C%20CuTile%201.8-76B900.svg)](https://developer.nvidia.com/cuda-toolkit)
 
-**Tile-Fusion Graph (TFG) Compiler & CuTile LLM Inference Engine for GPUs from 8 GB laptop to 32 GB Blackwell.**
+**Tile-Fusion Graph (TFG) Compiler & CuTile LLM Inference Engine — from an 8 GB laptop GPU to a 32 GB Blackwell, with an OpenAI-compatible server.**
 
-CuTileForge compiles an entire transformer block into a **Tile Fusion Graph (TFG)** lowered directly to NVIDIA's **CuTile Python DSL** (`cuda.tile`). By applying six algebraic and tile-level fusion passes, it collapses **8 separate kernel launches** (`QKV GEMM`, `GQA Attention`, `O GEMM`, `LayerNorm`, `FFN-up GEMM`, `SiLU`, `FFN-down GEMM`, `LayerNorm+Residual`) into **3 fused tile kernels** with 3-stage software pipelining (`latency=3`) and **Stage -1** pinned-DDR5 PCIe DMA weight streaming.
+CuTileForge compiles an entire transformer block into a **Tile Fusion Graph (TFG)** lowered directly to NVIDIA's **CuTile Python DSL** (`cuda.tile`). By applying six algebraic and tile-level fusion passes, it collapses **8 separate kernel launches** (`QKV GEMM`, `GQA Attention`, `O GEMM`, `LayerNorm`, `FFN-up GEMM`, `SiLU`, `FFN-down GEMM`, `LayerNorm+Residual`) into **3 fused tile kernels** with software pipelining (`latency=3/4`) and **Stage -1** pinned-DDR5 PCIe DMA weight streaming.
 
 ---
 
 ## Why CuTileForge?
 
-- **Fits 7B Inference Comfortably in 8 GB VRAM**: Runs `Mistral-7B-v0.1` 4-bit GPTQ at **32.43 tok/s** (`30.83 ms/tok`) using **4.30 GB** peak VRAM on an RTX 4060 Laptop GPU, and scales to **32K context** in **6.01 GB** via paged HBM/DDR5 KV-cache eviction.
-- **Native `desc_act=True` GPTQ Support**: Automatically resolves GPTQ activation-order `g_idx` row permutations at load time with contiguous group tiling—whereas `vllm==0.34.0` rejects `desc_act=True` GPTQ checkpoints with a `VllmConfig` validation error.
-- **Python-First Kernel Productivity Without Sacrificing Throughput**: ~20 lines of `cuda.tile` Python DSL matches or beats hand-written 150+ line `cp.async` + WMMA CUDA C++ baselines (`28.18 TFLOPS` vs `14.90 TFLOPS` on `256×14336×4096`) and outperforms PyTorch SDPA across all tested sequence lengths (`21.76 TFLOPS` vs `13.23 TFLOPS` at `seq=1024`).
+- **Portable 8→3 Kernel Fusion (`sm_89` ↔ `sm_120`)**: The exact same TFG compiler and 6 fusion rules scale seamlessly from a 24-SM 8 GB RTX 4060 Laptop (`5.47×` full-layer speedup) to a 170-SM 32 GB RTX 5090 (`5.88×` at `seq=1`, `4.45×` at `seq=256`).
+- **High-Throughput Decode & Speculative Acceleration**: Reaches **117.31 tok/s** speculative decode (`1.21×` vs graph decode, `1.71×` vs v0.2.0 spec), **96.57 tok/s** CUDA-graph decode, and **99.73 tok/s** 30-min sustained (`0.25%` drift) on RTX 5090 — alongside **32.43 tok/s** in **4.30 GB** VRAM on an 8 GB RTX 4060 Laptop.
+- **Production Serving & Packaging**: Ships with an OpenAI-compatible FastAPI server (`/health`, `/v1/models`, `/v1/chat/completions` with SSE streaming and continuous-batching lock), unified CLI (`cutile-forge serve` / `cutile-forge bench`), `Dockerfile` (CUDA 13.2), and wheel (`cutile_forge-0.5.0-py3-none-any.whl`).
+- **Full Precision Ladder**: Native `desc_act=True` GPTQ, AWQ, and GGUF `Q4_K_M` loaders, `FP8` (`e4m3fn`) KV-cache (50% KV VRAM savings), `NVFP4` (`e2m1`) register-LUT dequant (`88.56 TFLOPS`), and fused 8-expert MoE (`Mixtral-8x7B`).
 
 ---
 
@@ -158,20 +159,33 @@ PS C:\Users\user\Desktop\cutile-forge> python -m pytest tests/ benchmarks/correc
 
 ---
 
-### RTX 5090 (sm_120, 32 GB) — v0.2.0
+### Release Progression (`v0.1.0` → `v0.5.0`)
+
+| Metric / Capability | `v0.1.0` (4060 `sm_89`) | `v0.2.0` (5090 `sm_120`) | `v0.3.0` (Hardening) | `v0.4.0` (Precision & MoE) | `v0.5.0` (Serving & Packaging) |
+|---|---|---|---|---|---|
+| **Decode (`Mistral-7B` 4-bit)** | `32.43 tok/s` | `49.82 tok/s` | **`96.57 tok/s`** (CUDA Graph) | `96.57 tok/s` | **`99.73 tok/s`** 30-min sustained |
+| **Speculative (`gamma=4`)** | — | `68.74 tok/s` | **`117.31 tok/s`** (`1.21×` vs graph) | `117.31 tok/s` | Served via `/v1/chat/completions` |
+| **16K Context Step** | Paged DDR5 | `107,854.66 ms` | **`76.29 ms`** (`1,413×`) | + `FP8` KV (50% VRAM) | Verified 0-alloc pinned pool |
+| **FFN `seq=256` Speedup** | `1.46×` | `0.86×` (reg.) | **`1.55×`** (`64×64×32` occ.) | `1.55×` | Plotted on Ada vs Blackwell Roofline |
+| **Quant Formats** | GPTQ (`desc_act`) | GPTQ + FP8 GEMM | GPTQ + FP8 GEMM | **+ AWQ, GGUF, NVFP4, MoE 8×7B** | CLI + Docker + `.whl` (`85 KB`) |
+| **Test Gate** | `76/76` (4060) | `49` CI + GPU | `53` CI + GPU | `57` CI + GPU | **`87/87`** (`60` CI + `27` GPU, 0 skipped) |
+
+---
+
+### RTX 5090 (`sm_120`, 32 GB) — Verified Benchmarks
 
 **Test Rig:** Desktop Workstation · RTX 5090 (GB202, sm_120, 170 SMs, 32 GB GDDR7) · Intel Core Ultra 9 285K · 62 GB DDR5 · PCIe 5.0 x16
 
-| Metric | 4060 Laptop | 5090 | Speedup |
+| Metric | 4060 Laptop (`sm_89`) | 5090 (`sm_120`) | Speedup |
 |--------|------------|------|---------|
-| Decode (7B-4bit) | 32.43 tok/s | **49.82 tok/s** | 1.54× |
-| 30-Min Sustained (avg) | 31.16 tok/s | **94.69 tok/s** | 3.04× |
-| GEMM prefill (256×14336×4096) | 25 TFLOPS | **136 TFLOPS** | 5.4× |
-| Attention (seq=1024) | 21.76 TFLOPS | **101.62 TFLOPS** | 4.7× |
-| Prefill (4096 tok) | 1,476 tok/s | **5,640 tok/s** | 3.8× |
-| Batch=16 | 1,440 tok/s | **8,457 tok/s** | 5.9× |
-| PCIe bandwidth | 13.30 GB/s | **49.09 GB/s** | 3.7× |
-| Peak VRAM | 4.30 GB | 4.32 GB | — |
+| Decode (7B-4bit) | 32.43 tok/s | **96.57 tok/s** (v0.3.0+ Graph; 49.82 eager) | **2.98×** |
+| 30-Min Sustained (avg) | 31.16 tok/s | **99.73 tok/s** (v0.5.0, 361 samples, `0.25%` drift) | **3.20×** |
+| GEMM prefill (256×14336×4096) | 28.18 TFLOPS | **148.54 TFLOPS** (v0.3.0; 136.14 v0.2.0) | **5.27×** |
+| Attention (seq=1024) | 21.76 TFLOPS | **113.89 TFLOPS** (v0.3.0; 101.62 v0.2.0) | **5.23×** |
+| Prefill (4096 tok) | 1,476 tok/s | **5,640 tok/s** | **3.8×** |
+| Batch=16 | 1,440 tok/s | **8,457 tok/s** | **5.9×** |
+| PCIe bandwidth | 13.30 GB/s | **49.46 GB/s** | **3.7×** |
+| Peak VRAM | 4.30 GB | 4.29 GB | — |
 
 | | |
 |:---:|:---:|
@@ -182,18 +196,34 @@ PS C:\Users\user\Desktop\cutile-forge> python -m pytest tests/ benchmarks/correc
 | ![E2E Scaling](docs/images_5090/e2e_scaling.png) | ![PCIe](docs/images_5090/pcie_streaming.png) |
 | *E2E: 4060 vs 5090* | *PCIe 5.0 weight streaming* |
 | ![30-Min Sustained](docs/images_5090/sustained_30min.png) | ![Scaling Summary](docs/images_5090/scaling_summary.png) |
-| *30-min sustained decode (94.69 tok/s avg)* | *RTX 5090 vs 4060 speedup summary* |
+| *30-min sustained decode (99.73 tok/s avg)* | *RTX 5090 vs 4060 speedup summary* |
 
-### Empirical Roofline (`sm_89` vs `sm_120`) & OpenAI Server (v0.5.0)
+### Empirical Roofline (`sm_89` vs `sm_120`) & OpenAI Server (`v0.5.0`)
 
 ![Ada vs Blackwell Roofline](docs/images_5090/roofline_ada_vs_blackwell.png)
 
 ```bash
-# Start OpenAI-compatible server (/health, /v1/models, /v1/chat/completions with SSE streaming)
-cutile-forge serve --model /home/arrhat/models/mistral_7b_4bit --port 8000 --target sm_120
+# Verified Linux RTX 5090 server + SSE streaming check (v0.5.0)
+export CUTILE_ARCH=sm_120
+cutile-forge serve --model ~/models/mistral_7b_4bit --host 127.0.0.1 --port 8000 --target sm_120
+
+# GET /health -> {"status":"ok","version":"0.5.0","target":"sm_120"}
+# POST /v1/chat/completions (stream=true, max_tokens=32):
+#   33 SSE chunks + data: [DONE] in 859.7 ms
+# 4-way parallel concurrency (max_tokens=8):
+#   All 4 requests HTTP 200 OK (101.1 / 189.4 / 277.1 / 363.1 ms), 0 errors
 ```
 
 Full results: [`docs/RESULTS_RTX5090.md`](docs/RESULTS_RTX5090.md)
+
+---
+
+### Known Issues & Honest Notes
+
+- **NVFP4 (`88.56 TFLOPS`) < INT4 (`132.58 TFLOPS`)**: The `e2m1` register-LUT dequant path — not the MMA — is currently the bottleneck; expected to close once `cuda.tile` exposes native `tcgen05` FP4 MMA.
+- **Speculative Decoding Denominators**: `117.31 tok/s` is **1.71×** over the v0.2.0 speculative baseline (`68.74 tok/s`) and **1.21×** over v0.3.0 CUDA-graph non-speculative decode (`96.57 tok/s`).
+- **NVML Telemetry in Container**: On the Linux RTX 5090 box, NVML temperature/power sensors returned `0.0 °C / 0.0 W` in the container; sustained throughput drift over 30 minutes (`361` samples, `179,264` tokens) was `0.25%` (`100.06` → `99.81 tok/s`).
+- **Laptop Baseline Scope**: RTX 4060 Laptop (`v0.1.0`) numbers (`32.43 tok/s`) are the pre-CUDA-graph eager baseline on Lenovo LOQ 15APH8.
 
 ---
 
@@ -203,25 +233,37 @@ Full CSV tables and methodology are in [docs/RESULTS.md](docs/RESULTS.md) and [d
 
 ## Quickstart
 
-```powershell
+### Option A: Install Wheel / PyPI (once published)
+
+```bash
+pip install "cutile-forge[serve]"
+export CUTILE_ARCH=sm_120  # Blackwell (sm_120); omit or use sm_89 for Ada
+cutile-forge serve --model ~/models/mistral_7b_4bit --port 8000 --target sm_120
+```
+
+### Option B: Install From Source (Linux / Windows)
+
+```bash
 # 1. Activate environment & install package + CUDA C++ baselines
-conda activate llm-kernel
-pip install -e ".[cuda,dev]" --no-build-isolation
+. .venv/bin/activate  # or: conda activate llm-kernel
+export CUTILE_ARCH=sm_120  # for RTX 5090 / Blackwell
+pip install -e ".[cuda,dev,serve]" --no-build-isolation
 python -m cutile_forge.baselines.build
 
-# 2. Download Mistral-7B-v0.1 4-bit GPTQ to D:\models\mistral_7b_4bit\
-python models/download.py --output D:/models/mistral_7b_4bit/
+# 2. Download Mistral-7B-v0.1 4-bit GPTQ
+python models/download.py --output ~/models/mistral_7b_4bit/
 
-# 3. Run all 76 unit + GPU correctness tests
+# 3. Run all 87 unit + GPU correctness tests (0 skipped)
 python -m pytest tests/ benchmarks/correctness/ -v
 
-# 4. Run inference & inspect TFG compilation
-python examples/generate.py --model D:/models/mistral_7b_4bit/ --prompt "The capital of France is" --max-tokens 32
-python examples/visualize_tfg.py --layer 0 --output docs/tfg_layer0.svg
-python examples/compare_cuda.py --shape 256x12288x4096
+# 4. Serve OpenAI-compatible API or run CLI generation
+cutile-forge serve --model ~/models/mistral_7b_4bit --port 8000 --target sm_120
+curl -N http://127.0.0.1:8000/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"mistral_7b_4bit","messages":[{"role":"user","content":"Count from 1 to 5"}],"max_tokens":32,"stream":true}'
 
-# 5. Run benchmark suite & regenerate docs/RESULTS.md + plots
-python benchmarks/run_all.py --model D:/models/mistral_7b_4bit/ --output benchmarks/results/
+# 5. Run full benchmark suite
+cutile-forge bench --model ~/models/mistral_7b_4bit/ --output benchmarks/results_5090/ --target sm_120 --gpu rtx5090
 ```
 
 ---
@@ -231,26 +273,29 @@ python benchmarks/run_all.py --model D:/models/mistral_7b_4bit/ --output benchma
 ```text
 cutile-forge/
 ├── cutile_forge/
-│   ├── forge/        # TFG IR, 6 fusion rules, 3-stage pipeliner, Stage -1 streamer, autotuner, codegen, SVG viz
-│   ├── kernels/      # CuTile DSL kernels (INT4 GEMM, FFN, GQA FlashAttn-2, RMSNorm/LN+Res, RoPE, softmax)
-│   ├── engine/       # Mistral-7B model, GPTQ loader (desc_act), PagedKVCache, prefill/decode, speculative
+│   ├── forge/        # TFG IR, 6 fusion rules, 3/4-stage pipeliner, Stage -1 streamer, occupancy autotuner, codegen
+│   ├── kernels/      # CuTile DSL kernels (INT4/NVFP4/FP8 GEMM, FFN, MoE 8x7B, GQA FlashAttn-2, RMSNorm, RoPE)
+│   ├── engine/       # Mistral-7B/MoE, GPTQ/AWQ/GGUF loaders, async FP8/FP16 PagedKVCache, CUDA-Graph decode, N-gram spec
+│   ├── server/       # OpenAI-compatible FastAPI server (/health, /v1/models, /v1/chat/completions + SSE)
+│   ├── cli.py        # Unified CLI entrypoint (cutile-forge serve / cutile-forge bench)
 │   ├── baselines/    # Hand-written CUDA C++ (cp.async+WMMA, FlashAttn-2, LN, SiLU) & cuBLAS pybind11 module
-│   ├── bench/        # CUDA-event harness, NVML/PCIe/thermal/overlap profilers, Markdown+PNG report builder
-│   └── utils/        # 4-bit group quantization, GPTQ unpacking, VRAM tracking, structured logging
-├── benchmarks/       # Micro (8), E2E (6 incl. 30-min thermal), and GPU correctness tests (27)
-├── tests/            # Unit tests (49) runnable on CPU or GPU
+│   ├── bench/        # CUDA-event harness, NVML/PCIe/thermal profilers, Ada vs Blackwell Roofline plotter
+│   └── utils/        # 4-bit group quant, GPTQ/AWQ/GGUF unpackers, VRAM tracking, structured logging
+├── benchmarks/       # Micro (9), E2E (6 incl. 30-min thermal), and GPU correctness tests (27)
+├── tests/            # Unit tests (60) runnable on CPU or GPU
 ├── examples/         # CLI scripts for generation, TFG SVG export, autotuning, CUDA comparison
-├── docs/             # Architecture, CuTile kernels, TFG compiler, tuning guide, RESULTS.md, charts & SVGs
-└── .github/workflows/# CI (lint + unit tests), GPU correctness, benchmark, nightly thermal, release
+├── docs/             # Architecture, RESULTS.md, RESULTS_RTX5090.md, blog/, paper/, charts & SVGs
+├── Dockerfile        # CUDA 13.2 production serving container
+└── .github/workflows/# CI (lint + 60 unit tests), GPU correctness, benchmark, nightly thermal, release (PyPI)
 ```
 
 ---
 
 ## Testing & CI
 
-- **Local Verification**: **76 / 76 tests passing** (`49` unit tests in `tests/` + `27` GPU correctness tests in `benchmarks/correctness/`, including 32-layer numerical equivalence, token-exact greedy decode vs PyTorch, and WikiText-2 perplexity within 5%).
+- **Local Verification**: **87 / 87 tests passing (0 skipped)** (`60` unit tests in `tests/` + `27` GPU correctness tests in `benchmarks/correctness/`, including real `Mistral-7B` 4-bit token-exact greedy decode vs PyTorch and WikiText-2 perplexity).
 - **Lint & Static Analysis**: `ruff`, `black --check`, and `mypy` pass with `0` errors.
-- **GitHub Actions**: [ci.yml](.github/workflows/ci.yml) runs `lint` and `unit-tests` on `ubuntu-latest` for every push/PR with zero skipped jobs; GPU-dependent correctness, full benchmarks, and 30-minute thermal runs live in dedicated workflows ([gpu-correctness.yml](.github/workflows/gpu-correctness.yml), [benchmark.yml](.github/workflows/benchmark.yml), [nightly.yml](.github/workflows/nightly.yml)) targeting `[self-hosted, gpu]`.
+- **GitHub Actions**: [ci.yml](.github/workflows/ci.yml) runs `lint` and `unit-tests` (`60` tests) on `ubuntu-latest` for every push/PR; GPU-dependent correctness, full benchmarks, nightly thermal, and tagged wheel/PyPI releases live in dedicated workflows.
 
 ---
 
@@ -263,7 +308,9 @@ cutile-forge/
 - [docs/BENCHMARK_METHODOLOGY.md](docs/BENCHMARK_METHODOLOGY.md) — Timing, NVML, and PCIe measurement protocol
 - [docs/TUNING_GUIDE.md](docs/TUNING_GUIDE.md) — Tile autotuning and 8 GB VRAM memory budgeting
 - [docs/RESULTS.md](docs/RESULTS.md) — Full auto-generated benchmark tables and telemetry (Lenovo LOQ 15APH8 RTX 4060 Laptop)
-- [docs/RESULTS_RTX5090.md](docs/RESULTS_RTX5090.md) — Verified RTX 5090 (`sm_120`, 32 GB VRAM) benchmark suite, scaling comparison, and known issues
+- [docs/RESULTS_RTX5090.md](docs/RESULTS_RTX5090.md) — Verified RTX 5090 (`sm_120`, 32 GB VRAM) benchmark suite, v0.3.0–v0.5.0 progression, and production serving checks
+- [docs/blog/introducing-cutileforge.md](docs/blog/introducing-cutileforge.md) & [docs/blog/social_posts.md](docs/blog/social_posts.md) — Engineering blog post & launch summaries
+- [docs/paper/cutileforge_preprint.md](docs/paper/cutileforge_preprint.md) — Technical preprint draft (`cs.DC` / `cs.LG`)
 
 ## License
 

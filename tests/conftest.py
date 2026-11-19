@@ -20,7 +20,12 @@ def cuda_available() -> bool:
 
 @pytest.fixture(scope="session")
 def model_dir() -> Path:
-    return Path(os.environ.get("CUTILE_MODEL_DIR", r"D:\models\mistral_7b_4bit"))
+    env_dir = os.environ.get("CUTILE_MODEL_DIR")
+    if env_dir:
+        return Path(env_dir)
+    if os.path.isdir("D:/models/mistral_7b_4bit"):
+        return Path("D:/models/mistral_7b_4bit")
+    return Path.home() / "models" / "mistral_7b_4bit"
 
 
 @pytest.fixture
