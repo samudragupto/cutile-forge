@@ -7,6 +7,7 @@ import json
 import time
 import uuid
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
 from typing import Any
 
 from fastapi import FastAPI
@@ -14,6 +15,87 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from cutile_forge import __version__
+
+
+@dataclass
+class _PendingRequest:
+    prompt_ids: Any
+    max_tokens: int
+    temperature: float
+    top_k: int
+    top_p: float
+    future: asyncio.Future[list[int]]
+
+
+class DynamicBatcher:
+    """Async micro-batching scheduler coalescing concurrent requests onto GPU."""
+
+    def __init__(
+        self,
+        engine: Any,
+        max_batch_size: int = 16,
+        batch_wait_ms: float = 8.0,
+    ) -> None:
+        self.engine = engine
+        self.max_batch_size = max(1, max_batch_size)
+        self.batch_wait_s = max(0.001, batch_wait_ms / 1000.0)
+        self._pending: list[_PendingRequest] = []
+        self._flush_task: asyncio.Task[None] | None = None
+        self._gpu_lock = asyncio.Lock()
+
+    async def submit(
+        self,
+        prompt_ids: Any,
+        max_tokens: int,
+        temperature: float,
+        top_k: int,
+        top_p: float,
+    ) -> list[int]:
+        loop = asyncio.get_running_loop()
+        fut: asyncio.Future[list[int]] = loop.create_future()
+        self._pending.append(
+            _PendingRequest(prompt_ids, max_tokens, temperature, top_k, top_p, fut)
+        )
+        if self._flush_task is None or self._flush_task.done():
+            self._flush_task = asyncio.create_task(self._flush_after_window())
+        return await fut
+
+    async def _flush_after_window(self) -> None:
+        await asyncio.sleep(self.batch_wait_s)
+        while self._pending:
+            batch = self._pending[: self.max_batch_size]
+            del self._pending[: self.max_batch_size]
+            async with self._gpu_lock:
+                try:
+                    max_toks = max(r.max_tokens for r in batch)
+                    prompts = [r.prompt_ids for r in batch]
+                    r0 = batch[0]
+                    if hasattr(self.engine, "generate_batch"):
+                        outs = self.engine.generate_batch(
+                            prompts,
+                            max_new_tokens=max_toks,
+                            temperature=r0.temperature,
+                            top_k=r0.top_k,
+                            top_p=r0.top_p,
+                        )
+                    else:
+                        outs = [
+                            self.engine.generate_ids(
+                                r.prompt_ids,
+                                max_new_tokens=r.max_tokens,
+                                temperature=r.temperature,
+                                top_k=r.top_k,
+                                top_p=r.top_p,
+                            )
+                            for r in batch
+                        ]
+                    for r, out in zip(batch, outs, strict=True):
+                        if not r.future.done():
+                            r.future.set_result(out[: r.max_tokens])
+                except Exception as exc:
+                    for r in batch:
+                        if not r.future.done():
+                            r.future.set_exception(exc)
 
 
 class ChatMessage(BaseModel):
@@ -36,11 +118,16 @@ def _format_prompt(messages: list[ChatMessage]) -> str:
 
 
 def create_app(
-    engine: Any, tokenizer: Any | None = None, model_id: str = "mistral-7b-4bit"
+    engine: Any,
+    tokenizer: Any | None = None,
+    model_id: str = "mistral-7b-4bit",
+    max_batch_size: int = 16,
+    batch_wait_ms: float = 8.0,
 ) -> FastAPI:
     """Create FastAPI app exposing `/health`, `/v1/models`, and `/v1/chat/completions`."""
     app = FastAPI(title="CuTileForge OpenAI Server", version=__version__)
-    batch_lock = asyncio.Lock()
+    batcher = DynamicBatcher(engine, max_batch_size=max_batch_size, batch_wait_ms=batch_wait_ms)
+    batch_lock = batcher._gpu_lock
 
     @app.get("/health")
     async def health() -> dict[str, Any]:
@@ -122,14 +209,13 @@ def create_app(
 
             return StreamingResponse(event_stream(), media_type="text/event-stream")
 
-        async with batch_lock:
-            out_ids = engine.generate_ids(
-                prompt_ids,
-                max_new_tokens=req.max_tokens,
-                temperature=req.temperature,
-                top_k=req.top_k,
-                top_p=req.top_p,
-            )
+        out_ids = await batcher.submit(
+            prompt_ids,
+            max_tokens=req.max_tokens,
+            temperature=req.temperature,
+            top_k=req.top_k,
+            top_p=req.top_p,
+        )
         text = _decode_tokens(out_ids)
         return {
             "id": req_id,

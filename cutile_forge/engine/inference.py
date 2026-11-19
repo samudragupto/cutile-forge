@@ -12,6 +12,7 @@ import torch.nn.functional as F
 
 from cutile_forge.engine.kv_cache import PagedKVCache
 from cutile_forge.engine.model import Mistral7B, _quant_linear_cutile
+from cutile_forge.engine.radix_cache import RadixPrefixCache
 from cutile_forge.kernels.attention_gqa import fused_attention_gqa
 from cutile_forge.kernels.gemm_dequant_silu import fused_gemm_dequant_silu
 from cutile_forge.kernels.layernorm_residual import fused_rmsnorm_residual
@@ -34,6 +35,34 @@ class GenerationStats:
     peak_vram_gb: float
 
 
+class BatchedKVCache:
+    """Lightweight batched `(B, H_kv, S_kv, D)` KV cache for coalesced GPU decode."""
+
+    def __init__(self, num_layers: int) -> None:
+        self.num_layers = num_layers
+        self._k: list[torch.Tensor | None] = [None] * num_layers
+        self._v: list[torch.Tensor | None] = [None] * num_layers
+
+    def update(self, layer_idx: int, k_new: torch.Tensor, v_new: torch.Tensor) -> int:
+        prev_k = self._k[layer_idx]
+        prev_v = self._v[layer_idx]
+        if prev_k is None or prev_v is None:
+            self._k[layer_idx] = k_new
+            self._v[layer_idx] = v_new
+        else:
+            self._k[layer_idx] = torch.cat([prev_k, k_new], dim=2)
+            self._v[layer_idx] = torch.cat([prev_v, v_new], dim=2)
+        cur = self._k[layer_idx]
+        assert cur is not None
+        return int(cur.shape[2])
+
+    def get_kv(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor]:
+        k = self._k[layer_idx]
+        v = self._v[layer_idx]
+        assert k is not None and v is not None
+        return k, v
+
+
 class InferenceEngine:
     """High-level prefill + decode engine over `Mistral7B` and `PagedKVCache`."""
 
@@ -44,12 +73,15 @@ class InferenceEngine:
         kv_gpu_budget_bytes: int = 2 * 1024 * 1024 * 1024,
         target: str = "sm_120",
         use_cuda_graph: bool = True,
+        enable_radix_cache: bool = True,
     ) -> None:
         os.environ.setdefault("CUTILE_ARCH", target)
         self.target = target
         self.model = model
         self.config = model.config
         self.use_cuda_graph = use_cuda_graph
+        self.enable_radix_cache = enable_radix_cache
+        self.radix_cache = RadixPrefixCache(max_entries=64)
         self.kv_cache = PagedKVCache(
             num_layers=self.config.num_hidden_layers,
             num_kv_heads=self.config.num_key_value_heads,
@@ -270,6 +302,132 @@ class InferenceEngine:
         )
 
     @torch.inference_mode()
+    def prefill(
+        self,
+        prompt_ids: torch.Tensor,
+        backend: str = "cutile",
+    ) -> torch.Tensor:
+        """Run prefill for `(1, S)` prompt with RadixPrefixCache reuse."""
+        if prompt_ids.ndim == 1:
+            prompt_ids = prompt_ids.unsqueeze(0)
+        prompt_ids = prompt_ids.to(self.model.device)
+        self.kv_cache.reset()
+
+        tok_list: list[int] = [int(t) for t in prompt_ids[0].tolist()]
+        if self.enable_radix_cache and len(tok_list) > 0:
+            matched_len, cached_kv, cached_logits = self.radix_cache.match_prefix(tok_list)
+            if matched_len > 0 and cached_kv is not None:
+                for l_idx, (k_c, v_c) in cached_kv.items():
+                    self.kv_cache.update(
+                        l_idx, k_c.to(self.model.device), v_c.to(self.model.device)
+                    )
+                if matched_len == len(tok_list) and cached_logits is not None:
+                    return cached_logits.to(self.model.device)
+                # Run only the uncached suffix tokens
+                suffix = prompt_ids[:, matched_len:]
+                logits = self.model.forward(
+                    suffix,
+                    kv_cache=self.kv_cache,
+                    pos_offset=matched_len,
+                    backend=backend,
+                    last_token_only=True,
+                )
+                kv_snap = {
+                    l_idx: self.kv_cache.get_kv(l_idx)
+                    for l_idx in range(self.config.num_hidden_layers)
+                }
+                self.radix_cache.insert(tok_list, kv_snap, logits)
+                return logits
+
+        logits = self.model.forward(
+            prompt_ids,
+            kv_cache=self.kv_cache,
+            pos_offset=0,
+            backend=backend,
+            last_token_only=True,
+        )
+        if self.enable_radix_cache and len(tok_list) > 0 and self.kv_cache.evictions == 0:
+            kv_snap = {
+                l_idx: self.kv_cache.get_kv(l_idx) for l_idx in range(self.config.num_hidden_layers)
+            }
+            self.radix_cache.insert(tok_list, kv_snap, logits)
+        return logits
+
+    @torch.inference_mode()
+    def decode_batch(
+        self,
+        token_ids_batch: torch.Tensor,
+        batch_kv: BatchedKVCache,
+        pos_offset: int = 0,
+        backend: str = "cutile",
+    ) -> torch.Tensor:
+        """Run a single batched `(B, 1)` decode step on GPU with `BatchedKVCache`."""
+        return self.model.forward(
+            token_ids_batch,
+            kv_cache=batch_kv,  # type: ignore[arg-type]
+            pos_offset=pos_offset,
+            backend=backend,
+            last_token_only=True,
+        )
+
+    @torch.inference_mode()
+    def generate_batch(
+        self,
+        prompt_ids_list: list[torch.Tensor],
+        max_new_tokens: int = 8,
+        temperature: float = 0.0,
+        top_k: int = 50,
+        top_p: float = 0.9,
+        backend: str = "cutile",
+    ) -> list[list[int]]:
+        """Coalesce multiple prompts into a single batched prefill + decode pass."""
+        if len(prompt_ids_list) == 1:
+            return [
+                self.generate_ids(
+                    prompt_ids_list[0],
+                    max_new_tokens=max_new_tokens,
+                    temperature=temperature,
+                    top_k=top_k,
+                    top_p=top_p,
+                    backend=backend,
+                )
+            ]
+
+        bsz = len(prompt_ids_list)
+        seqs = [p.view(-1).to(self.model.device, dtype=torch.long) for p in prompt_ids_list]
+        max_len = max(int(s.numel()) for s in seqs)
+        pad_id = 1
+        batch_in = torch.full((bsz, max_len), pad_id, device=self.model.device, dtype=torch.long)
+        for i, s in enumerate(seqs):
+            batch_in[i, max_len - int(s.numel()) :] = s
+
+        batch_kv = BatchedKVCache(self.config.num_hidden_layers)
+        logits = self.model.forward(
+            batch_in,
+            kv_cache=batch_kv,  # type: ignore[arg-type]
+            pos_offset=0,
+            backend=backend,
+            last_token_only=True,
+        )
+        next_toks = sample_tokens(
+            logits[:, -1, :], temperature=temperature, top_k=top_k, top_p=top_p
+        )
+        outputs: list[list[int]] = [[int(next_toks[i].item())] for i in range(bsz)]
+        pos = max_len
+
+        for _ in range(max(0, max_new_tokens - 1)):
+            cur_in = next_toks.view(bsz, 1)
+            logits = self.decode_batch(cur_in, batch_kv=batch_kv, pos_offset=pos, backend=backend)
+            next_toks = sample_tokens(
+                logits[:, -1, :], temperature=temperature, top_k=top_k, top_p=top_p
+            )
+            for i in range(bsz):
+                outputs[i].append(int(next_toks[i].item()))
+            pos += 1
+
+        return outputs
+
+    @torch.inference_mode()
     def generate_ids(
         self,
         prompt_ids: torch.Tensor,
@@ -284,17 +442,10 @@ class InferenceEngine:
         if prompt_ids.ndim == 1:
             prompt_ids = prompt_ids.unsqueeze(0)
         prompt_ids = prompt_ids.to(self.model.device)
-        self.kv_cache.reset()
         reset_peak_vram()
 
         t_pre0 = time.perf_counter()
-        logits = self.model.forward(
-            prompt_ids,
-            kv_cache=self.kv_cache,
-            pos_offset=0,
-            backend=backend,
-            last_token_only=True,
-        )
+        logits = self.prefill(prompt_ids, backend=backend)
         if self.model.device.type == "cuda":
             torch.cuda.synchronize()
         prefill_ms = (time.perf_counter() - t_pre0) * 1000.0
