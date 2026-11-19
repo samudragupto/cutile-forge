@@ -9,7 +9,7 @@ from pathlib import Path
 import torch
 
 from cutile_forge.engine.config import ModelConfig
-from cutile_forge.forge.weight_streamer import WeightStreamer
+from cutile_forge.forge.weight_streamer import HybridLayerBudgeter, WeightStreamer
 from cutile_forge.utils.quantize import (
     quantize_4bit_group,
     unpack_awq_to_cutile,
@@ -48,7 +48,7 @@ class QuantLinearWeight:
 
 @dataclass
 class MistralLayerWeights:
-    """All weights for one Mistral-7B transformer layer."""
+    """All weights for one Mistral/Llama/Mixtral transformer layer."""
 
     layer_idx: int
     input_layernorm: torch.Tensor
@@ -60,9 +60,13 @@ class MistralLayerWeights:
     gate_proj: QuantLinearWeight
     up_proj: QuantLinearWeight
     down_proj: QuantLinearWeight
+    moe_gate: torch.Tensor | None = None
+    moe_w1: list[QuantLinearWeight] | None = None
+    moe_w2: list[QuantLinearWeight] | None = None
+    moe_w3: list[QuantLinearWeight] | None = None
 
     def to_tensor_dict(self) -> dict[str, torch.Tensor]:
-        return {
+        d: dict[str, torch.Tensor] = {
             "input_layernorm": self.input_layernorm,
             "post_attention_layernorm": self.post_attention_layernorm,
             "q_qw": self.q_proj.qweight,
@@ -87,6 +91,18 @@ class MistralLayerWeights:
             "down_s": self.down_proj.scales,
             "down_z": self.down_proj.zeros,
         }
+        for name, proj in (
+            ("q", self.q_proj),
+            ("k", self.k_proj),
+            ("v", self.v_proj),
+            ("o", self.o_proj),
+            ("gate", self.gate_proj),
+            ("up", self.up_proj),
+            ("down", self.down_proj),
+        ):
+            if proj.perm is not None:
+                d[f"{name}_perm"] = proj.perm
+        return d
 
     @classmethod
     def from_tensor_dict(
@@ -96,13 +112,19 @@ class MistralLayerWeights:
             layer_idx=layer_idx,
             input_layernorm=d["input_layernorm"],
             post_attention_layernorm=d["post_attention_layernorm"],
-            q_proj=QuantLinearWeight(d["q_qw"], d["q_s"], d["q_z"], group_size),
-            k_proj=QuantLinearWeight(d["k_qw"], d["k_s"], d["k_z"], group_size),
-            v_proj=QuantLinearWeight(d["v_qw"], d["v_s"], d["v_z"], group_size),
-            o_proj=QuantLinearWeight(d["o_qw"], d["o_s"], d["o_z"], group_size),
-            gate_proj=QuantLinearWeight(d["gate_qw"], d["gate_s"], d["gate_z"], group_size),
-            up_proj=QuantLinearWeight(d["up_qw"], d["up_s"], d["up_z"], group_size),
-            down_proj=QuantLinearWeight(d["down_qw"], d["down_s"], d["down_z"], group_size),
+            q_proj=QuantLinearWeight(d["q_qw"], d["q_s"], d["q_z"], group_size, d.get("q_perm")),
+            k_proj=QuantLinearWeight(d["k_qw"], d["k_s"], d["k_z"], group_size, d.get("k_perm")),
+            v_proj=QuantLinearWeight(d["v_qw"], d["v_s"], d["v_z"], group_size, d.get("v_perm")),
+            o_proj=QuantLinearWeight(d["o_qw"], d["o_s"], d["o_z"], group_size, d.get("o_perm")),
+            gate_proj=QuantLinearWeight(
+                d["gate_qw"], d["gate_s"], d["gate_z"], group_size, d.get("gate_perm")
+            ),
+            up_proj=QuantLinearWeight(
+                d["up_qw"], d["up_s"], d["up_z"], group_size, d.get("up_perm")
+            ),
+            down_proj=QuantLinearWeight(
+                d["down_qw"], d["down_s"], d["down_z"], group_size, d.get("down_perm")
+            ),
         )
 
 
@@ -121,6 +143,44 @@ def _pin_dict(d: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
     return {k: WeightStreamer.pin_tensor(v) for k, v in d.items()}
 
 
+class _ShardReader:
+    """Lazy memory-mapped multi-shard `.safetensors` reader (zero RAM duplication)."""
+
+    def __init__(self, shard_files: list[Path]) -> None:
+        from safetensors import safe_open
+
+        self._handles = [safe_open(str(sf), framework="pt", device="cpu") for sf in shard_files]
+        self._key_to_handle: dict[str, int] = {}
+        for h_idx, h in enumerate(self._handles):
+            for k in h.keys():
+                self._key_to_handle[k] = h_idx
+
+    def __contains__(self, key: str) -> bool:
+        return key in self._key_to_handle
+
+    def get(self, key: str) -> torch.Tensor | None:
+        h_idx = self._key_to_handle.get(key)
+        if h_idx is None:
+            return None
+        return self._handles[h_idx].get_tensor(key)
+
+    def __getitem__(self, key: str) -> torch.Tensor:
+        t = self.get(key)
+        if t is None:
+            raise KeyError(key)
+        return t
+
+
+def _estimate_layer_bytes(config: ModelConfig) -> int:
+    d = config.hidden_size
+    kv_dim = config.num_key_value_heads * config.head_dim
+    ffn = config.intermediate_size
+    attn_params = d * d + 2 * d * kv_dim + d * d
+    ffn_params = 3 * d * ffn * max(1, config.experts)
+    total_params = attn_params + ffn_params
+    return (total_params // 2) + (total_params // config.group_size) * 4
+
+
 def load_gptq_weights(
     model_dir: str | Path,
     config: ModelConfig | None = None,
@@ -128,9 +188,7 @@ def load_gptq_weights(
     pin_ddr5: bool = True,
     max_gpu_layers: int | None = None,
 ) -> LoadedModelWeights:
-    """Load 4-bit GPTQ safetensors from `model_dir` into pinned DDR5 / GPU HBM."""
-    from safetensors import safe_open
-
+    """Load single- or multi-shard 4-bit GPTQ safetensors into GPU HBM + pinned DDR5."""
     base = Path(model_dir)
     if config is None:
         cfg_file = base / "config.json"
@@ -145,11 +203,7 @@ def load_gptq_weights(
     if not shard_files:
         raise FileNotFoundError(f"No .safetensors files found in {base}")
 
-    raw: dict[str, torch.Tensor] = {}
-    for sf in shard_files:
-        with safe_open(str(sf), framework="pt", device="cpu") as f:
-            for key in f.keys():
-                raw[key] = f.get_tensor(key)
+    raw = _ShardReader(shard_files)
 
     target_dev = torch.device(device if torch.cuda.is_available() else "cpu")
     embed_tokens = raw["model.embed_tokens.weight"].to(dtype=torch.float16, device=target_dev)
@@ -158,7 +212,22 @@ def load_gptq_weights(
         raw["lm_head.weight"] if "lm_head.weight" in raw else raw["model.embed_tokens.weight"]
     ).to(dtype=torch.float16, device=target_dev)
 
-    gpu_layers = config.num_hidden_layers if max_gpu_layers is None else max_gpu_layers
+    if max_gpu_layers is None:
+        if target_dev.type == "cuda" and torch.cuda.is_available():
+            vram_gb = torch.cuda.get_device_properties(target_dev).total_memory / (1024.0**3)
+            budgeter = HybridLayerBudgeter(
+                total_layers=config.num_hidden_layers,
+                layer_bytes=_estimate_layer_bytes(config),
+                vram_budget_gb=vram_gb,
+                reserve_slots=2,
+                overhead_gb=2.5,
+            )
+            gpu_layers = budgeter.n_resident
+        else:
+            gpu_layers = config.num_hidden_layers
+    else:
+        gpu_layers = max_gpu_layers
+
     layers: list[MistralLayerWeights] = []
 
     def _load_proj(prefix: str, target: torch.device | str) -> QuantLinearWeight:
@@ -197,20 +266,60 @@ def load_gptq_weights(
             in_ln = in_ln.to(layer_dev)
             post_ln = post_ln.to(layer_dev)
 
-        layers.append(
-            MistralLayerWeights(
-                layer_idx=idx,
-                input_layernorm=in_ln,
-                post_attention_layernorm=post_ln,
-                q_proj=_load_proj(f"{p}.self_attn.q_proj", layer_dev),
-                k_proj=_load_proj(f"{p}.self_attn.k_proj", layer_dev),
-                v_proj=_load_proj(f"{p}.self_attn.v_proj", layer_dev),
-                o_proj=_load_proj(f"{p}.self_attn.o_proj", layer_dev),
-                gate_proj=_load_proj(f"{p}.mlp.gate_proj", layer_dev),
-                up_proj=_load_proj(f"{p}.mlp.up_proj", layer_dev),
-                down_proj=_load_proj(f"{p}.mlp.down_proj", layer_dev),
+        is_moe = f"{p}.block_sparse_moe.gate.weight" in raw
+        if is_moe:
+            moe_gate = raw[f"{p}.block_sparse_moe.gate.weight"].to(torch.float16)
+            moe_gate = (
+                WeightStreamer.pin_tensor(moe_gate)
+                if (str(layer_dev) == "cpu" and pin_ddr5)
+                else moe_gate.to(layer_dev)
             )
-        )
+            num_exp = max(1, config.experts)
+            moe_w1 = [
+                _load_proj(f"{p}.block_sparse_moe.experts.{e}.w1", layer_dev)
+                for e in range(num_exp)
+            ]
+            moe_w2 = [
+                _load_proj(f"{p}.block_sparse_moe.experts.{e}.w2", layer_dev)
+                for e in range(num_exp)
+            ]
+            moe_w3 = [
+                _load_proj(f"{p}.block_sparse_moe.experts.{e}.w3", layer_dev)
+                for e in range(num_exp)
+            ]
+            layers.append(
+                MistralLayerWeights(
+                    layer_idx=idx,
+                    input_layernorm=in_ln,
+                    post_attention_layernorm=post_ln,
+                    q_proj=_load_proj(f"{p}.self_attn.q_proj", layer_dev),
+                    k_proj=_load_proj(f"{p}.self_attn.k_proj", layer_dev),
+                    v_proj=_load_proj(f"{p}.self_attn.v_proj", layer_dev),
+                    o_proj=_load_proj(f"{p}.self_attn.o_proj", layer_dev),
+                    gate_proj=moe_w1[0],
+                    up_proj=moe_w3[0],
+                    down_proj=moe_w2[0],
+                    moe_gate=moe_gate,
+                    moe_w1=moe_w1,
+                    moe_w2=moe_w2,
+                    moe_w3=moe_w3,
+                )
+            )
+        else:
+            layers.append(
+                MistralLayerWeights(
+                    layer_idx=idx,
+                    input_layernorm=in_ln,
+                    post_attention_layernorm=post_ln,
+                    q_proj=_load_proj(f"{p}.self_attn.q_proj", layer_dev),
+                    k_proj=_load_proj(f"{p}.self_attn.k_proj", layer_dev),
+                    v_proj=_load_proj(f"{p}.self_attn.v_proj", layer_dev),
+                    o_proj=_load_proj(f"{p}.self_attn.o_proj", layer_dev),
+                    gate_proj=_load_proj(f"{p}.mlp.gate_proj", layer_dev),
+                    up_proj=_load_proj(f"{p}.mlp.up_proj", layer_dev),
+                    down_proj=_load_proj(f"{p}.mlp.down_proj", layer_dev),
+                )
+            )
 
     return LoadedModelWeights(
         config=config,

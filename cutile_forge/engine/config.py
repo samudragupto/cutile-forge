@@ -27,6 +27,7 @@ class ModelConfig:
     bos_token_id: int = 1
     eos_token_id: int = 2
     experts: int = 1
+    top_k_experts: int = 2
     d_model: int | None = None
     n_layers: int | None = None
     n_heads: int | None = None
@@ -96,6 +97,8 @@ class ModelConfig:
             "head_dim",
             data.get("hidden_size", 4096) // data.get("num_attention_heads", 32),
         )
+        raw_gs = int(data.get("group_size", 128))
+        eff_gs = 128 if raw_gs <= 0 else raw_gs
         return cls(
             vocab_size=int(data.get("vocab_size", 32000)),
             hidden_size=int(data.get("hidden_size", 4096)),
@@ -108,9 +111,11 @@ class ModelConfig:
             rms_norm_eps=float(data.get("rms_norm_eps", 1e-5)),
             rope_theta=float(data.get("rope_theta", 10000.0)),
             bits=int(data.get("bits", 4)),
-            group_size=int(data.get("group_size", 128)),
+            group_size=eff_gs,
             bos_token_id=int(data.get("bos_token_id", 1)),
             eos_token_id=int(data.get("eos_token_id", 2)),
+            experts=int(data.get("num_local_experts", data.get("experts", 1))),
+            top_k_experts=int(data.get("num_experts_per_tok", 2)),
         )
 
 

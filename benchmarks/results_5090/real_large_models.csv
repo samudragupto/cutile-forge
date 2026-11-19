@@ -1,0 +1,4 @@
+model,resident_layers,streamed_layers,prefill_ms,prefill_tok_s,decode_tok_s,ms_per_tok,active_tflops,perplexity,pcie_overlap_pct,peak_vram_gb,host_rss_gb,sample_output
+Mixtral-8x7B-Instruct-v0.1-GPTQ,32,0,9.69,2786.68,41.83,23.9,1.06,7.48,0.0,25.26,1.93,"A GPU (Graphics Processing Unit) consists of many small processing cores called CUDA cores, which can execute instructions in parallel. Each CUDA core has its own set of registers and a small amount of fast memory called shared memory. Shared memory is a user-managed cache that is physically close"
+Llama-2-70B-Chat-GPTQ (prompt 1),55,25,6.98,859.19,3.9,256.23,0.0,0.0,84.4,27.44,9.07,Paris
+Llama-2-70B-Chat-GPTQ (prompt 2),55,25,1053.09,15.19,4.07,245.51,0.0,0.0,88.1,27.44,9.08, 

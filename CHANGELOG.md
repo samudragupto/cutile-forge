@@ -3,6 +3,7 @@
 ## v1.0.0 (2026-11-19)
 
 - **PyTorch Dynamo / FX Backend (`cutile_forge.forge.fx_backend`)**: Registered `torch.compile(backend="cutile_forge")` on package import, pattern-matching `linear+silu+linear`, `add+layer_norm`, and `scaled_dot_product_attention` through TFG fusion rules to fused CuTile kernels.
+- **Real Large-Model Checkpoints (`Mixtral-8x7B` & `Llama-2-70B`)**: Lazy memory-mapped multi-shard `.safetensors` reader (`_ShardReader`), per-channel GPTQ (`group_size == -1`) support, real `Mixtral-8x7B-Instruct-v0.1-GPTQ` (`41.83 tok/s`, PPL `7.48`, `25.26 GB` VRAM), and real `Llama-2-70B-Chat-GPTQ` 80-layer hybrid (`55 HBM + 25 PCIe 5.0`, `3.90–4.07 tok/s`, `27.44 GB` VRAM, zero OOM).
 
 ## v0.8.0 (2026-11-19)
 

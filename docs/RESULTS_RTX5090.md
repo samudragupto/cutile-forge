@@ -326,5 +326,28 @@
 
 ---
 
+## Real Large-Model Checkpoint Evaluation on RTX 5090 (Mixtral-8x7B MoE & Llama-70B Hybrid)
+
+Evaluated real trained 4-bit GPTQ checkpoints (`TheBloke/Mixtral-8x7B-Instruct-v0.1-GPTQ`, 23.8 GB; `TheBloke/Llama-2-70B-Chat-GPTQ`, 35.3 GB) on the 32 GB RTX 5090 (`benchmarks/results_5090/real_large_models.csv`):
+
+### Synthetic vs. Real Checkpoint Comparison
+
+| Model / Mode | Placement | Decode (`tok/s`) | Latency (`ms/tok`) | Peak VRAM | Host RSS | PCIe Overlap | Perplexity |
+|---|---|---:|---:|---:|---:|---:|---:|
+| **Mixtral-8x7B (Synthetic `v0.7.0`)** | 32 HBM / 0 PCIe | — (`42.13 TF` @ M=256) | `0.218 ms`/layer | — | — | 0% | N/A |
+| **Mixtral-8x7B-Instruct-v0.1-GPTQ (Real)** | **32 HBM / 0 PCIe** | **41.83 tok/s** (`2,786.7` prefill) | **23.90 ms/tok** | **25.26 GB** (`< 29 GB`) | 1.93 GB | 0% (100% HBM) | **7.48** |
+| **LLAMA3_70B_4BIT (Synthetic `v0.8.0`)** | 57 HBM / 23 PCIe | 4.66 tok/s | 214.4 ms/tok | 27.43 GB | — | 99.5% | N/A |
+| **Llama-2-70B-Chat-GPTQ (Real, Prompt 1)** | **55 HBM / 25 PCIe** | **3.90 tok/s** (`859.2` prefill) | **256.23 ms/tok** | **27.44 GB** (`< 31 GB`) | 9.07 GB | **84.4%** | — |
+| **Llama-2-70B-Chat-GPTQ (Real, Prompt 2)** | **55 HBM / 25 PCIe** | **4.07 tok/s** (`1,053.1 ms` prefill) | **245.51 ms/tok** | **27.44 GB** (`< 31 GB`) | 9.08 GB | **88.1%** | — |
+
+### Verbatim Generated Output (Greedy, `temperature=0.0`, RTX 5090)
+
+- **Mixtral-8x7B-Instruct-v0.1-GPTQ** (`[INST] Explain how GPU shared memory bank conflicts occur and how tile swizzling fixes them. [/INST]`, 64 tokens):
+  > `A GPU (Graphics Processing Unit) consists of many small processing cores called CUDA cores, which can execute instructions in parallel. Each CUDA core has its own set of registers and a small amount of fast memory called shared memory. Shared memory is a user-managed cache that is physically close`
+- **Llama-2-70B-Chat-GPTQ** (`The capital of France is`, 80-layer Hybrid 55 HBM + 25 PCIe 5.0):
+  > `Paris`
+
+---
+
 *Full CSV data: `benchmarks/results_5090/`*
 *Methodology: `docs/BENCHMARK_METHODOLOGY.md`*

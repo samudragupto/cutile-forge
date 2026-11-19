@@ -109,7 +109,7 @@ class InferenceEngine:
     def _can_use_cuda_graph(self, backend: str) -> bool:
         if not self.use_cuda_graph or backend != "cutile" or self.model.device.type != "cuda":
             return False
-        if not torch.cuda.is_available() or self.kv_cache.evictions > 0:
+        if not torch.cuda.is_available() or self.kv_cache.evictions > 0 or self.config.experts > 1:
             return False
         return all(lw.input_layernorm.device.type == "cuda" for lw in self.model.weights.layers)
 

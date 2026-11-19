@@ -171,7 +171,19 @@ PS C:\Users\user\Desktop\cutile-forge> python -m pytest tests/ benchmarks/correc
 | **v0.6.0** | Dynamic Batching & Radix | `DynamicBatcher` 4-way concurrent p99 **`113.6 ms`** (down from `363.1 ms` — **3.20×**), `RadixPrefixCache` |
 | **v0.7.0** | Grouped MoE & FlashDecoding | Persistent Grouped MoE **`42.13 TFLOPS`** (`M=256`, **68×** vs v0.4.0), Split-KV FlashDecoding `16K` **`59.20 ms`** |
 | **v0.8.0** | 70B Hybrid 32 GB Engine | `LLAMA3_70B_4BIT` (`57` HBM + `23` PCIe 5.0): **`4.66 tok/s`**, **`27.43 GB`** VRAM (zero OOM), **`99.5%`** overlap |
-| **v1.0.0** | `torch.compile` FX Backend | `@torch.compile(backend="cutile_forge")` lowers `FFN`, `LN+Res`, and `SDPA` to fused CuTile kernels (`101/101` tests) |
+| **v1.0.0** | `torch.compile` FX Backend + Real 47B/70B | `@torch.compile(backend="cutile_forge")`, Real **Mixtral-8x7B-GPTQ** (`41.83 tok/s`, PPL `7.48`, `25.26 GB`), Real **Llama-2-70B-GPTQ** (`55 HBM + 25 PCIe`, `4.07 tok/s`, `27.44 GB`, zero OOM) |
+
+---
+
+### Real Large-Model Checkpoint Evaluation on RTX 5090 (Mixtral-8x7B MoE & Llama-70B Hybrid)
+
+| Model | Placement | Decode (`tok/s`) | Peak VRAM | Host RSS | PCIe Overlap | Perplexity |
+|---|---|---:|---:|---:|---:|---:|
+| **Mixtral-8x7B-Instruct-v0.1-GPTQ (Real, 23.8 GB)** | 32 HBM / 0 PCIe | **41.83 tok/s** (`2,786.7` prefill) | **25.26 GB** | 1.93 GB | 0% (100% HBM) | **7.48** |
+| **Llama-2-70B-Chat-GPTQ (Real, 35.3 GB)** | 55 HBM / 25 PCIe 5.0 | **3.90–4.07 tok/s** | **27.44 GB** | 9.08 GB | **84.4–88.1%** | — |
+
+> **Mixtral-8x7B-GPTQ (verbatim, 64 tok):** *"A GPU (Graphics Processing Unit) consists of many small processing cores called CUDA cores, which can execute instructions in parallel. Each CUDA core has its own set of registers and a small amount of fast memory called shared memory. Shared memory is a user-managed cache that is physically close"*  
+> **Llama-2-70B-Chat-GPTQ (verbatim, `"The capital of France is"`):** *"Paris"*
 
 ---
 

@@ -161,6 +161,35 @@ class MistralLayer:
             o_proj, x_2d, weights.post_attention_layernorm, eps=self.config.rms_norm_eps
         )
 
+        if (
+            weights.moe_gate is not None
+            and weights.moe_w1 is not None
+            and weights.moe_w2 is not None
+            and weights.moe_w3 is not None
+        ):
+            r_logits = torch.matmul(post_norm, weights.moe_gate.t())
+            probs, indices = fused_topk_gating(r_logits, top_k=self.config.top_k_experts)
+            ffn_out = torch.zeros_like(post_norm)
+            for e in range(len(weights.moe_w1)):
+                mask = indices == e
+                if not bool(mask.any()):
+                    continue
+                tok_idx, k_slot = torch.where(mask)
+                x_e = post_norm.index_select(0, tok_idx)
+                w1 = weights.moe_w1[e]
+                w2 = weights.moe_w2[e]
+                w3 = weights.moe_w3[e]
+                g_in = x_e[:, w1.perm] if w1.perm is not None else x_e
+                g_act = fused_gemm_dequant_silu(
+                    g_in, w1.qweight, w1.scales, w1.zeros, group_size=w1.group_size
+                )
+                u_val = _quant_linear_cutile(x_e, w3)
+                y_e = _quant_linear_cutile(g_act * u_val, w2)
+                ffn_out.index_add_(
+                    0, tok_idx, (y_e * probs[tok_idx, k_slot].unsqueeze(1)).to(ffn_out.dtype)
+                )
+            return (residual_mid + ffn_out).view(bsz, seq_len, hidden_dim)
+
         gate_in = (
             post_norm[:, weights.gate_proj.perm]
             if weights.gate_proj.perm is not None
@@ -234,6 +263,31 @@ class MistralLayer:
         post_norm = _pytorch_rmsnorm(
             residual_mid, weights.post_attention_layernorm, eps=self.config.rms_norm_eps
         )
+
+        if (
+            weights.moe_gate is not None
+            and weights.moe_w1 is not None
+            and weights.moe_w2 is not None
+            and weights.moe_w3 is not None
+        ):
+            r_logits = torch.matmul(post_norm, weights.moe_gate.t())
+            probs, indices = fused_topk_gating(r_logits, top_k=self.config.top_k_experts)
+            ffn_out = torch.zeros_like(post_norm)
+            for e in range(len(weights.moe_w1)):
+                mask = indices == e
+                if not bool(mask.any()):
+                    continue
+                tok_idx, k_slot = torch.where(mask)
+                x_e = post_norm.index_select(0, tok_idx)
+                g_e = F.silu(_quant_linear_pytorch(x_e, weights.moe_w1[e]).float()).to(
+                    torch.float16
+                )
+                u_e = _quant_linear_pytorch(x_e, weights.moe_w3[e])
+                y_e = _quant_linear_pytorch(g_e * u_e, weights.moe_w2[e])
+                ffn_out.index_add_(
+                    0, tok_idx, (y_e * probs[tok_idx, k_slot].unsqueeze(1)).to(ffn_out.dtype)
+                )
+            return (residual_mid + ffn_out).view(bsz, seq_len, hidden_dim)
 
         gate = F.silu(_quant_linear_pytorch(post_norm, weights.gate_proj).float()).to(torch.float16)
         up = _quant_linear_pytorch(post_norm, weights.up_proj)

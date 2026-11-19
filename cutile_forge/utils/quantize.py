@@ -70,6 +70,15 @@ def unpack_gptq_layer(
     g_dim, n_div8 = qzeros_i32.shape
     qz_unpacked = ((qzeros_i32.unsqueeze(2) >> shifts.view(1, 1, 8)) & 0xF) + 1
     zeros_fp16 = qz_unpacked.reshape(g_dim, n_div8 * 8).to(torch.float16)
+    scales_fp16 = scales.to(torch.float16)
+
+    k_dim = k_div8 * 8
+    num_groups = k_dim // group_size
+    if g_dim == 1 and num_groups > 1:
+        # Per-channel GPTQ (group_size == -1): broadcast single scale/zero across K groups
+        scales_fp16 = scales_fp16.expand(num_groups, n_dim).contiguous()
+        zeros_fp16 = zeros_fp16.expand(num_groups, n_dim).contiguous()
+        g_idx = None
 
     perm: torch.Tensor | None = None
     if g_idx is not None:
@@ -80,7 +89,7 @@ def unpack_gptq_layer(
 
     return (
         pack_int4_weights(qw_unpacked),
-        scales.to(torch.float16).contiguous(),
+        scales_fp16.contiguous(),
         zeros_fp16.contiguous(),
         perm,
     )

@@ -39,3 +39,34 @@ def test_hybrid_layer_budgeter_7b_fits_fully_resident() -> None:
     budgeter = HybridLayerBudgeter(total_layers=32, layer_bytes=layer_bytes, vram_budget_gb=32.0)
     assert budgeter.n_resident == 32
     assert budgeter.n_streamed == 0
+
+
+def test_real_large_checkpoints_config_and_budget_if_present() -> None:
+    import os
+    from pathlib import Path
+
+    from cutile_forge.engine.config import ModelConfig
+    from cutile_forge.engine.weight_loader import _estimate_layer_bytes
+
+    root = Path(os.environ.get("STORAGE_ROOT", "/var/tmp/arrhat_models"))
+    mixtral_dir = root / "mixtral_8x7b_4bit"
+    if (mixtral_dir / "config.json").exists():
+        cfg = ModelConfig.from_json(mixtral_dir / "config.json")
+        assert cfg.experts == 8
+        assert cfg.num_hidden_layers == 32
+        assert cfg.group_size == 128
+
+    llama70_dir = root / "llama_70b_4bit"
+    if (llama70_dir / "config.json").exists():
+        cfg70 = ModelConfig.from_json(llama70_dir / "config.json")
+        assert cfg70.num_hidden_layers == 80
+        assert cfg70.hidden_size == 8192
+        b = HybridLayerBudgeter(
+            total_layers=cfg70.num_hidden_layers,
+            layer_bytes=_estimate_layer_bytes(cfg70),
+            vram_budget_gb=32.0,
+            reserve_slots=2,
+            overhead_gb=2.5,
+        )
+        assert 50 <= b.n_resident <= 60
+        assert b.n_streamed == 80 - b.n_resident
