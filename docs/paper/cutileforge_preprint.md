@@ -1,6 +1,6 @@
 # CuTileForge: A Tile-Fusion Graph Compiler for 8 GB-VRAM LLM Inference on NVIDIA CuTile
 
-**Author:** Arrhat Nag (`@samudragupto`)  
+**Authors:** Arrhat Nag (`@samudragupto`), Rupesh Nasre  
 **Target Categories:** `cs.DC` (Distributed, Parallel, and Cluster Computing), `cs.LG` (Machine Learning)  
 **Code & Artifacts:** https://github.com/samudragupto/cutile-forge (`v0.1.0`, MIT License)
 

@@ -10,7 +10,7 @@
 [![GHCR](https://img.shields.io/badge/ghcr-cutile--forge-blue)](https://github.com/samudragupto/cutile-forge/pkgs/container/cutile-forge)
 [![Tests](https://img.shields.io/badge/tests-102%2F102%20passed%20%7C%200%20skipped-16a34a)](tests/)
 
-**Author:** [Arrhat Nag](https://github.com/samudragupto) (`@samudragupto`)
+**Authors:** [Arrhat Nag](https://github.com/samudragupto) (`@samudragupto`), Rupesh Nasre
 
 <p align="center">
   <a href="#abstract">Abstract</a> ·
@@ -400,7 +400,7 @@ python3 scripts/generate_publication_figures.py
 ```bibtex
 @software{cutileforge2026,
   title   = {CuTileForge: A Tile-Fusion Graph Compiler and Hybrid PCIe-Streaming Inference Engine on NVIDIA CuTile},
-  author  = {Nag, Arrhat},
+  author  = {Nag, Arrhat and Nasre, Rupesh},
   year    = {2026},
   version = {1.0.0},
   url     = {https://github.com/samudragupto/cutile-forge},

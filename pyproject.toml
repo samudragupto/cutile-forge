@@ -11,6 +11,7 @@ license = { text = "MIT" }
 requires-python = ">=3.11"
 authors = [
     { name = "Arrhat Nag" },
+    { name = "Rupesh Nasre" },
 ]
 keywords = ["cuda", "cutile", "llm", "inference", "tile-fusion", "compiler", "mistral"]
 classifiers = [
