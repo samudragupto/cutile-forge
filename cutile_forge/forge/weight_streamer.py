@@ -19,6 +19,62 @@ class PrefetchSlot:
     bytes_transferred: int
 
 
+class HybridLayerBudgeter:
+    """Partitions model layers into HBM-resident vs. Stage -1 PCIe-streamed tiers.
+
+    When a model exceeds 85% of available VRAM (e.g., 70B-4bit ~38.5 GB on 32 GB RTX 5090),
+    pins the first `n_resident` layers permanently in HBM and streams the remaining
+    `n_streamed` layers through double-buffered PCIe DMA overlapped with compute.
+    """
+
+    def __init__(
+        self,
+        total_layers: int,
+        layer_bytes: int,
+        vram_budget_gb: float = 32.0,
+        reserve_slots: int = 2,
+        overhead_gb: float = 2.0,
+    ) -> None:
+        if total_layers <= 0 or layer_bytes <= 0:
+            raise ValueError("total_layers and layer_bytes must be positive")
+        self.total_layers = total_layers
+        self.layer_bytes = layer_bytes
+        self.vram_budget_gb = vram_budget_gb
+        total_model_gb = (total_layers * layer_bytes) / (1024.0**3)
+
+        if total_model_gb <= vram_budget_gb * 0.85:
+            self.n_resident = total_layers
+        else:
+            usable_bytes = max(
+                0.0,
+                vram_budget_gb * 0.85 * (1024.0**3)
+                - overhead_gb * (1024.0**3)
+                - reserve_slots * layer_bytes,
+            )
+            self.n_resident = min(total_layers, max(0, int(usable_bytes // layer_bytes)))
+        self.n_streamed = total_layers - self.n_resident
+
+    def is_resident(self, layer_idx: int) -> bool:
+        return 0 <= layer_idx < self.n_resident
+
+    @property
+    def resident_gb(self) -> float:
+        return (self.n_resident * self.layer_bytes) / (1024.0**3)
+
+    @property
+    def streamed_gb(self) -> float:
+        return (self.n_streamed * self.layer_bytes) / (1024.0**3)
+
+    def summary(self) -> dict[str, float | int]:
+        return {
+            "total_layers": self.total_layers,
+            "n_resident": self.n_resident,
+            "n_streamed": self.n_streamed,
+            "resident_gb": round(self.resident_gb, 2),
+            "streamed_gb": round(self.streamed_gb, 2),
+        }
+
+
 class WeightStreamer:
     """Stage -1 asynchronous PCIe DMA streamer using pinned host memory and double buffering."""
 

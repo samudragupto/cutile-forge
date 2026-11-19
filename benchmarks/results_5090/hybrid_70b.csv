@@ -1,0 +1,2 @@
+model,total_layers,resident_layers,streamed_layers,resident_gb,streamed_gb,peak_vram_gb,ms_per_tok,tokens_per_sec,pcie_overlap_pct
+LLAMA3_70B_4BIT,80,57,23,24.13,9.74,27.43,214.41,4.66,99.5

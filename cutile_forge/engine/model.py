@@ -8,6 +8,7 @@ import torch
 import torch.nn.functional as F
 
 from cutile_forge.engine.config import (
+    LLAMA3_70B_4BIT,
     LLAMA_34B_4BIT,
     GPUConfig,
     MISTRAL_8x7B_4BIT,
@@ -359,8 +360,10 @@ class Mistral7B:
 
 
 __all__ = [
+    "LLAMA3_70B_4BIT",
     "LLAMA_34B_4BIT",
     "MISTRAL_8x7B_4BIT",
     "Mistral7B",
     "MistralLayer",
+    "MoEFFNBlock",
 ]

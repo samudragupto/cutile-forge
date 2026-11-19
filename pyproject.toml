@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cutile-forge"
-version = "0.7.0"
+version = "0.8.0"
 description = "Tile-Fusion Graph Compiler and CuTile Inference Engine for 8 GB-VRAM LLMs"
 readme = "README.md"
 license = { text = "MIT" }

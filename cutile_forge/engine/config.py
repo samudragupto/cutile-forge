@@ -29,17 +29,38 @@ class ModelConfig:
     experts: int = 1
     d_model: int | None = None
     n_layers: int | None = None
+    n_heads: int | None = None
+    n_kv_heads: int | None = None
+    d_head: int | None = None
+    ffn_dim: int | None = None
 
     def __post_init__(self) -> None:
+        if self.d_head is not None:
+            self.head_dim = self.d_head
+        else:
+            self.d_head = self.head_dim
+        if self.n_heads is not None:
+            self.num_attention_heads = self.n_heads
+        if self.n_kv_heads is not None:
+            self.num_key_value_heads = self.n_kv_heads
+        else:
+            self.n_kv_heads = self.num_key_value_heads
+        if self.ffn_dim is not None:
+            self.intermediate_size = self.ffn_dim
+        else:
+            self.ffn_dim = self.intermediate_size
         if self.d_model is not None:
             self.hidden_size = self.d_model
             if (
-                self.hidden_size != self.num_attention_heads * self.head_dim
+                self.n_heads is None
+                and self.hidden_size != self.num_attention_heads * self.head_dim
                 and self.hidden_size % self.head_dim == 0
             ):
                 self.num_attention_heads = self.hidden_size // self.head_dim
         else:
             self.d_model = self.hidden_size
+        if self.n_heads is None:
+            self.n_heads = self.num_attention_heads
         if self.n_layers is not None:
             self.num_hidden_layers = self.n_layers
         else:
@@ -147,6 +168,15 @@ LLAMA_34B_4BIT = ModelConfig(
     intermediate_size=22016,
     num_attention_heads=64,
     num_key_value_heads=8,
+)
+LLAMA3_70B_4BIT = ModelConfig(
+    d_model=8192,
+    n_layers=80,
+    n_heads=64,
+    n_kv_heads=8,
+    d_head=128,
+    ffn_dim=28672,
+    vocab_size=128256,
 )
 
 
