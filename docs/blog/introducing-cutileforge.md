@@ -1,5 +1,7 @@
 # I Fused 8 CUDA Kernels into 3 Python Tiles on an 8 GB Laptop GPU
 
+**Author:** Arrhat Nag (`@samudragupto`)  
+
 Running a 7-billion-parameter language model locally on an 8 GB laptop GPU usually forces an uncomfortable compromise: either you accept fragmented PyTorch eager execution with dozens of tiny kernel launches per layer, or you drop down to hundreds of lines of hand-tuned CUDA C++ templates (`cp.async`, shared-memory bank padding, warp-matrix fragments, and custom epilogues) that break the moment you want to fuse a new activation or quantization scheme.
 
 I built **[CuTileForge](https://github.com/samudragupto/cutile-forge)** (`v0.1.0`) to test a different path: **can a high-level Tile Fusion Graph (TFG) compiler written in Python lower an entire transformer layer directly into NVIDIA's CuTile Python DSL (`cuda.tile`), match or beat hand-written CUDA C++ baselines, and sustain >30 tok/s on a real 8 GB laptop GPU without thermal collapse?**

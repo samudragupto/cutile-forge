@@ -43,7 +43,7 @@ sequenceDiagram
 ## TFG Fusion Before & After (8 Kernels to 3)
 
 ```mermaid
-flowchart LR
+flowchart TB
     subgraph Before["Before Fusion: 8 Separate Kernels"]
         direction TB
         K1["QKV GEMM"] --> K2["GQA Attention"]

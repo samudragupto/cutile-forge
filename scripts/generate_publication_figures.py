@@ -44,7 +44,7 @@ def _apply_pub_style() -> None:
 
 def generate_fig1_executive_overview(out_dir: Path) -> Path:
     """Figure 1: 2x2 Executive Overview (Decode Progression, Real Checkpoints, Long-Ctx, Serving)."""
-    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    fig, axes = plt.subplots(2, 2, figsize=(16, 11), constrained_layout=True)
 
     # (a) End-to-End Decode & Speculative Throughput Progression
     ax = axes[0, 0]
@@ -59,11 +59,11 @@ def generate_fig1_executive_overview(out_dir: Path) -> Path:
     mults = ["1.00×", "1.54×", "2.98×", "3.08×", "3.62×"]
     colors = [SLATE, GOLD, TEAL, NAVY, CORAL]
     x = np.arange(len(labels))
-    bars = ax.bar(x, vals, width=0.6, color=colors, edgecolor="none")
+    bars = ax.bar(x, vals, width=0.58, color=colors, edgecolor="none")
     for bar, v, m in zip(bars, vals, mults, strict=True):
         ax.text(
             bar.get_x() + bar.get_width() / 2.0,
-            v + 2.5,
+            v + 2.8,
             f"{v:.2f}\n({m})",
             ha="center",
             va="bottom",
@@ -74,7 +74,7 @@ def generate_fig1_executive_overview(out_dir: Path) -> Path:
     ax.set_xticks(x)
     ax.set_xticklabels(labels, fontsize=8.5)
     ax.set_ylabel("Throughput (tok/s)")
-    ax.set_ylim(0, 142)
+    ax.set_ylim(0, 152)
     ax.set_title("(a) End-to-End Decode Progression (Mistral-7B 4-bit GPTQ)")
 
     # (b) Real Checkpoint Scale-Up & Memory Partitioning on 32 GB RTX 5090
@@ -87,14 +87,14 @@ def generate_fig1_executive_overview(out_dir: Path) -> Path:
     hbm_gb = [4.32, 25.26, 27.44]
     ddr5_gb = [0.0, 1.93, 9.08]
     x = np.arange(len(models))
-    w = 0.36
+    w = 0.35
     b1 = ax.bar(x - w / 2, hbm_gb, w, label="GPU HBM VRAM (GB)", color=NAVY)
     b2 = ax.bar(x + w / 2, ddr5_gb, w, label="Pinned Host DDR5 RSS (GB)", color=TEAL)
     ax.axhline(32.0, color=CRIMSON, linestyle="--", linewidth=1.6, label="32.0 GB HBM Ceiling")
     for bar, v in zip(b1, hbm_gb, strict=True):
         ax.text(
             bar.get_x() + bar.get_width() / 2.0,
-            v + 0.6,
+            v + 0.7,
             f"{v:.2f} GB",
             ha="center",
             va="bottom",
@@ -105,7 +105,7 @@ def generate_fig1_executive_overview(out_dir: Path) -> Path:
     for bar, v in zip(b2, ddr5_gb, strict=True):
         ax.text(
             bar.get_x() + bar.get_width() / 2.0,
-            v + 0.6,
+            v + 0.7,
             f"{v:.2f} GB",
             ha="center",
             va="bottom",
@@ -116,7 +116,7 @@ def generate_fig1_executive_overview(out_dir: Path) -> Path:
     ax.set_xticks(x)
     ax.set_xticklabels(models, fontsize=8.5)
     ax.set_ylabel("Memory Footprint (GB)")
-    ax.set_ylim(0, 38)
+    ax.set_ylim(0, 42)
     ax.set_title("(b) Real Checkpoint Scale-Up & Hybrid Memory Partitioning (sm_120)")
     ax.legend(loc="upper left", fontsize=8.5)
 
@@ -138,7 +138,7 @@ def generate_fig1_executive_overview(out_dir: Path) -> Path:
         lbl = f"{v:,.0f}" if v > 1000 else f"{v:.1f}"
         ax.text(
             bar.get_x() + bar.get_width() / 2.0,
-            v * 1.18,
+            v * 1.22,
             lbl,
             ha="center",
             va="bottom",
@@ -150,7 +150,7 @@ def generate_fig1_executive_overview(out_dir: Path) -> Path:
         lbl = f"{v:,.0f}" if v > 1000 else f"{v:.1f}"
         ax.text(
             bar.get_x() + bar.get_width() / 2.0,
-            v * 1.18,
+            v * 1.22,
             lbl,
             ha="center",
             va="bottom",
@@ -160,8 +160,8 @@ def generate_fig1_executive_overview(out_dir: Path) -> Path:
         )
     ax.annotate(
         "1,822× faster\n@ 16K ctx",
-        xy=(2 - w / 2, 59.20),
-        xytext=(1.15, 6000),
+        xy=(2 - w / 2, 130.0),
+        xytext=(1.25, 14000),
         arrowprops={"arrowstyle": "->", "color": TEAL, "lw": 1.6},
         fontsize=9,
         fontweight="bold",
@@ -171,7 +171,7 @@ def generate_fig1_executive_overview(out_dir: Path) -> Path:
     ax.set_xticks(x)
     ax.set_xticklabels(stages, fontsize=8.5)
     ax.set_ylabel("Decode Step Latency (ms, log scale)")
-    ax.set_ylim(10, 400000)
+    ax.set_ylim(10, 600000)
     ax.set_title("(c) 16K & 32K Long-Context Paging Latency Ablation")
     ax.legend(loc="upper right", fontsize=8.5)
 
@@ -197,13 +197,15 @@ def generate_fig1_executive_overview(out_dir: Path) -> Path:
         label="v0.6.0 DynamicBatcher (p99 = 113.6 ms)",
     )
     for r, v in zip(reqs, serial_ms, strict=True):
-        ax.text(r, v + 12, f"{v:.1f} ms", ha="center", fontsize=8.5, fontweight="bold", color=CORAL)
+        dy = -22 if r == 1 else 14
+        ax.text(r, v + dy, f"{v:.1f} ms", ha="center", fontsize=8.5, fontweight="bold", color=CORAL)
     for r, v in zip(reqs, batched_ms, strict=True):
-        ax.text(r, v - 22, f"{v:.1f} ms", ha="center", fontsize=8.5, fontweight="bold", color=TEAL)
+        dy = 15 if r == 1 else -22
+        ax.text(r, v + dy, f"{v:.1f} ms", ha="center", fontsize=8.5, fontweight="bold", color=TEAL)
     ax.annotate(
         "3.20× lower\np99 tail latency",
-        xy=(4, 113.6),
-        xytext=(2.85, 220),
+        xy=(4, 116.0),
+        xytext=(2.85, 225),
         arrowprops={"arrowstyle": "->", "color": NAVY, "lw": 1.5},
         fontsize=9,
         fontweight="bold",
@@ -213,11 +215,10 @@ def generate_fig1_executive_overview(out_dir: Path) -> Path:
     ax.set_xticks(reqs)
     ax.set_xticklabels([f"Req {r}" for r in reqs])
     ax.set_ylabel("End-to-End Request Latency (ms)")
-    ax.set_ylim(40, 420)
+    ax.set_ylim(40, 440)
     ax.set_title("(d) 4-Way Concurrent Serving Latency (max_tokens=8)")
     ax.legend(loc="upper left", fontsize=8.5)
 
-    plt.tight_layout()
     out_path = out_dir / "fig1_executive_overview.png"
     plt.savefig(out_path, bbox_inches="tight")
     plt.close()
@@ -226,8 +227,8 @@ def generate_fig1_executive_overview(out_dir: Path) -> Path:
 
 def generate_fig2_roofline(out_dir: Path) -> Path:
     """Figure 2: Dual-Architecture Empirical Log-Log Roofline (Ada sm_89 vs Blackwell sm_120)."""
-    fig, ax = plt.subplots(figsize=(11, 7))
-    ai = np.logspace(np.log10(0.5), 3.0, 500)
+    fig, ax = plt.subplots(figsize=(13, 8), constrained_layout=True)
+    ai = np.logspace(np.log10(0.5), np.log10(1600.0), 500)
 
     # Ceilings
     bw_5090_cublas = np.minimum(1.792 * ai, 289.0)
@@ -264,50 +265,58 @@ def generate_fig2_roofline(out_dir: Path) -> Path:
     )
 
     # Ridge points
-    ax.scatter([150.3 / 1.792], [150.3], color=TEAL, marker="D", s=45, zorder=6)
-    ax.scatter([28.2 / 0.272], [28.2], color=GOLD, marker="D", s=45, zorder=6)
+    ax.scatter([150.3 / 1.792], [150.3], color=TEAL, marker="D", s=50, zorder=6)
+    ax.scatter([28.2 / 0.272], [28.2], color=GOLD, marker="D", s=50, zorder=6)
 
-    # Empirical measured points (AI in FLOPs/Byte, TFLOPS, label, offset)
+    arrow_kw = {"arrowstyle": "->", "lw": 0.85, "color": "#475569", "shrinkA": 2, "shrinkB": 4}
+
+    # Explicit non-overlapping offsets (dx, dy) + horizontal alignment
     sm120_pts = [
-        (2.0, 3.22, "Decode GEMV (M=1)\n3.22 TF", (8, -16)),
-        (37.5, 42.13, "Grouped MoE 8x7B (M=256)\n42.13 TF", (8, -8)),
-        (37.5, 4.91, "v0.4.0 Sparse MoE\n4.91 TF", (8, -10)),
-        (204.8, 101.62, "GQA FlashAttn-2 (1024)\n101.62 TF", (-115, -22)),
-        (410.0, 88.56, "NVFP4 (e2m1) LUT\n88.56 TF", (8, -12)),
-        (410.0, 132.58, "INT4 Dequant+GEMM\n132.58 TF", (8, -4)),
-        (240.0, 136.14, "FP16 GEMM (256x14336)\n136.14 TF", (-130, 10)),
-        (341.0, 150.26, "FP16 GEMM (512x4096)\n150.26 TF", (-95, 16)),
+        (2.0, 3.22, "Decode GEMV (M=1)\n3.22 TF", (14, -18), "left"),
+        (37.5, 42.13, "Grouped MoE 8x7B (M=256)\n42.13 TF", (-36, 26), "right"),
+        (37.5, 4.91, "v0.4.0 Sparse MoE\n4.91 TF", (14, -14), "left"),
+        (204.8, 101.62, "GQA FlashAttn-2 (1024)\n101.62 TF", (-20, -28), "right"),
+        (240.0, 136.14, "FP16 GEMM (256×14336)\n136.14 TF", (-52, 54), "right"),
+        (341.0, 150.26, "FP16 GEMM (512×4096)\n150.26 TF", (0, 25), "center"),
+        (410.0, 132.58, "INT4 Dequant+GEMM\n132.58 TF", (22, -4), "left"),
+        (410.0, 88.56, "NVFP4 (e2m1) LUT\n88.56 TF", (22, -16), "left"),
     ]
     sm89_pts = [
-        (204.8, 21.76, "Ada GQA Attn\n21.76 TF", (-90, -24)),
-        (410.0, 23.37, "Ada INT4 GEMM\n23.37 TF", (8, -18)),
-        (240.0, 28.18, "Ada FP16 GEMM\n28.18 TF", (-45, 12)),
+        (204.8, 21.76, "Ada GQA Attn\n21.76 TF", (-18, -26), "right"),
+        (240.0, 28.18, "Ada FP16 GEMM\n28.18 TF", (-12, 24), "right"),
+        (410.0, 23.37, "Ada INT4 GEMM\n23.37 TF", (20, -14), "left"),
     ]
 
-    for x_v, y_v, txt, (dx, dy) in sm120_pts:
-        ax.scatter([x_v], [y_v], color=NAVY, marker="o", s=70, zorder=7, edgecolors="white", lw=0.8)
+    for x_v, y_v, txt, (dx, dy), ha_val in sm120_pts:
+        ax.scatter([x_v], [y_v], color=NAVY, marker="o", s=72, zorder=7, edgecolors="white", lw=0.8)
         ax.annotate(
             txt,
             (x_v, y_v),
             xytext=(dx, dy),
             textcoords="offset points",
-            fontsize=8,
+            fontsize=8.2,
             fontweight="bold",
             color=NAVY,
+            ha=ha_val,
+            va="center",
+            arrowprops=arrow_kw,
         )
 
-    for x_v, y_v, txt, (dx, dy) in sm89_pts:
+    for x_v, y_v, txt, (dx, dy), ha_val in sm89_pts:
         ax.scatter(
-            [x_v], [y_v], color=CORAL, marker="^", s=70, zorder=7, edgecolors="white", lw=0.8
+            [x_v], [y_v], color=CORAL, marker="^", s=72, zorder=7, edgecolors="white", lw=0.8
         )
         ax.annotate(
             txt,
             (x_v, y_v),
             xytext=(dx, dy),
             textcoords="offset points",
-            fontsize=8,
+            fontsize=8.2,
             fontweight="bold",
             color=CORAL,
+            ha=ha_val,
+            va="center",
+            arrowprops=arrow_kw,
         )
 
     # Upward arrow for MoE optimization jump
@@ -321,7 +330,7 @@ def generate_fig2_roofline(out_dir: Path) -> Path:
         29.0,
         14.0,
         "8.6× @ M=64\n68.4× @ M=256",
-        fontsize=8,
+        fontsize=8.5,
         fontweight="bold",
         color=CRIMSON,
         ha="right",
@@ -329,12 +338,11 @@ def generate_fig2_roofline(out_dir: Path) -> Path:
 
     ax.set_xlabel("Arithmetic Intensity (FLOPs / HBM Byte)")
     ax.set_ylabel("Achieved Throughput (TFLOPS)")
-    ax.set_xlim(0.5, 1000)
-    ax.set_ylim(0.5, 420)
+    ax.set_xlim(0.5, 1600)
+    ax.set_ylim(0.5, 520)
     ax.set_title("Empirical Log-Log Roofline: Ada Lovelace (sm_89) vs. Blackwell (sm_120)")
     ax.legend(loc="upper left", fontsize=8.5)
 
-    plt.tight_layout()
     out_path = out_dir / "roofline_ada_vs_blackwell.png"
     plt.savefig(out_path, bbox_inches="tight")
     plt.close()
@@ -343,7 +351,7 @@ def generate_fig2_roofline(out_dir: Path) -> Path:
 
 def generate_fig3_microbenchmarks(out_dir: Path) -> Path:
     """Figure 3: 2x2 Micro-Benchmark Suite (GEMM, INT4/NVFP4, FFN Cost Model, GQA Attention)."""
-    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    fig, axes = plt.subplots(2, 2, figsize=(16, 11), constrained_layout=True)
 
     # (a) Prefill GEMM Throughput (sm_120)
     ax = axes[0, 0]
@@ -364,18 +372,18 @@ def generate_fig3_microbenchmarks(out_dir: Path) -> Path:
         for b, v in zip(bars, vals, strict=True):
             ax.text(
                 b.get_x() + b.get_width() / 2.0,
-                v + 4,
+                v + 5,
                 f"{v:.0f}",
                 ha="center",
-                fontsize=7.5,
+                fontsize=8,
                 fontweight="bold",
             )
     ax.set_xticks(x)
     ax.set_xticklabels(shapes)
     ax.set_ylabel("Throughput (TFLOPS)")
-    ax.set_ylim(0, 355)
+    ax.set_ylim(0, 385)
     ax.set_title("(a) Prefill FP16 GEMM Throughput (RTX 5090, sm_120)")
-    ax.legend(loc="upper left", fontsize=8)
+    ax.legend(loc="upper left", fontsize=8.5)
 
     # (b) Fused INT4 Dequant+GEMM Speedup vs Separate
     ax = axes[0, 1]
@@ -394,7 +402,7 @@ def generate_fig3_microbenchmarks(out_dir: Path) -> Path:
     for b, sp, tf in zip(bars, speedups, tflops_lbl, strict=True):
         ax.text(
             b.get_x() + b.get_width() / 2.0,
-            sp + 0.12,
+            sp + 0.14,
             f"{sp:.2f}×\n({tf})",
             ha="center",
             fontsize=8.5,
@@ -403,7 +411,7 @@ def generate_fig3_microbenchmarks(out_dir: Path) -> Path:
     ax.set_xticks(x)
     ax.set_xticklabels(dq_shapes, fontsize=8.5)
     ax.set_ylabel("Speedup vs. Separate Dequant + GEMM (×)")
-    ax.set_ylim(0, 6.2)
+    ax.set_ylim(0, 6.6)
     ax.set_title("(b) Fused INT4 Dequant+GEMM Speedup (sm_120)")
 
     # (c) Occupancy-Aware FFN Cost Model Ablation
@@ -417,19 +425,32 @@ def generate_fig3_microbenchmarks(out_dir: Path) -> Path:
     b2 = ax.bar(x + w / 2, v030, w, label="v0.3.0+ (Occupancy Cost Model)", color=TEAL)
     ax.axhline(1.0, color=CRIMSON, linestyle="--", lw=1.3, label="1.0× Parity")
     for b, v in zip(b1, v020, strict=True):
-        ax.text(
-            b.get_x() + b.get_width() / 2.0,
-            v + 0.15,
-            f"{v:.2f}×",
-            ha="center",
-            fontsize=8,
-            fontweight="bold",
-            color=CORAL,
-        )
+        # Put label inside the bar when below the 1.0x parity line so it never touches the dashed line
+        if v < 1.0:
+            ax.text(
+                b.get_x() + b.get_width() / 2.0,
+                v * 0.5,
+                f"{v:.2f}×",
+                ha="center",
+                va="center",
+                fontsize=8,
+                fontweight="bold",
+                color="white",
+            )
+        else:
+            ax.text(
+                b.get_x() + b.get_width() / 2.0,
+                v + 0.18,
+                f"{v:.2f}×",
+                ha="center",
+                fontsize=8,
+                fontweight="bold",
+                color=CORAL,
+            )
     for b, v in zip(b2, v030, strict=True):
         ax.text(
             b.get_x() + b.get_width() / 2.0,
-            v + 0.15,
+            v + 0.18,
             f"{v:.2f}×",
             ha="center",
             fontsize=8,
@@ -439,7 +460,7 @@ def generate_fig3_microbenchmarks(out_dir: Path) -> Path:
     ax.set_xticks(x)
     ax.set_xticklabels(seqs)
     ax.set_ylabel("Speedup vs. 3 Separate CUDA Kernels (×)")
-    ax.set_ylim(0, 9.8)
+    ax.set_ylim(0, 10.5)
     ax.set_title("(c) Occupancy-Aware FFN Cost Model Ablation (sm_120)")
     ax.legend(loc="upper right", fontsize=8.5)
 
@@ -454,20 +475,22 @@ def generate_fig3_microbenchmarks(out_dir: Path) -> Path:
     b_ct = ax.bar(x - w, ct_a, w, label="CuTile FlashAttn-2", color=NAVY)
     b_pt = ax.bar(x, pt_a, w, label="PyTorch SDPA", color=TEAL)
     ax.bar(x + w, cu_a, w, label="CUDA C++ Baseline", color=GOLD)
-    for b, v in zip(b_ct, ct_a, strict=True):
+    for i, (b, v) in enumerate(zip(b_ct, ct_a, strict=True)):
+        x_off = -0.04 if i == 1 else 0.0
         ax.text(
-            b.get_x() + b.get_width() / 2.0,
-            v + 2.0,
+            b.get_x() + b.get_width() / 2.0 + x_off,
+            v + 2.2,
             f"{v:.1f}",
             ha="center",
             fontsize=8,
             fontweight="bold",
             color=NAVY,
         )
-    for b, v in zip(b_pt, pt_a, strict=True):
+    for i, (b, v) in enumerate(zip(b_pt, pt_a, strict=True)):
+        x_off = 0.04 if i == 1 else 0.0
         ax.text(
-            b.get_x() + b.get_width() / 2.0,
-            v + 2.0,
+            b.get_x() + b.get_width() / 2.0 + x_off,
+            v + 2.2,
             f"{v:.1f}",
             ha="center",
             fontsize=8,
@@ -477,11 +500,10 @@ def generate_fig3_microbenchmarks(out_dir: Path) -> Path:
     ax.set_xticks(x)
     ax.set_xticklabels(a_seqs)
     ax.set_ylabel("Throughput (TFLOPS)")
-    ax.set_ylim(0, 120)
+    ax.set_ylim(0, 128)
     ax.set_title("(d) GQA FlashAttention-2 (32:8 Heads) Scaling (sm_120)")
     ax.legend(loc="upper left", fontsize=8.5)
 
-    plt.tight_layout()
     out_path = out_dir / "fig3_microbenchmark_suite.png"
     plt.savefig(out_path, bbox_inches="tight")
     plt.close()
@@ -490,7 +512,7 @@ def generate_fig3_microbenchmarks(out_dir: Path) -> Path:
 
 def generate_fig4_systems_telemetry(out_dir: Path) -> Path:
     """Figure 4: 1x2 Systems Telemetry (30-Min Sustained Stability & Stage -1 PCIe DMA Overlap)."""
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5.5))
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6), constrained_layout=True)
 
     # (a) 30-Minute Sustained Throughput Stability
     csv_5090 = Path("benchmarks/results_5090/sustained/thermal.csv")
@@ -538,7 +560,7 @@ def generate_fig4_systems_telemetry(out_dir: Path) -> Path:
     ax1.set_xlabel("Elapsed Time (minutes)")
     ax1.set_ylabel("Decode Throughput (tok/s)")
     ax1.set_xlim(0, 30.2)
-    ax1.set_ylim(0, 118)
+    ax1.set_ylim(0, 120)
     ax1.set_title("(a) 30-Minute Sustained Throughput Stability (1,800s)")
     ax1.legend(loc="center right", fontsize=8.5)
 
@@ -556,7 +578,7 @@ def generate_fig4_systems_telemetry(out_dir: Path) -> Path:
     for b, p in zip(bars, pcts, strict=True):
         ax2.text(
             b.get_x() + b.get_width() / 2.0,
-            p + 1.8,
+            p + 2.0,
             f"{p:.1f}%",
             ha="center",
             fontsize=9.5,
@@ -565,11 +587,96 @@ def generate_fig4_systems_telemetry(out_dir: Path) -> Path:
     ax2.set_xticks(x)
     ax2.set_xticklabels(labels, fontsize=8.5)
     ax2.set_ylabel("Overlap / Bus Utilization (%)")
-    ax2.set_ylim(0, 112)
+    ax2.set_ylim(0, 118)
     ax2.set_title("(b) Stage -1 PCIe DMA Overlap & Bus Saturation")
 
-    plt.tight_layout()
     out_path = out_dir / "fig4_systems_telemetry.png"
+    plt.savefig(out_path, bbox_inches="tight")
+    plt.close()
+    return out_path
+
+
+def generate_real_models_v100(out_dir: Path) -> Path:
+    """Real Checkpoint Evaluation (Mistral-7B, Mixtral-8x7B MoE, Llama-2-70B Hybrid)."""
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6), constrained_layout=True)
+
+    models = [
+        "Mistral-7B-v0.1\n(4.16 GB · 32 HBM / 0 PCIe)",
+        "Mixtral-8x7B-v0.1\n(23.8 GB · 32 HBM / 0 PCIe)",
+        "Llama-2-70B-Chat\n(35.3 GB · 55 HBM / 25 PCIe)",
+    ]
+    decode_tps = [96.57, 41.83, 4.07]
+    prefill_tps = [4120.0, 2786.68, 859.19]
+
+    # (a) Decode vs Prefill Throughput (Log Scale)
+    x = np.arange(len(models))
+    w = 0.35
+    b1 = ax1.bar(x - w / 2, prefill_tps, w, label="Prefill Throughput (tok/s)", color=NAVY)
+    b2 = ax1.bar(x + w / 2, decode_tps, w, label="Decode Throughput (tok/s)", color=TEAL)
+    ax1.set_yscale("log")
+    for b, v in zip(b1, prefill_tps, strict=True):
+        ax1.text(
+            b.get_x() + b.get_width() / 2.0,
+            v * 1.18,
+            f"{v:,.1f}" if v >= 100 else f"{v:.2f}",
+            ha="center",
+            va="bottom",
+            fontsize=8.5,
+            fontweight="bold",
+            color=NAVY,
+        )
+    for b, v in zip(b2, decode_tps, strict=True):
+        ax1.text(
+            b.get_x() + b.get_width() / 2.0,
+            v * 1.18,
+            f"{v:.2f}",
+            ha="center",
+            va="bottom",
+            fontsize=8.5,
+            fontweight="bold",
+            color=TEAL,
+        )
+    ax1.set_xticks(x)
+    ax1.set_xticklabels(models, fontsize=8.5)
+    ax1.set_ylabel("Throughput (tok/s, log scale)")
+    ax1.set_ylim(1, 18000)
+    ax1.set_title("(a) Real 4-Bit GPTQ Checkpoint Throughput (RTX 5090)")
+    ax1.legend(loc="upper right", fontsize=8.5)
+
+    # (b) HBM vs Pinned Host DDR5 Memory Partitioning
+    hbm_gb = [4.32, 25.26, 27.44]
+    ddr5_gb = [0.0, 1.93, 9.08]
+    b3 = ax2.bar(x - w / 2, hbm_gb, w, label="GPU HBM VRAM (GB)", color=CORAL)
+    b4 = ax2.bar(x + w / 2, ddr5_gb, w, label="Pinned Host DDR5 RSS (GB)", color=GOLD)
+    ax2.axhline(32.0, color=CRIMSON, linestyle="--", lw=1.6, label="32.0 GB RTX 5090 HBM Ceiling")
+    for b, v in zip(b3, hbm_gb, strict=True):
+        ax2.text(
+            b.get_x() + b.get_width() / 2.0,
+            v + 0.7,
+            f"{v:.2f} GB",
+            ha="center",
+            fontsize=8.5,
+            fontweight="bold",
+            color=CORAL,
+        )
+    for b, v in zip(b4, ddr5_gb, strict=True):
+        ax2.text(
+            b.get_x() + b.get_width() / 2.0,
+            v + 0.7,
+            f"{v:.2f} GB",
+            ha="center",
+            fontsize=8.5,
+            fontweight="bold",
+            color="#9a6b00",
+        )
+    ax2.set_xticks(x)
+    ax2.set_xticklabels(models, fontsize=8.5)
+    ax2.set_ylabel("Memory Footprint (GB)")
+    ax2.set_ylim(0, 42)
+    ax2.set_title("(b) Zero-OOM Hybrid HBM + DDR5 Residency")
+    ax2.legend(loc="upper left", fontsize=8.5)
+
+    out_path = out_dir / "real_models_v100.png"
     plt.savefig(out_path, bbox_inches="tight")
     plt.close()
     return out_path
@@ -584,6 +691,7 @@ def main() -> None:
         generate_fig2_roofline,
         generate_fig3_microbenchmarks,
         generate_fig4_systems_telemetry,
+        generate_real_models_v100,
     ):
         p = fn(out_dir)
         print(f"Generated {p} ({p.stat().st_size // 1024} KB)")
