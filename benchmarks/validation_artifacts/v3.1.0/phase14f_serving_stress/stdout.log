@@ -1,0 +1,7 @@
+[Phase 14F] Server pid=878581 ready in 10612.5ms on http://127.0.0.1:51359
+  [Phase 14F | C=  1] ok=1/1 | agg=87.93 tok/s | TTFT p50=82.2ms | RSS=5437.3MB
+  [Phase 14F | C=  4] ok=4/4 | agg=113.41 tok/s | TTFT p50=36.4ms | RSS=5437.3MB
+  [Phase 14F | C= 16] ok=16/16 | agg=189.42 tok/s | TTFT p50=116.0ms | RSS=5437.3MB
+  [Phase 14F | C= 64] ok=64/64 | agg=189.01 tok/s | TTFT p50=465.0ms | RSS=5437.3MB
+  [Phase 14F | C=128] ok=128/128 | agg=198.86 tok/s | TTFT p50=883.2ms | RSS=5437.3MB
+[Phase 14F] Starting sustained soak for 900s...

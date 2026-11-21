@@ -29,6 +29,9 @@ env/
 .mypy_cache/
 .ruff_cache/
 *.log
+!benchmarks/validation_artifacts/**/commands.log
+!benchmarks/validation_artifacts/**/stdout.log
+!benchmarks/validation_artifacts/**/stderr.log
 
 # Benchmark outputs (keep .gitkeep)
 benchmarks/results/*.csv

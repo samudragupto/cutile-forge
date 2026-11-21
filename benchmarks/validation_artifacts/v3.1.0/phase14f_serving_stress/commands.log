@@ -1,0 +1,1 @@
+benchmarks/production/bench_serving_stress.py --soak-seconds 900 --max-concurrent 128

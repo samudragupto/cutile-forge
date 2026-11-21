@@ -1,0 +1,1 @@
+benchmarks/production/bench_quant_e2e_parity.py --layers 8

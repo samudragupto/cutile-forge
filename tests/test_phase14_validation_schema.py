@@ -128,14 +128,15 @@ def test_report_generation_and_baseline_regression_gate(tmp_path: Path) -> None:
     from benchmarks.production.compare_with_baseline import compare_with_baseline
     from scripts.build_validation_report import build_validation_reports
 
+    repo_root = Path(__file__).resolve().parents[1]
     art_root = tmp_path / "artifacts"
-    fixture_src = Path("tests/fixtures/validation_sample")
+    fixture_src = repo_root / "tests/fixtures/validation_sample"
     shutil.copytree(fixture_src, art_root)
     docs_out = tmp_path / "docs"
 
     summary = build_validation_reports(
         artifacts_root=art_root,
-        results_csv_dir=Path("benchmarks/results_5090"),
+        results_csv_dir=repo_root / "benchmarks/results_5090",
         docs_dir=docs_out,
         version="3.1.0",
     )
@@ -145,7 +146,7 @@ def test_report_generation_and_baseline_regression_gate(tmp_path: Path) -> None:
     assert (docs_out / "QUANTIZATION_ACCURACY_REPORT.md").exists()
 
     cmp_res = compare_with_baseline(
-        summary, Path("benchmarks/baselines/v3.0.0_rtx5090_baseline.json")
+        summary, repo_root / "benchmarks/baselines/v3.0.0_rtx5090_baseline.json"
     )
     assert cmp_res.passed is True
 
@@ -154,7 +155,7 @@ def test_report_generation_and_baseline_regression_gate(tmp_path: Path) -> None:
     bad_summary["headline"] = dict(summary["headline"])
     bad_summary["headline"]["native_single_stream_tok_s"] = 100.0
     cmp_bad = compare_with_baseline(
-        bad_summary, Path("benchmarks/baselines/v3.0.0_rtx5090_baseline.json")
+        bad_summary, repo_root / "benchmarks/baselines/v3.0.0_rtx5090_baseline.json"
     )
     assert cmp_bad.passed is False
     assert any(r["metric"] == "native_single_stream_tok_s" for r in cmp_bad.regressions)
