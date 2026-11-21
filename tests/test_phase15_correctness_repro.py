@@ -204,3 +204,38 @@ def test_fp8_tensor_native_vs_reference_parity() -> None:
     max_diff = (nat.float() - ref.float()).abs().max().item()
     assert cos >= 0.9999, f"FP8 native vs reference cosine degraded: {cos}"
     assert max_diff < 5e-2, f"FP8 native vs reference max_diff too high: {max_diff}"
+
+
+def test_weight_streamer_multistream_no_corruption() -> None:
+    """Reproduce WeightStreamer caching-allocator race across copy_stream and compute_stream."""
+    if not torch.cuda.is_available():
+        return
+
+    from cutile_forge.forge.weight_streamer import WeightStreamer
+
+    streamer = WeightStreamer(num_slots=2, device="cuda", model_gb=40.0, gpu_vram_gb=32.0)
+    dim = 1024
+    w_good = WeightStreamer.pin_tensor(torch.eye(dim, dtype=torch.float16))
+    w_nan = WeightStreamer.pin_tensor(torch.full((dim, dim), float("nan"), dtype=torch.float16))
+    busy = torch.randn((4096, 4096), device="cuda", dtype=torch.float16) * 0.01
+    x = torch.ones((64, dim), device="cuda", dtype=torch.float16)
+
+    outputs: list[torch.Tensor] = []
+    torch.cuda.synchronize()
+    for step in range(4):
+        slot = streamer.acquire_layer(step, {"w": w_good})
+        w_active = slot["w"]
+        del slot
+        z = busy
+        for _ in range(15):
+            z = z @ busy
+        y = x @ w_active
+        del w_active
+        outputs.append(y)
+        streamer.release_layer(step)
+        _ = streamer.prefetch_layer(step + 10, {"w": w_nan})
+
+    torch.cuda.synchronize()
+    for step, y in enumerate(outputs):
+        assert torch.isfinite(y).all(), f"Step {step} corrupted by copy_stream overwrite"
+        assert torch.allclose(y, x, atol=1e-3, rtol=1e-3)
