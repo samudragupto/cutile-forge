@@ -89,8 +89,15 @@ def build_baselines(verbose: bool = True) -> Path:
         if cu_path.exists():
             sources.append(str(cu_path))
 
-    # Target sm_89 (RTX 4060 Laptop) cleanly; allow override via TORCH_CUDA_ARCH_LIST
-    os.environ.setdefault("TORCH_CUDA_ARCH_LIST", "8.9")
+    # Detect target CUDA architecture or default to multi-arch Ada + Blackwell
+    if "TORCH_CUDA_ARCH_LIST" not in os.environ:
+        import torch
+
+        if torch.cuda.is_available():
+            maj, mn = torch.cuda.get_device_capability(0)
+            os.environ["TORCH_CUDA_ARCH_LIST"] = f"{maj}.{mn}"
+        else:
+            os.environ["TORCH_CUDA_ARCH_LIST"] = "8.9;12.0"
 
     extra_cuda_cflags = ["-O3", "--use_fast_math"]
     if platform.system() == "Windows":

@@ -1,9 +1,11 @@
-"""Unified CLI entrypoint (`cutile-forge serve` and `cutile-forge bench`)."""
+"""Unified CLI entrypoint (`cutile-forge serve`, `bench`, and `doctor`)."""
 
 from __future__ import annotations
 
 import argparse
+import json
 import os
+import sys
 from pathlib import Path
 
 
@@ -24,8 +26,28 @@ def main() -> None:
     bench_p.add_argument("--gpu", default="rtx5090")
     bench_p.add_argument("--micro-only", action="store_true")
 
+    doc_p = sub.add_parser("doctor", help="Diagnose CUDA, cuda.tile, and system compatibility")
+    doc_p.add_argument("--json", action="store_true", help="Emit structured JSON report")
+    doc_p.add_argument(
+        "--require-gpu",
+        action="store_true",
+        help="Fail if CUDA GPU or cuda.tile is unavailable",
+    )
+
     args = parser.parse_args()
-    os.environ["CUTILE_ARCH"] = args.target
+    target = getattr(args, "target", None)
+    if target is not None:
+        os.environ["CUTILE_ARCH"] = target
+
+    if args.command == "doctor":
+        from cutile_forge.doctor import run_diagnostics
+
+        report = run_diagnostics(require_gpu=args.require_gpu)
+        if args.json:
+            print(json.dumps(report.to_dict(), indent=2))
+        else:
+            print(report.format_text())
+        sys.exit(0 if report.ok else 1)
 
     if args.command == "serve":
         import uvicorn

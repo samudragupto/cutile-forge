@@ -96,9 +96,12 @@ def _act_o_layernorm(graph: FusionGraph, node: TileNode) -> bool:
 
 
 def _cond_gemm_silu(graph: FusionGraph, node: TileNode) -> bool:
-    return node.op_type in (OpType.FFN_UP_GEMM, OpType.GEMM, OpType.GEMM_DEQUANT) and (
-        _single_successor(graph, node, OpType.SILU) is not None
-    )
+    return node.op_type in (
+        OpType.FFN_UP_GEMM,
+        OpType.GEMM,
+        OpType.GEMM_DEQUANT,
+        OpType.MATMUL,
+    ) and (_single_successor(graph, node, OpType.SILU) is not None)
 
 
 def _act_gemm_silu(graph: FusionGraph, node: TileNode) -> bool:
@@ -113,8 +116,12 @@ def _act_gemm_silu(graph: FusionGraph, node: TileNode) -> bool:
 
 
 def _cond_gemm_silu_down(graph: FusionGraph, node: TileNode) -> bool:
-    return node.op_type == OpType.GEMM_SILU and (
+    if node.op_type != OpType.GEMM_SILU:
+        return False
+    return (
         _single_successor(graph, node, OpType.FFN_DOWN_GEMM) is not None
+        or _single_successor(graph, node, OpType.MATMUL) is not None
+        or _single_successor(graph, node, OpType.GEMM) is not None
     )
 
 
@@ -149,6 +156,7 @@ def _act_ffn_ln_res(graph: FusionGraph, node: TileNode) -> bool:
         dst.node_id,
         new_op=OpType.FUSED_FFN_NORM,
         new_name="Fused FFN+LayerNorm+Residual",
+        attrs={"fused_tail_op": dst.op_type.value},
     )
     return True
 

@@ -11,6 +11,14 @@ from typing import Any
 class OpType(StrEnum):
     """Supported primitive and fused tile operations in a TFG."""
 
+    INPUT = "input"
+    MATMUL = "matmul"
+    ADD = "add"
+    GELU = "gelu"
+    SOFTMAX = "softmax"
+    REDUCE_SUM = "reduce_sum"
+    TRANSPOSE = "transpose"
+    CUSTOM = "custom"
     DEQUANT = "dequant"
     GEMM = "gemm"
     GEMM_DEQUANT = "gemm_dequant"
@@ -42,6 +50,9 @@ class DataTensor:
     residency: str = "hbm"  # "hbm", "ddr5", "sram", "register"
     quantized: bool = False
     group_size: int = 128
+    layout: str = "row_major"
+    strides: tuple[int, ...] | None = None
+    alignment: int = 16
 
     @property
     def nbytes(self) -> int:
@@ -94,6 +105,7 @@ class FusionGraph:
         self.name = name
         self.nodes: dict[str, TileNode] = {}
         self.edges: list[Edge] = []
+        self.graph_outputs: list[str] = []
 
     def add_node(self, node: TileNode) -> TileNode:
         if node.node_id in self.nodes:
@@ -143,11 +155,18 @@ class FusionGraph:
         dst = self.nodes[dst_id]
         merged_attrs = {**src.attrs, **dst.attrs, **(attrs or {})}
         merged_ops = list(src.fused_ops) + list(dst.fused_ops)
+        src_out_names = {t.name for t in src.outputs}
+        fused_inputs = list(src.inputs)
+        seen_names = {t.name for t in fused_inputs}
+        for inp in dst.inputs:
+            if inp.name not in src_out_names and inp.name not in seen_names:
+                fused_inputs.append(inp)
+                seen_names.add(inp.name)
         fused = TileNode(
             node_id=src.node_id,
             op_type=new_op,
             name=new_name or f"{src.name}+{dst.name}",
-            inputs=list(src.inputs),
+            inputs=fused_inputs,
             outputs=list(dst.outputs),
             tile_shape=src.tile_shape,
             pipeline_stages=max(src.pipeline_stages, dst.pipeline_stages),
@@ -172,6 +191,7 @@ class FusionGraph:
         del self.nodes[dst_id]
         self.nodes[fused.node_id] = fused
         self.edges = new_edges
+        self.graph_outputs = [fused.node_id if nid == dst_id else nid for nid in self.graph_outputs]
         return fused
 
     def topological_order(self) -> list[TileNode]:

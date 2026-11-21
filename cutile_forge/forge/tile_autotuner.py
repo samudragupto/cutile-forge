@@ -6,7 +6,10 @@ from dataclasses import dataclass
 
 import torch
 
-from cutile_forge.forge.tile_pipeliner import SM89_MAX_SMEM_BYTES, estimate_smem_bytes
+from cutile_forge.forge.tile_pipeliner import (
+    estimate_smem_bytes,
+    resolve_target_specs,
+)
 
 
 @dataclass(frozen=True)
@@ -99,9 +102,16 @@ def select_ffn_execution_strategy(
 class TileAutotuner:
     """Searches 12 tile configs for a given (M, N, K) shape and target GPU."""
 
-    def __init__(self, target: str = "sm_89", smem_limit_bytes: int = SM89_MAX_SMEM_BYTES) -> None:
-        self.target = target
-        self.smem_limit_bytes = smem_limit_bytes
+    def __init__(
+        self,
+        target: str = "sm_89",
+        smem_limit_bytes: int | None = None,
+        num_sms: int | None = None,
+    ) -> None:
+        resolved_arch, resolved_sms, resolved_smem = resolve_target_specs(target)
+        self.target = resolved_arch
+        self.num_sms = resolved_sms if num_sms is None else num_sms
+        self.smem_limit_bytes = resolved_smem if smem_limit_bytes is None else smem_limit_bytes
         self._cache: dict[tuple[int, int, int, bool], TileConfig] = {}
 
     def valid_configs(self, quantized: bool = False) -> list[TileConfig]:
@@ -114,16 +124,22 @@ class TileAutotuner:
         ]
 
     @staticmethod
-    def _heuristic_score(cfg: TileConfig, m: int, n: int, k: int) -> float:
+    def _heuristic_score(
+        cfg: TileConfig,
+        m: int,
+        n: int,
+        k: int,
+        num_sms: int = 24,
+    ) -> float:
         """Score a config analytically: lower is better (waste + wave quantization)."""
         m_tiles = (m + cfg.tm - 1) // cfg.tm
         n_tiles = (n + cfg.tn - 1) // cfg.tn
         padded_m = m_tiles * cfg.tm
         padded_n = n_tiles * cfg.tn
         waste = float(padded_m * padded_n) / max(1.0, float(m * n))
-        # Prefer >= 24 CTAs on RTX 4060 (24 SMs) and higher arithmetic intensity
+        # Prefer full SM utilization on target GPU and higher arithmetic intensity
         num_ctas = m_tiles * n_tiles
-        sm_underfill = max(1.0, 24.0 / max(1, num_ctas))
+        sm_underfill = max(1.0, float(num_sms) / max(1, num_ctas))
         arith_intensity = (2.0 * cfg.tm * cfg.tn) / max(1.0, float(cfg.tm + cfg.tn))
         return (waste * sm_underfill) / (arith_intensity * (1.0 + 0.05 * cfg.pipeline_stages))
 
@@ -180,6 +196,8 @@ class TileAutotuner:
             self._cache[key] = best_cfg
             return best_cfg
 
-        best_cfg = min(candidates, key=lambda c: self._heuristic_score(c, m, n, k))
+        best_cfg = min(
+            candidates, key=lambda c: self._heuristic_score(c, m, n, k, num_sms=self.num_sms)
+        )
         self._cache[key] = best_cfg
         return best_cfg

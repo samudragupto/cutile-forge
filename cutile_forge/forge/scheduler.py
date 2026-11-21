@@ -1,10 +1,11 @@
-"""SM-aware tile scheduler for RTX 4060 (24 SMs, sm_89) and L2 cache swizzling."""
+"""SM-aware tile scheduler for Ada (sm_89), Blackwell (sm_120), and L2 cache swizzling."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
 from cutile_forge.forge.fusion_graph import FusionGraph
+from cutile_forge.forge.tile_pipeliner import resolve_target_specs
 
 
 @dataclass
@@ -19,8 +20,14 @@ class ScheduleEntry:
     stream_id: int
 
 
-def schedule_tfg(graph: FusionGraph, num_sms: int = 24) -> list[ScheduleEntry]:
+def schedule_tfg(
+    graph: FusionGraph,
+    num_sms: int | None = None,
+    target: str | None = None,
+) -> list[ScheduleEntry]:
     """Assign grid dimensions, L2 swizzle group, and wave estimates across SMs."""
+    if num_sms is None:
+        _, num_sms, _ = resolve_target_specs(target)
     entries: list[ScheduleEntry] = []
     for idx, node in enumerate(graph.topological_order()):
         m = int(node.attrs.get("M", 256))

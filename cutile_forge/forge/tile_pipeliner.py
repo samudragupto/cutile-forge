@@ -2,12 +2,34 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
+
+import torch
 
 from cutile_forge.forge.fusion_graph import FusionGraph, OpType
 
-# Target sm_89 (Ada Lovelace RTX 4060) configurable shared memory limit per SM (bytes)
+# Target sm_89 (Ada Lovelace RTX 4060) and sm_120 (Blackwell RTX 5090) SMEM limits per SM
 SM89_MAX_SMEM_BYTES = 100 * 1024
+SM120_MAX_SMEM_BYTES = 228 * 1024
+
+
+def resolve_target_specs(target: str | None = None) -> tuple[str, int, int]:
+    """Resolve `(arch, num_sms, smem_limit_bytes)` for an explicit target or `'auto'`."""
+    if target is None or target == "auto":
+        if torch.cuda.is_available():
+            props = torch.cuda.get_device_properties(0)
+            arch = f"sm_{props.major}{props.minor}"
+            default_smem = SM120_MAX_SMEM_BYTES if props.major >= 10 else SM89_MAX_SMEM_BYTES
+            smem = int(getattr(props, "shared_memory_per_multiprocessor", default_smem))
+            return arch, int(props.multi_processor_count), smem
+        target = os.environ.get("CUTILE_ARCH", "sm_120")
+
+    if target == "sm_89":
+        return "sm_89", 24, SM89_MAX_SMEM_BYTES
+    if target == "sm_120":
+        return "sm_120", 170, SM120_MAX_SMEM_BYTES
+    return target, 24, SM89_MAX_SMEM_BYTES
 
 
 @dataclass

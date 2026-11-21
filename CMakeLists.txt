@@ -3,7 +3,9 @@ project(cutile_forge_baselines LANGUAGES CXX CUDA)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CUDA_STANDARD 20)
-set(CMAKE_CUDA_ARCHITECTURES 89)
+if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+  set(CMAKE_CUDA_ARCHITECTURES "89;120")
+endif()
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
 find_package(CUDAToolkit REQUIRED)
