@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 import torch
 
 
@@ -54,3 +56,55 @@ class PinnedHostPool:
         self.hits = 0
         self.misses = 0
         self.allocations = 0
+
+
+class MemoryLifetimeAllocator:
+    """Slot-based buffer allocator reusing non-overlapping lifetime pools across TFG ops."""
+
+    def __init__(self) -> None:
+        self._slots: dict[int, torch.Tensor] = {}
+        self.peak_bytes: int = 0
+        self.total_requested_bytes: int = 0
+        self.reuse_hits: int = 0
+
+    def allocate_slot(
+        self,
+        slot_id: int,
+        shape: tuple[int, ...],
+        dtype: torch.dtype,
+        device: str | torch.device = "cpu",
+    ) -> torch.Tensor:
+        """Return a tensor view over `slot_id`'s backing buffer, growing on demand."""
+        req_dev = torch.device(
+            device if (str(device) != "cuda" or torch.cuda.is_available()) else "cpu"
+        )
+        if req_dev.type == "cuda" and req_dev.index is None:
+            req_dev = torch.device("cuda", torch.cuda.current_device())
+        numel = math.prod(shape)
+        elem_size = torch.tensor([], dtype=dtype).element_size()
+        req_bytes = numel * elem_size
+        self.total_requested_bytes += req_bytes
+
+        buf = self._slots.get(slot_id)
+        if buf is not None and buf.device == req_dev and buf.numel() >= req_bytes:
+            self.reuse_hits += 1
+        else:
+            new_buf = torch.empty((max(1, req_bytes),), dtype=torch.uint8, device=req_dev)
+            self._slots[slot_id] = new_buf
+            buf = new_buf
+            live_bytes = sum(t.numel() for t in self._slots.values())
+            self.peak_bytes = max(self.peak_bytes, live_bytes)
+
+        return buf[:req_bytes].view(dtype).view(shape)
+
+    def reuse_ratio(self) -> float:
+        """Fraction of total requested memory avoided via slot buffer reuse."""
+        if self.total_requested_bytes <= 0:
+            return 0.0
+        return max(0.0, 1.0 - (self.peak_bytes / float(self.total_requested_bytes)))
+
+    def reset(self) -> None:
+        self._slots.clear()
+        self.peak_bytes = 0
+        self.total_requested_bytes = 0
+        self.reuse_hits = 0

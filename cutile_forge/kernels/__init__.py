@@ -55,19 +55,30 @@ from cutile_forge.kernels.training import (
     cutile_silu_autograd,
 )
 from cutile_forge.kernels.transpose import cutile_transpose
+from cutile_forge.kernels.vision import (
+    CuTilePatchEmbed,
+    cutile_avg_pool2d,
+    cutile_conv2d_backward,
+    cutile_depthwise_conv2d,
+    cutile_max_pool2d,
+)
 
 __all__ = [
     "CuTileGELUFn",
     "CuTileLayerNormFn",
     "CuTileLinearFn",
+    "CuTilePatchEmbed",
     "CuTileRMSNormFn",
     "CuTileSiLUFn",
     "apply_rope",
     "cutile_adamw_step",
+    "cutile_avg_pool2d",
     "cutile_bmm",
     "cutile_bmm_backward",
     "cutile_conv2d",
+    "cutile_conv2d_backward",
     "cutile_cumsum",
+    "cutile_depthwise_conv2d",
     "cutile_gather",
     "cutile_gelu",
     "cutile_gelu_autograd",
@@ -80,6 +91,7 @@ __all__ = [
     "cutile_layernorm_backward",
     "cutile_linear_autograd",
     "cutile_linear_backward",
+    "cutile_max_pool2d",
     "cutile_multi_tensor_adamw",
     "cutile_reduce_max",
     "cutile_reduce_sum",

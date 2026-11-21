@@ -30,10 +30,13 @@ class TensorStreamer:
         max_vram_bytes: int | None = None,
         device: str | torch.device = "cuda",
         host_pool: PinnedHostPool | None = None,
+        adaptive_slots: bool = False,
     ) -> None:
         if num_slots < 1:
             raise ValueError(f"num_slots must be >= 1, got {num_slots}")
         self.num_slots = num_slots
+        self._max_slots = max(2, num_slots)
+        self.adaptive_slots = adaptive_slots
         self.max_vram_bytes = max_vram_bytes
         self.device = torch.device(
             device if (str(device) != "cuda" or torch.cuda.is_available()) else "cpu"
@@ -66,6 +69,8 @@ class TensorStreamer:
         return key
 
     def _enforce_backpressure(self, incoming_bytes: int) -> None:
+        if self.adaptive_slots and self.max_vram_bytes is not None and incoming_bytes > 0:
+            self.num_slots = max(2, min(self._max_slots, self.max_vram_bytes // incoming_bytes))
         while len(self._slots) >= self.num_slots:
             self.evict_lru()
         if self.max_vram_bytes is not None:
@@ -137,3 +142,13 @@ class TensorStreamer:
             self._release_staged_host(buf)
         self._slots.clear()
         self.vram_used_bytes = 0
+
+
+def p2p_capable(src_device: int = 0, dst_device: int = 1) -> bool:
+    """Return True if CUDA peer-to-peer DMA access is supported between `src` and `dst`."""
+    if not torch.cuda.is_available() or torch.cuda.device_count() <= max(src_device, dst_device):
+        return False
+    try:
+        return bool(torch.cuda.can_device_access_peer(src_device, dst_device))
+    except Exception:
+        return False
