@@ -1,14 +1,14 @@
-# CuTileForge (`v2.3.0`)
+# CuTileForge (`v2.8.0`)
 
-### *General-Purpose Tile-Fusion Graph Compiler, Native Zero-ATen Runtime, Training/Vision Ecosystem & Multi-Architecture LLM Engine on NVIDIA CuTile (`sm_89` Ada & `sm_120` Blackwell)*
+### *General-Purpose Tile-Fusion Graph Compiler, Native Zero-ATen Runtime, Universal Quantization Engine & Multi-Architecture LLM Ecosystem on NVIDIA CuTile (`sm_89` Ada & `sm_120` Blackwell)*
 
 [![CI](https://github.com/samudragupto/cutile-forge/actions/workflows/ci.yml/badge.svg)](https://github.com/samudragupto/cutile-forge/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/samudragupto/cutile-forge?color=1b365d)](https://github.com/samudragupto/cutile-forge/releases/tag/v2.3.0)
+[![Release](https://img.shields.io/github/v/release/samudragupto/cutile-forge?color=1b365d)](https://github.com/samudragupto/cutile-forge/releases/tag/v2.8.0)
 [![License: MIT](https://img.shields.io/badge/License-MIT-6c757d.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](pyproject.toml)
 [![CUDA Targets](https://img.shields.io/badge/CUDA-sm__89%20%7C%20sm__120-76B900)](https://developer.nvidia.com/cuda-toolkit)
 [![GHCR](https://img.shields.io/badge/ghcr-cutile--forge-blue)](https://github.com/samudragupto/cutile-forge/pkgs/container/cutile-forge)
-[![Tests](https://img.shields.io/badge/tests-228%2F228%20passed%20%7C%200%20skipped-16a34a)](tests/)
+[![Tests](https://img.shields.io/badge/tests-259%2F259%20passed%20%7C%200%20skipped-16a34a)](tests/)
 
 **Authors:** [Arrhat Nag](https://github.com/samudragupto) (`@samudragupto`), Rupesh Nasre
 
@@ -38,6 +38,7 @@ Deploying 7B–70B large language models across heterogeneous consumer GPUs—fr
 4. **3.20× Concurrent Tail-Latency Reduction (`363.1 ms → 113.6 ms` p99):** Async `DynamicBatcher` (`max_batch_size=16`, `8 ms` window) with `BatchedKVCache` and `RadixPrefixCache` serves OpenAI-compatible `/v1/chat/completions` + SSE streaming.
 5. **Zero-Code-Change `torch.compile(backend="cutile_forge")`:** Registered Dynamo/FX backend lowers both transformer patterns (`linear+silu+linear`, `add+layer_norm`, `scaled_dot_product_attention`) and standalone general ops (`linear`, `addmm`, `matmul`, `bmm`, `layer_norm`, `gelu`, `silu`, `softmax`, `sum`, `amax`, `cumsum`, `conv2d`, `embedding`) into CuTile kernels via `FXOpRegistry` and `ShapeGuard`.
 6. **General-Purpose CuTile Ecosystem (`v2.0.0`, 214/214 Passing Tests):** Adds imperative `cutile_forge.sdk.Graph`, `import_onnx_model(...)`, generalized TFG compiler passes (`LayoutStridePass`, `ConstantFoldPass`, `ProfitabilityPass`, `MemoryLifetimePass`), `CuTileTune v2` + `CuTileVision v2` (`cutile-forge inspect`), async `CuTileRuntime` (`PinnedHostPool`, `TensorStreamer`, `MemoryLifetimeAllocator`), training backward kernels + autograd wrappers + `cutile_multi_tensor_adamw` (**1.51×** vs. PyTorch AdamW, 10-step MLP parity within `2.83e-07`), and `1.88×` BMM / `2.05×` parallel prefix scan on RTX 5090.
+7. **Full-Step Zero-ATen Native Runtime & Production Serving (`v2.4.0 → v2.8.0`, 259/259 Passing Tests):** Captures the entire 32-layer decode step into a single zero-ATen `torch.cuda.CUDAGraph` (**171.60–172.58 tok/s** single-stream, **6.11 ms** TTFT, **5.79 ms** p50 ITL, **2,337.90–2,377.11 tok/s** at concurrency 16–64, **369.30–752.29 tok/s** speculative decoding, **3.86 ms/step** 32-layer 32K FlashDecoding), adds native CuTile kernels for **GPTQ, AWQ, GGUF (`Q4_0/Q8_0/Q4_K/Q6_K/Q4_K_M`), INT8 (`96.24 TFLOPS`), and 2D Block-Scaled FP8 (`91.77 TFLOPS`)** with `< 0.05%` WikiText-2 perplexity drift, verifies real-checkpoint parity across **Mistral-7B, Llama-2-70B, Mixtral-8x7B, Qwen2.5-0.5B, SigLIP-ViT-B/16, and Whisper-Tiny**, and provides logical multi-rank **TP, PP, EP, and Distributed KV-Cache** validation.
 
 ---
 
@@ -589,7 +590,7 @@ python3 scripts/generate_publication_figures.py
   title   = {CuTileForge: A General-Purpose Tile-Fusion Graph Compiler, Async Runtime, and Hybrid PCIe-Streaming Engine on NVIDIA CuTile},
   author  = {Nag, Arrhat and Nasre, Rupesh},
   year    = {2026},
-  version = {2.3.0},
+  version = {2.8.0},
   url     = {https://github.com/samudragupto/cutile-forge},
   license = {MIT}
 }

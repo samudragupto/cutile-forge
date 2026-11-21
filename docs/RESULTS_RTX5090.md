@@ -1,4 +1,4 @@
-# CuTileForge — RTX 5090 Benchmark Results (v2.3.0)
+# CuTileForge — RTX 5090 Benchmark Results (v2.8.0)
 
 **Authors:** Arrhat Nag (`@samudragupto`), Rupesh Nasre  
 **Hardware:** Desktop Workstation · NVIDIA GeForce RTX 5090 (GB202, sm_120, 170 SMs, 32 GB GDDR7, ~1,792 GB/s) · Intel Core Ultra 9 285K (24C/24T) · 62 GB DDR5 · PCIe 5.0 x16  
@@ -403,6 +403,71 @@ Measured on real `Mistral-7B-v0.1-GPTQ` with `torch.utils._python_dispatch.Torch
 
 - **Registered Architectures (`MODEL_REGISTRY`)**: `mistral`, `llama`, `llama3` (500K RoPE scaling + 128K vocab), `qwen2` (QKV bias), `mixtral`, `deepseek_moe` / `qwen2_moe` (shared + routed fine-grained experts), `vit` / `clip_vision` / `siglip_vision`, `llava` multimodal (`ViT -> 2-layer GELU projector -> unified LLM prefill stream`).
 - **Auto-Detected Checkpoint Formats**: `FP16`/`BF16` safetensors, `GPTQ` (`desc_act`, `group_size=32/64/128/-1`), `AWQ` 4-bit interleaved, `GGUF` (`Q4_K_M`, `Q4_0`, `Q8_0` via pure-Python GGUF v2/v3 parser), and `FP8` (`e4m3fn` scalar/channel/block-scaled), integrated with `HybridLayerBudgeter` whenever checkpoint footprint exceeds `0.85 * vram_gb`.
+
+---
+
+## Phases 9 → 13 (`v2.4.0` → `v2.8.0`) on RTX 5090 (`sm_120`)
+
+### Phase 9 (`v2.4.0`) — Full-Step Native CUDA Graph Runtime (`benchmarks/results_5090/phase9_native_runtime.csv`)
+
+Measured on real `Mistral-7B-v0.1-GPTQ` (`256` generated tokens, 5 runs, `gpu_contended=False`):
+
+| Mode | Forbidden ATen Calls | Eager `ct.launch` / Step | Prefill (`ms`) | Decode Median (`tok/s`) | Min–Max (`tok/s`) | Latency (`ms/tok`) | 256-Token 5-Prompt Parity |
+|---|---:|---:|---:|---:|---:|---:|---|
+| `v2.3.0` Step 9.0 Eager Baseline | 0 | 164 | 10.14 | 103.22 | 102.77–103.26 | 9.69 | `5/5` |
+| `v2.4.0` Native Graph (`device_masked`, 2048 ceiling) | **0** | **0** | 6.81 | 148.90 | 146.53–149.07 | 6.72 | **`5/5`** |
+| `v2.4.0` Native Graph (`bucketed`, `sync_interval=32`) | **0** | **0** | **6.66** | **171.60** | **169.31–171.66** | **5.83** | **`5/5`** |
+| `v2.4.0` Continuous Batching (`B=4` × 64 tok) | **0** | **0** | 12.11 | **672.80** | 632.12–673.25 | 1.49 | **`True`** |
+| `v2.4.0` Speculative Decoding (`gamma=4`, standard / N-gram) | **0** | — | 6.75 | **369.30 / 752.29** | — | 2.71 / 1.33 | **`True`** |
+
+### Phase 10 (`v2.5.0`) — Universal Quantization Engine (`benchmarks/results_5090/phase10_universal_quant.csv`)
+
+Measured on real `Mistral-7B-v0.1` weights (`4096 × 4096`, 5 runs, 128-token WikiText-2 excerpt over 4 layers):
+
+| Format | Group Size | Dequant Error vs Package | `M=16` Median (`ms`) | Speed vs INT4 GPTQ | `M=128` Median (`ms`) | `M=128` (`TFLOPS`) | WikiText-2 PPL Rel Diff (`%`) |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `GPTQ_gs128_desc` | 128 | `0.000e+00` | 0.0187 | **1.000×** | 0.1617 | 26.55 | **0.0099%** |
+| `GPTQ_gs128_nodesc` | 128 | `0.000e+00` | **0.0166** | **1.126×** | 0.1571 | 27.33 | **0.0049%** |
+| `GPTQ_gs64` / `gs32` / `per_channel` | 64 / 32 / -1 | `0.000e+00` | 0.0216 / 0.0314 / 0.0168 | 0.866× / 0.596× / 1.117× | 0.1572 | 27.32 | **0.0017–0.0095%** |
+| `AWQ_gs128` (native `[K, N//8]`) | 128 | `0.000e+00` | 0.0355 | 0.528× | 0.0529 | **81.17** | **0.0049%** |
+| `GGUF_Q4_0` (18B block) | 32 | `0.000e+00` | 0.0312 | 0.600× | 0.0540 | **79.60** | **0.0122%** |
+| `GGUF_Q8_0` (34B block) | 32 | `0.000e+00` | 0.0311 | 0.602× | 0.0839 | 51.21 | **0.0146%** |
+| `GGUF_Q4_K` (144B super-block) | 32 | `0.000e+00` | 0.0327 | 0.573× | 0.0688 | 62.42 | **0.0469%** |
+| `GGUF_Q6_K` (210B super-block) | 16 | `0.000e+00` | 0.0418 | 0.448× | 0.0570 | **75.32** | **0.0332%** |
+| `GGUF_Q4_K_M` (mixed `Q4_K + Q6_K`) | 32 / 16 | `0.000e+00` | 0.0327 | 0.574× | 0.0691 | 62.13 | **0.0074%** |
+| `INT8_gs128` | 128 | `0.000e+00` | 0.0197 | **0.952×** | **0.0446** | **96.24** | **0.0112%** |
+| `FP8_e4m3_block128` (`128×128`) | 128 | `0.000e+00` | 0.0252 | 0.744× | **0.0468** | **91.77** | **0.0047%** |
+
+### Phase 11 (`v2.6.0`) — Architecture Compatibility Matrix (`benchmarks/results_5090/phase11_architecture_parity.csv`)
+
+| Architecture | Modality | Compatibility Status | Weight Source | Checkpoint | Cosine Sim | Median Latency (`ms`) |
+|---|---|---|---|---|---:|---:|
+| `Mistral-7B-v0.1` | Text | **real-checkpoint parity** | `real-checkpoint` | `/home/arrhat/models/mistral_7b_4bit` (4L) | `0.999999` | 2.181 |
+| `Llama-2-70B` | Text | **real-checkpoint parity** | `real-checkpoint` | `/var/tmp/arrhat_models/llama_70b_4bit` (2L) | `1.000000` | 3.659 |
+| `Mixtral-8x7B-MoE` | Text (MoE) | **real-checkpoint parity** | `real-checkpoint` | `/var/tmp/arrhat_models/mixtral_8x7b_4bit` (2L) | `1.000000` | 3.489 |
+| `Qwen2.5-0.5B` | Text | **real-checkpoint parity** | `real-checkpoint` | `Qwen/Qwen2.5-0.5B` (24L) | `0.999992` | 12.407 |
+| `SigLIP-ViT-B/16` | Vision | **real-checkpoint parity** | `real-checkpoint` | `google/siglip-base-patch16-224` (12L) | `0.999986` | 2.083 |
+| `Whisper-Tiny-Encoder` | Audio | **real-checkpoint parity** | `real-checkpoint` | `openai/whisper-tiny` (4L) | `0.999963` | 1.574 |
+| `Llama-3.1`, `DeepSeek-MoE (EP=4)`, `Qwen2-MoE`, `ViT-B/16`, `CLIP-ViT-L/14`, `LLaVA-1.5`, `DiT-S/2` | Text / MoE / Vision / Multimodal / Diffusion | **synthetic-only** | `synthetic-weights` | `synthetic:*` | `>= 0.999999` | 0.728–12.280 |
+
+### Phase 12 (`v2.7.0`) — Distributed GPU Runtime (`benchmarks/results_5090/phase12_distributed_simulated.csv`)
+
+Validated on `1× NVIDIA GeForce RTX 5090` (`nvidia-smi -L`) via logical partitions + `LoopbackCommTransport` (all performance numbers labeled **`simulated`**):
+- **Tensor Parallelism (`TP=2, TP=4`)**: `Mistral7B_SwiGLU_M16` (`max_abs_diff = 9.77e-04`, `0.295 / 0.576 ms` simulated) and `Mistral7B_GQA_B2S64` (`max_abs_diff = 1.95e-03`, `0.567 / 1.085 ms` simulated).
+- **Pipeline Parallelism (`PP=2, PP=4`)**: `Transformer8L_Microbatch4` (**`max_abs_diff = 0.000e+00` bit-exact**, `4.283 / 4.238 ms` simulated).
+- **Expert Parallelism (`EP=2, EP=4`)**: `MoE_8xTop2_AllToAll` (**`max_abs_diff = 0.000e+00` bit-exact**, `3.687 / 6.789 ms` simulated).
+- **Distributed Paged KV-Cache (`PP=2, TP=2`)**: **`max_abs_diff = 0.000e+00` bit-exact** (`0.072 ms` simulated).
+
+### Phase 13 (`v2.8.0`) — Production Benchmarking (`benchmarks/results_5090/phase13_production.csv`)
+
+- **Single-Stream (`Mistral-7B-v0.1-GPTQ`, `real-checkpoint`)**: TTFT **`6.114 ms`** (`6.10–7.04 ms`), ITL **`p50 = 5.787 ms` / `p90 = 6.084 ms` / `p99 = 6.207 ms`**, throughput **`172.581 tok/s`** (`170.338–172.667 tok/s`), peak VRAM **`8,565.7 MB`**, host RSS **`5,394.5 MB`**.
+- **Concurrent Batching (`Mistral-7B-v0.1-GPTQ`, `real-checkpoint`)**: `C=1`: **`172.332 tok/s`**, `C=4`: **`617.814 tok/s`**, `C=16`: **`2,337.904 tok/s`**, `C=64`: **`2,377.111 tok/s`**.
+- **Long-Context 32-Layer Attention (`synthetic-weights`)**: `8K`: **`1.327 ms/step`** (`fp16`) / `1.858 ms` (`fp8`); `16K`: **`2.133 ms/step`** (`fp16`) / `3.767 ms` (`fp8`); `32K`: **`3.861 ms/step`** (`fp16`) / `7.595 ms` (`fp8`).
+- **External Engine Comparison**:
+  - `HF-Transformers-4.x (PyTorch 2.15+cu132)` on `Qwen/Qwen2.5-0.5B` (`real-checkpoint`): **`161.474 tok/s`** (`156.699–161.825 tok/s`).
+  - `vLLM (vllm==0.34.0)`: `NOT RUN: vllm==0.34.0 pins torch==2.14.0 (cu124) which lacks sm_120 Blackwell kernels and conflicts with workstation CUDA 13.2 / torch 2.15+cu132; source build blocked by missing nvcc on workstation`.
+  - `SGLang (sglang==0.5.23)`: `NOT RUN: sglang==0.5.23 pins torch==2.14.1 and sgl-kernel prebuilt wheels compiled for cu124 (no sm_120 / cu132 wheel); source build blocked by missing nvcc`.
+  - `TensorRT-LLM (tensorrt_llm==1.3.0)`: `NOT RUN: tensorrt_llm==1.3.0 requires torch<=2.14.0 and system OpenMPI/libmpi_cxx + nvcc toolkit not installed on workstation (no sudo allowed)`.
 
 ---
 

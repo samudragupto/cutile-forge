@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.8.0 (2026-11-21) — Phase 13: Production Benchmarking Suite & Documentation Sync
+
+- **Production Benchmarking Harness (`benchmarks/production/bench_phase13_production.py`, `benchmarks/results_5090/phase13_production.csv`)**: Measured end-to-end TTFT (`6.11 ms` median), per-token ITL distribution (`p50=5.79 ms`, `p90=6.08 ms`, `p99=6.21 ms`), single-stream throughput (**`172.58 tok/s`**), concurrent batching throughput at concurrency `1` (`172.33 tok/s`), `4` (`617.81 tok/s`), `16` (**`2,337.90 tok/s`**), and `64` (**`2,377.11 tok/s`**), peak GPU VRAM (`8,565.7–8,608.9 MB`) & host RSS (`5,394.5 MB`), and 32-layer Paged KV + FlashDecoding latency at `8K` (`1.33 ms/step`), `16K` (`2.13 ms/step`), and `32K` (`3.86 ms/step` FP16; `7.60 ms/step` FP8).
+- **External Engine Evaluation**: Benchmarked HuggingFace `transformers` (`torch 2.15+cu132`) on `Qwen/Qwen2.5-0.5B` (`161.47 tok/s`) and probed `vLLM` (`0.34.0`), `SGLang` (`0.5.23`), and `TensorRT-LLM` (`1.3.0`) in isolated `/var/tmp/arrhat_models/venvs`, recording exact `NOT RUN: <reason>` metadata where prebuilt PyPI wheels pin `torch<=2.14.1` (`cu124`, lacking `sm_120` Blackwell binaries) and source builds are blocked by missing `nvcc` / system OpenMPI without `sudo`.
+- **Documentation Sync**: Updated `README.md`, `docs/RESULTS_RTX5090.md`, and `CHANGELOG.md` with measured Phases 9–13 (`v2.4.0 → v2.8.0`) data.
+
 ## v2.7.0 (2026-11-21) — Phase 12: Distributed GPU Runtime (TP, PP, EP, Distributed KV-Cache & Scheduler)
 
 - **Multi-Node Communication Layer (`cutile_forge.distributed.runtime`)**: Added `CommTransport` protocol and `LoopbackCommTransport` supporting `all_reduce_sum`, `all_gather`, `reduce_scatter_sum`, `all_to_all`, and `send_recv` with byte-transfer telemetry across logical ranks and nodes.
