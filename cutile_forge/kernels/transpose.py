@@ -7,7 +7,7 @@ import torch
 from cutile_forge.cuda_tile_init import ct
 
 
-@ct.kernel(occupancy=2)
+@ct.kernel(occupancy=4)
 def transpose_2d_kernel(
     x_ptr,
     y_ptr,
@@ -25,6 +25,7 @@ def transpose_2d_kernel(
             index=(b_id, pid_m, pid_n),
             shape=(1, tm, tn),
             padding_mode=ct.PaddingMode.ZERO,
+            latency=3,
         ),
         (tm, tn),
     )
@@ -63,7 +64,10 @@ def cutile_transpose(
 
     x_3d = x.contiguous().view(batch, m, n)
     y_3d = torch.empty((batch, n, m), device=x.device, dtype=x.dtype)
-    tm, tn = 32, 32
+    if m >= 64 and n >= 64:
+        tm, tn = 64, 64
+    else:
+        tm, tn = 32, 32
     grid = (ct.cdiv(n, tn), ct.cdiv(m, tm), batch)
     ct.launch(torch.cuda.current_stream(), grid, transpose_2d_kernel, (x_3d, y_3d, tm, tn))
     return y_3d.view(*batch_shape, n, m)

@@ -10,7 +10,7 @@ import torch.nn.functional as F
 from cutile_forge.cuda_tile_init import ct
 
 
-@ct.kernel(occupancy=2)
+@ct.kernel(occupancy=4)
 def silu_forward_kernel(
     x_ptr,
     y_ptr,
@@ -19,7 +19,13 @@ def silu_forward_kernel(
     """Elementwise SiLU forward: x * sigmoid(x) with FP32 math."""
     pid = ct.bid(0)
     x = ct.astype(
-        ct.load(x_ptr, index=(pid,), shape=(tile_n,), padding_mode=ct.PaddingMode.ZERO),
+        ct.load(
+            x_ptr,
+            index=(pid,),
+            shape=(tile_n,),
+            padding_mode=ct.PaddingMode.ZERO,
+            latency=3,
+        ),
         ct.float32,
     )
     sig = 1.0 / (1.0 + ct.exp(-x))
@@ -27,7 +33,7 @@ def silu_forward_kernel(
     ct.store(y_ptr, index=(pid,), tile=ct.astype(out, y_ptr.dtype))
 
 
-@ct.kernel(occupancy=2)
+@ct.kernel(occupancy=4)
 def silu_backward_kernel(
     dy_ptr,
     x_ptr,
@@ -37,11 +43,23 @@ def silu_backward_kernel(
     """Elementwise SiLU backward: dy * (sig + x * sig * (1 - sig))."""
     pid = ct.bid(0)
     dy = ct.astype(
-        ct.load(dy_ptr, index=(pid,), shape=(tile_n,), padding_mode=ct.PaddingMode.ZERO),
+        ct.load(
+            dy_ptr,
+            index=(pid,),
+            shape=(tile_n,),
+            padding_mode=ct.PaddingMode.ZERO,
+            latency=3,
+        ),
         ct.float32,
     )
     x = ct.astype(
-        ct.load(x_ptr, index=(pid,), shape=(tile_n,), padding_mode=ct.PaddingMode.ZERO),
+        ct.load(
+            x_ptr,
+            index=(pid,),
+            shape=(tile_n,),
+            padding_mode=ct.PaddingMode.ZERO,
+            latency=3,
+        ),
         ct.float32,
     )
     sig = 1.0 / (1.0 + ct.exp(-x))
@@ -49,7 +67,7 @@ def silu_backward_kernel(
     ct.store(dx_ptr, index=(pid,), tile=ct.astype(dx, dx_ptr.dtype))
 
 
-@ct.kernel(occupancy=2)
+@ct.kernel(occupancy=4)
 def gelu_forward_kernel(
     x_ptr,
     y_ptr,
@@ -59,7 +77,13 @@ def gelu_forward_kernel(
     """Elementwise approximate GELU forward in CuTile."""
     pid = ct.bid(0)
     x = ct.astype(
-        ct.load(x_ptr, index=(pid,), shape=(tile_n,), padding_mode=ct.PaddingMode.ZERO),
+        ct.load(
+            x_ptr,
+            index=(pid,),
+            shape=(tile_n,),
+            padding_mode=ct.PaddingMode.ZERO,
+            latency=3,
+        ),
         ct.float32,
     )
     inner = sqrt_2_over_pi * (x + 0.044715 * x * x * x)
@@ -118,7 +142,7 @@ def cutile_silu(x: torch.Tensor) -> torch.Tensor:
         return F.silu(x)
     x_1d = x.contiguous().view(-1)
     y_1d = torch.empty_like(x_1d)
-    tile_n = 1024
+    tile_n = 4096 if x_1d.numel() >= 16384 else 1024
     grid = (ct.cdiv(x_1d.numel(), tile_n), 1, 1)
     ct.launch(torch.cuda.current_stream(), grid, silu_forward_kernel, (x_1d, y_1d, tile_n))
     return y_1d.view(x.shape)
@@ -132,7 +156,7 @@ def cutile_silu_backward(grad_out: torch.Tensor, x: torch.Tensor) -> torch.Tenso
     dy_1d = grad_out.contiguous().view(-1)
     x_1d = x.contiguous().view(-1)
     dx_1d = torch.empty_like(x_1d)
-    tile_n = 1024
+    tile_n = 4096 if x_1d.numel() >= 16384 else 1024
     grid = (ct.cdiv(x_1d.numel(), tile_n), 1, 1)
     ct.launch(torch.cuda.current_stream(), grid, silu_backward_kernel, (dy_1d, x_1d, dx_1d, tile_n))
     return dx_1d.view(x.shape)
@@ -144,7 +168,7 @@ def cutile_gelu(x: torch.Tensor) -> torch.Tensor:
         return F.gelu(x, approximate="tanh")
     x_1d = x.contiguous().view(-1)
     y_1d = torch.empty_like(x_1d)
-    tile_n = 1024
+    tile_n = 4096 if x_1d.numel() >= 16384 else 1024
     grid = (ct.cdiv(x_1d.numel(), tile_n), 1, 1)
     ct.launch(
         torch.cuda.current_stream(),
