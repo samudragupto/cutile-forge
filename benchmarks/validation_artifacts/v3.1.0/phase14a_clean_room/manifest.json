@@ -1,0 +1,170 @@
+{
+  "schema_version": "1.0.0",
+  "run_id": "phase14a_clean_room",
+  "cutile_forge_version": "3.1.0",
+  "git_commit": "b2ff6b8124cd8afa1696dafb8e231a213c4251c0",
+  "dirty_worktree": false,
+  "dirty_diff_sha256": null,
+  "utc_start": "2026-11-21T18:13:23.334575+00:00",
+  "utc_end": "2026-11-21T18:13:23.977437+00:00",
+  "environment": {
+    "hostname": "prashant-lab",
+    "os": "Linux 7.0.0-43-generic",
+    "kernel": "#43~24.04.1-Ubuntu SMP PREEMPT_DYNAMIC Sat Oct 31 06:52:47 UTC 2",
+    "cpu_model": "Intel(R) Core(TM) Ultra 9 285K",
+    "ram_gb": 62.26,
+    "gpu_name": "NVIDIA GeForce RTX 5090",
+    "gpu_count": 1,
+    "compute_capability": "sm_120",
+    "vram_gb": 31.35,
+    "nvidia_driver": "595.58.03",
+    "cuda_runtime": "13.2",
+    "torch_version": "2.15.0+cu132",
+    "cutile_version": "1.8.1",
+    "python_version": "3.12.3",
+    "dependencies": {
+      "numpy": "2.5.5",
+      "transformers": "5.24.0",
+      "tokenizers": "0.23.3",
+      "safetensors": "0.8.0",
+      "huggingface-hub": "2.4.0",
+      "gguf": "0.19.0",
+      "fastapi": "0.165.0",
+      "uvicorn": "0.54.0",
+      "httpx": "0.28.1",
+      "nvidia-ml-py": "13.615.71"
+    },
+    "nvml_available": true,
+    "gpu_temp_c": 40.0,
+    "gpu_power_w": 105.21
+  },
+  "env_vars": {
+    "CUTILE_ARCH": "sm_120",
+    "HF_HOME": "/var/tmp/arrhat_models/hf_cache"
+  },
+  "command": "clean-room wheel venv pytest + Mistral-7B-v0.1-GPTQ 16-tok parity",
+  "cwd": "/var/tmp/arrhat_models/clean_room_v310",
+  "checkpoint": {
+    "model_id": "mistralai/Mistral-7B-v0.1-GPTQ",
+    "local_path": "/home/arrhat/models/mistral_7b_4bit",
+    "revision": null,
+    "files": [
+      {
+        "path": "added_tokens.json",
+        "bytes": 42,
+        "sha256": "d606246b713e31b1b43dfe913554dd47819089b9e44b9ebaa294eda2589a6b4c"
+      },
+      {
+        "path": "config.json",
+        "bytes": 963,
+        "sha256": "ecd4b068d5b218beb3310efe5dbfc7ee07559bd148834a8145599826fd9be323"
+      },
+      {
+        "path": "generation_config.json",
+        "bytes": 116,
+        "sha256": "afcf2a1da583dbeb66bb367a759713901e23ce19ed83ed8f5a21b0e877addd5b"
+      },
+      {
+        "path": "model.safetensors",
+        "bytes": 4158662096,
+        "sha256": "62d41823b37ce262a25ee6d47fcbcbae5ab4d178edfc40eade58ddd8e80c74c5"
+      },
+      {
+        "path": "quantize_config.json",
+        "bytes": 186,
+        "sha256": "63ee0b7e7666c745211a6c95390abd3cb8fc55625abeada8836fa1461bacf612"
+      },
+      {
+        "path": "special_tokens_map.json",
+        "bytes": 72,
+        "sha256": "96bdbb8504d9967606e5f661ccc7cbbac44a3661af863a7a58614670a0ccab33"
+      },
+      {
+        "path": "tokenizer.json",
+        "bytes": 1795300,
+        "sha256": "cdce92069938e6540fec77069211fa6ec7ea3ab5eb123c3aadad50a6f0c1e496"
+      },
+      {
+        "path": "tokenizer_config.json",
+        "bytes": 962,
+        "sha256": "842a192a75cc0245a959a00258b9ef4249377a46900da8e3c675e1ff6803019b"
+      }
+    ],
+    "total_bytes": 4160459737,
+    "sha256_manifest": {
+      "added_tokens.json": "d606246b713e31b1b43dfe913554dd47819089b9e44b9ebaa294eda2589a6b4c",
+      "config.json": "ecd4b068d5b218beb3310efe5dbfc7ee07559bd148834a8145599826fd9be323",
+      "generation_config.json": "afcf2a1da583dbeb66bb367a759713901e23ce19ed83ed8f5a21b0e877addd5b",
+      "model.safetensors": "62d41823b37ce262a25ee6d47fcbcbae5ab4d178edfc40eade58ddd8e80c74c5",
+      "quantize_config.json": "63ee0b7e7666c745211a6c95390abd3cb8fc55625abeada8836fa1461bacf612",
+      "special_tokens_map.json": "96bdbb8504d9967606e5f661ccc7cbbac44a3661af863a7a58614670a0ccab33",
+      "tokenizer.json": "cdce92069938e6540fec77069211fa6ec7ea3ab5eb123c3aadad50a6f0c1e496",
+      "tokenizer_config.json": "842a192a75cc0245a959a00258b9ef4249377a46900da8e3c675e1ff6803019b"
+    }
+  },
+  "quant_config": {
+    "quant_format": "gptq",
+    "group_size": 128,
+    "desc_act": true,
+    "kv_dtype": "fp16",
+    "mixed_precision": {},
+    "disk_format": "gptq_int4",
+    "kernel_format": "cutile_int4_dequant"
+  },
+  "prompt_ids_or_checksum": "08b6565c446db0dd8b4a6b63ef64c3ff2cbd10d840c6e1709814051a800d3b04",
+  "workload": {
+    "batch_size": 1,
+    "concurrency": 1,
+    "prompt_len": 21,
+    "output_len": 16,
+    "temperature": 0.0,
+    "seed": 42,
+    "warmup_iters": 2,
+    "measured_iters": 5,
+    "sync_method": "torch.cuda.synchronize"
+  },
+  "contention_before": {
+    "timestamp_utc": "2026-11-21T18:13:23.372923+00:00",
+    "contended": false,
+    "compute_apps": [
+      {
+        "pid": "890012",
+        "used_memory": "5222 MiB"
+      }
+    ],
+    "query_error": null
+  },
+  "contention_after": {
+    "timestamp_utc": "2026-11-21T18:13:23.977439+00:00",
+    "contended": false,
+    "compute_apps": [
+      {
+        "pid": "890012",
+        "used_memory": "5222 MiB"
+      }
+    ],
+    "query_error": null
+  },
+  "execution_mode": "clean-room",
+  "reproduction_status": "REPRODUCED",
+  "notes": "Fresh clone + isolated venv wheel install outside source tree. independent_second_operator=PENDING_INDEPENDENT_REPRODUCTION; wheel_import_path=/var/tmp/arrhat_models/clean_room_v310/venv/lib/python3.12/site-packages/cutile_forge/__init__.py",
+  "records": [
+    {
+      "component": "clean_room_wheel_install",
+      "status": "REPRODUCED",
+      "wheel_import_path": "/var/tmp/arrhat_models/clean_room_v310/venv/lib/python3.12/site-packages/cutile_forge/__init__.py",
+      "package_version": "3.1.0",
+      "cpu_phase14_pytest": "6 passed",
+      "independent_second_operator": "PENDING_INDEPENDENT_REPRODUCTION",
+      "model": "Mistral-7B-v0.1-GPTQ",
+      "prompt_len": 21,
+      "output_tokens": 16,
+      "decode_tok_s_median": 167.89,
+      "ttft_ms_median": 17.191,
+      "itl_ms_median": 5.935,
+      "peak_vram_allocated_mb": 4534.2,
+      "host_rss_mb": 5508.9,
+      "generated_preview": "and FP8 support, delivering up to 2x the performance of previous"
+    }
+  ]
+}

@@ -12,10 +12,6 @@
   ],
   "missing_coverage": [
     {
-      "area": "clean_room_reproduction",
-      "status": "NOT_RUN"
-    },
-    {
       "area": "external:TensorRT-LLM 1.3.0",
       "status": "NOT_RUN",
       "reason": "File \"/var/tmp/arrhat_models/venvs/trtllm_env/lib/python3.12/site-packages/tensorrt_llm/__init__.py\", line 28, in <module>\n    _prepare_environment()\n  File \"/var/tmp/arrhat_models/venvs/trtllm_env/li"
