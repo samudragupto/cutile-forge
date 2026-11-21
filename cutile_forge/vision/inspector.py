@@ -31,6 +31,10 @@ class DiagnosticSummary:
     decisions: list[FusionDecision] = field(default_factory=list)
     kernel_metrics: list[dict[str, Any]] = field(default_factory=list)
     pass_notes: list[str] = field(default_factory=list)
+    total_hbm_bytes: int = 0
+    total_hbm_bytes_saved: int = 0
+    buffer_slots: int = 0
+    timeline_events: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -38,6 +42,9 @@ class DiagnosticSummary:
             "target": self.target,
             "nodes_before": self.nodes_before,
             "nodes_after": self.nodes_after,
+            "total_hbm_bytes": self.total_hbm_bytes,
+            "total_hbm_bytes_saved": self.total_hbm_bytes_saved,
+            "buffer_slots": self.buffer_slots,
             "decisions": [
                 {
                     "node_id": d.node_id,
@@ -49,6 +56,7 @@ class DiagnosticSummary:
                 for d in self.decisions
             ],
             "kernel_metrics": list(self.kernel_metrics),
+            "timeline_events": list(self.timeline_events),
             "pass_notes": list(self.pass_notes),
         }
 
@@ -57,6 +65,8 @@ class DiagnosticSummary:
             f"# CuTileVision Report: `{self.graph_name}` (`{self.target}`)",
             "",
             f"- **Nodes:** `{self.nodes_before} -> {self.nodes_after}`",
+            f"- **Estimated HBM Traffic:** `{self.total_hbm_bytes:,} B` (saved via fusion: `{self.total_hbm_bytes_saved:,} B`)",
+            f"- **Reusable Buffer Slots:** `{self.buffer_slots}`",
             "",
             "## Fusion Decisions",
             "| Node | Output Op | Status | Fused Ops | Reason |",
@@ -89,8 +99,16 @@ def inspect_compilation(original: FusionGraph, compiled: CompiledTFG) -> Diagnos
 
     decisions: list[FusionDecision] = []
     kernel_metrics: list[dict[str, Any]] = []
+    timeline_events: list[dict[str, Any]] = []
+    total_hbm_bytes = 0
+    total_hbm_bytes_saved = 0
+    buffer_slots = 0
 
     for node in final_graph.topological_order():
+        total_hbm_bytes += sum(t.nbytes for t in node.inputs) + sum(t.nbytes for t in node.outputs)
+        total_hbm_bytes_saved += int(node.attrs.get("hbm_bytes_saved", 0))
+        buffer_slots = max(buffer_slots, int(node.attrs.get("total_buffer_slots", 0)))
+
         if len(node.fused_ops) > 1:
             status = "fused"
             reason = f"merged {len(node.fused_ops)} ops into {node.op_type.value}"
@@ -111,10 +129,11 @@ def inspect_compilation(original: FusionGraph, compiled: CompiledTFG) -> Diagnos
             )
         )
 
-    for k in compiled.kernels:
+    for order_idx, k in enumerate(compiled.kernels):
         node_ref = final_graph.nodes.get(k.node_id)
         sched = sched_by_id.get(k.node_id)
         smem = int(node_ref.attrs.get("smem_bytes", 0)) if node_ref is not None else 0
+        slot = node_ref.attrs.get("buffer_slot") if node_ref is not None else None
         kernel_metrics.append(
             {
                 "node_id": k.node_id,
@@ -125,6 +144,16 @@ def inspect_compilation(original: FusionGraph, compiled: CompiledTFG) -> Diagnos
                 "smem_bytes": smem,
                 "grid": sched.grid if sched is not None else (1, 1, 1),
                 "estimated_waves": sched.estimated_waves if sched is not None else 0.0,
+                "buffer_slot": slot,
+            }
+        )
+        timeline_events.append(
+            {
+                "order": order_idx,
+                "node_id": k.node_id,
+                "stream_id": sched.stream_id if sched is not None else 0,
+                "prefetch_stage": -1,
+                "buffer_slot": slot,
             }
         )
 
@@ -141,4 +170,8 @@ def inspect_compilation(original: FusionGraph, compiled: CompiledTFG) -> Diagnos
         decisions=decisions,
         kernel_metrics=kernel_metrics,
         pass_notes=pass_notes,
+        total_hbm_bytes=total_hbm_bytes,
+        total_hbm_bytes_saved=total_hbm_bytes_saved,
+        buffer_slots=buffer_slots,
+        timeline_events=timeline_events,
     )

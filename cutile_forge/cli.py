@@ -34,10 +34,27 @@ def main() -> None:
         help="Fail if CUDA GPU or cuda.tile is unavailable",
     )
 
+    insp_p = sub.add_parser("inspect", help="Inspect TFG fusion, HBM traffic & buffer reuse")
+    insp_p.add_argument("--seq-len", type=int, default=256)
+    insp_p.add_argument("--target", default="sm_120")
+    insp_p.add_argument("--json", action="store_true", help="Emit JSON report")
+
     args = parser.parse_args()
     target = getattr(args, "target", None)
     if target is not None:
         os.environ["CUTILE_ARCH"] = target
+
+    if args.command == "inspect":
+        from cutile_forge.forge.codegen import compile_tfg
+        from cutile_forge.forge.fusion_graph import build_mistral_layer_tfg
+        from cutile_forge.vision import inspect_compilation
+
+        orig = build_mistral_layer_tfg(0, seq_len=args.seq_len)
+        graph = build_mistral_layer_tfg(0, seq_len=args.seq_len)
+        compiled = compile_tfg(graph, target=args.target, run_passes=True)
+        summary = inspect_compilation(orig, compiled)
+        print(json.dumps(summary.to_dict(), indent=2) if args.json else summary.to_markdown())
+        return
 
     if args.command == "doctor":
         from cutile_forge.doctor import run_diagnostics

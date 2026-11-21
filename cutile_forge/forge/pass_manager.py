@@ -7,8 +7,9 @@ from collections import deque
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
-from cutile_forge.forge.fusion_graph import Edge, FusionGraph, OpType
+from cutile_forge.forge.fusion_graph import DataTensor, Edge, FusionGraph, OpType
 from cutile_forge.forge.fusion_rules import FusionRule, apply_fusion_rules
+from cutile_forge.forge.op_registry import DEFAULT_OP_REGISTRY
 
 
 @dataclass
@@ -282,14 +283,234 @@ class PassManager:
         )
 
 
+class LayoutStridePass(CompilerPass):
+    """Populates canonical row-major strides & validates broadcast compatibility on binary ops."""
+
+    name = "layout_stride"
+
+    @staticmethod
+    def _row_major_strides(shape: tuple[int, ...]) -> tuple[int, ...]:
+        if not shape:
+            return ()
+        strides: list[int] = [1] * len(shape)
+        acc = 1
+        for i in range(len(shape) - 1, -1, -1):
+            strides[i] = acc
+            acc *= max(1, shape[i])
+        return tuple(strides)
+
+    @staticmethod
+    def _broadcastable(s1: tuple[int, ...], s2: tuple[int, ...]) -> bool:
+        for d1, d2 in zip(reversed(s1), reversed(s2), strict=False):
+            if d1 != d2 and d1 != 1 and d2 != 1:
+                return False
+        return True
+
+    def run(self, graph: FusionGraph) -> PassResult:
+        nodes_before = len(graph.nodes)
+        changed = False
+        notes: list[str] = []
+
+        def _fill_tensor(dt: DataTensor) -> None:
+            nonlocal changed
+            if dt.strides is None and dt.shape:
+                dt.strides = self._row_major_strides(dt.shape)
+                changed = True
+            if dt.alignment <= 0:
+                dt.alignment = 16
+                changed = True
+
+        for node in graph.topological_order():
+            for dt in node.inputs:
+                _fill_tensor(dt)
+            for dt in node.outputs:
+                _fill_tensor(dt)
+            if node.op_type in (OpType.ADD, OpType.RESIDUAL_ADD) and len(node.inputs) >= 2:
+                s1, s2 = node.inputs[0].shape, node.inputs[1].shape
+                if s1 and s2 and not self._broadcastable(s1, s2):
+                    raise ValueError(
+                        f"Incompatible broadcast shapes on node '{node.node_id}': {s1} vs {s2}"
+                    )
+            notes.append(f"{node.node_id}: aligned")
+
+        return PassResult(
+            pass_name=self.name,
+            changed=changed,
+            nodes_before=nodes_before,
+            nodes_after=len(graph.nodes),
+            notes=notes,
+        )
+
+
+class ConstantFoldPass(CompilerPass):
+    """Folds redundant double-transpose identity pairs (`T(T(x)) -> x`)."""
+
+    name = "constant_fold"
+
+    def run(self, graph: FusionGraph) -> PassResult:
+        nodes_before = len(graph.nodes)
+        removed: set[str] = set()
+        notes: list[str] = []
+
+        for node in list(graph.topological_order()):
+            if node.node_id in removed or node.op_type != OpType.TRANSPOSE:
+                continue
+            succs = graph.successors(node.node_id)
+            if len(succs) != 1:
+                continue
+            dst = graph.nodes[succs[0]]
+            if dst.op_type != OpType.TRANSPOSE:
+                continue
+            d0_a = node.attrs.get("dim0", -2)
+            d1_a = node.attrs.get("dim1", -1)
+            d0_b = dst.attrs.get("dim0", -2)
+            d1_b = dst.attrs.get("dim1", -1)
+            if (d0_a, d1_a) != (d0_b, d1_b) and (d0_a, d1_a) != (d1_b, d0_b):
+                continue
+
+            preds = graph.predecessors(node.node_id)
+            if len(preds) != 1 or not node.inputs:
+                continue
+            src_id = preds[0]
+            in_tensor = node.inputs[0]
+            dst_out_names = {t.name for t in dst.outputs}
+
+            # Bypass node -> dst directly to src_id -> downstream(dst)
+            dst_succs = list(graph.outgoing_edges(dst.node_id))
+            for edge in dst_succs:
+                succ_node = graph.nodes[edge.dst_id]
+                for idx, inp in enumerate(succ_node.inputs):
+                    if inp.name in dst_out_names:
+                        succ_node.inputs[idx] = in_tensor
+                graph.add_edge(src_id, edge.dst_id, in_tensor)
+
+            if dst.node_id in graph.graph_outputs:
+                graph.graph_outputs = [
+                    src_id if nid == dst.node_id else nid for nid in graph.graph_outputs
+                ]
+            graph.remove_node(dst.node_id)
+            graph.remove_node(node.node_id)
+            removed.add(node.node_id)
+            removed.add(dst.node_id)
+            notes.append(f"folded double transpose {node.node_id}->{dst.node_id}")
+
+        return PassResult(
+            pass_name=self.name,
+            changed=bool(removed),
+            nodes_before=nodes_before,
+            nodes_after=len(graph.nodes),
+            notes=notes,
+        )
+
+
+class ProfitabilityPass(CompilerPass):
+    """Estimates HBM bytes saved by fused operators vs separate launches."""
+
+    name = "profitability"
+
+    def run(self, graph: FusionGraph) -> PassResult:
+        nodes_before = len(graph.nodes)
+        changed = False
+        notes: list[str] = []
+
+        for node in graph.topological_order():
+            spec = DEFAULT_OP_REGISTRY.get(node.op_type)
+            is_fused = len(node.fused_ops) > 1 or spec.category == "composite"
+            out_bytes = sum(t.nbytes for t in node.outputs)
+            saved_bytes = 2 * out_bytes * max(0, len(node.fused_ops) - 1) if is_fused else 0
+            profitable = is_fused or spec.bound_regime == "compute"
+            if (
+                node.attrs.get("hbm_bytes_saved") != saved_bytes
+                or node.attrs.get("fusion_profitable") != profitable
+            ):
+                changed = True
+            node.attrs["hbm_bytes_saved"] = saved_bytes
+            node.attrs["fusion_profitable"] = profitable
+            notes.append(f"{node.node_id}: saved={saved_bytes}B, profitable={profitable}")
+
+        return PassResult(
+            pass_name=self.name,
+            changed=changed,
+            nodes_before=nodes_before,
+            nodes_after=len(graph.nodes),
+            notes=notes,
+        )
+
+
+class MemoryLifetimePass(CompilerPass):
+    """Computes buffer lifetimes and assigns reusable memory slot IDs across topological order."""
+
+    name = "memory_lifetime"
+
+    def run(self, graph: FusionGraph) -> PassResult:
+        nodes_before = len(graph.nodes)
+        ordered = graph.topological_order()
+        pos = {n.node_id: idx for idx, n in enumerate(ordered)}
+        out_set = set(graph.graph_outputs)
+
+        # Last topological index at which each node's output is consumed
+        last_use: dict[str, int] = {}
+        for idx, node in enumerate(ordered):
+            last_use[node.node_id] = len(ordered) if node.node_id in out_set else idx
+            for edge in graph.outgoing_edges(node.node_id):
+                last_use[node.node_id] = max(last_use[node.node_id], pos[edge.dst_id])
+
+        # Linear-scan interval slot assignment
+        active: list[tuple[int, int]] = []  # (expire_idx, slot_id)
+        free_slots: list[int] = []
+        next_slot = 0
+        notes: list[str] = []
+
+        for idx, node in enumerate(ordered):
+            still_active: list[tuple[int, int]] = []
+            for exp_idx, slot in active:
+                if exp_idx < idx:
+                    free_slots.append(slot)
+                else:
+                    still_active.append((exp_idx, slot))
+            active = still_active
+
+            if node.op_type == OpType.INPUT:
+                continue
+
+            if free_slots:
+                free_slots.sort()
+                slot_id = free_slots.pop(0)
+            else:
+                slot_id = next_slot
+                next_slot += 1
+
+            exp = last_use.get(node.node_id, idx)
+            active.append((exp, slot_id))
+            node.attrs["buffer_slot"] = slot_id
+            node.attrs["live_range"] = (idx, exp)
+            notes.append(f"{node.node_id}: slot={slot_id} [{idx}, {exp}]")
+
+        for node in ordered:
+            if node.op_type != OpType.INPUT:
+                node.attrs["total_buffer_slots"] = next_slot
+
+        return PassResult(
+            pass_name=self.name,
+            changed=next_slot > 0,
+            nodes_before=nodes_before,
+            nodes_after=len(graph.nodes),
+            notes=notes,
+        )
+
+
 def default_pass_manager() -> PassManager:
     """Build the default TFG + general optimization pass pipeline."""
     return PassManager(
         [
             ShapeDtypeInferPass(),
+            LayoutStridePass(),
+            ConstantFoldPass(),
             CSEPass(),
             FusionLegalityPass(),
             TFGFusionPass(),
+            ProfitabilityPass(),
             DCEPass(),
+            MemoryLifetimePass(),
         ]
     )
