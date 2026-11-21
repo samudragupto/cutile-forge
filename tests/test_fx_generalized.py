@@ -37,6 +37,7 @@ def test_fx_op_registry_and_shape_guard() -> None:
 
 def test_fx_generalized_ops_parity_and_stats() -> None:
     fx_mod.clear_fx_cache()
+    torch.manual_seed(42)
     dev = "cuda" if torch.cuda.is_available() else "cpu"
     dtype = torch.float16 if torch.cuda.is_available() else torch.float32
 

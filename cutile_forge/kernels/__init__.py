@@ -12,6 +12,13 @@ from cutile_forge.kernels.activations import (
 )
 from cutile_forge.kernels.attention_gqa import flash_decoding_split_kv, fused_attention_gqa
 from cutile_forge.kernels.bmm import cutile_bmm
+from cutile_forge.kernels.embedding_lmhead import (
+    cutile_col_permute,
+    cutile_embedding_lookup,
+    cutile_ew_add,
+    cutile_ew_mul,
+    cutile_lm_head_fused,
+)
 from cutile_forge.kernels.ffn_fused import (
     fused_ffn_dequant_up_silu_down,
     fused_ffn_swiglu,
@@ -37,7 +44,12 @@ from cutile_forge.kernels.layernorm_residual import (
     fused_layernorm_residual,
     fused_rmsnorm_residual,
 )
-from cutile_forge.kernels.moe_fused import fused_moe_int4_gemm, fused_topk_gating
+from cutile_forge.kernels.moe_fused import (
+    cutile_moe_router_topk,
+    fused_moe_int4_gemm,
+    fused_moe_int4_native,
+    fused_topk_gating,
+)
 from cutile_forge.kernels.reductions import cutile_reduce_max, cutile_reduce_sum
 from cutile_forge.kernels.rmsnorm import cutile_rmsnorm
 from cutile_forge.kernels.rope import apply_rope, precompute_rope_freqs
@@ -82,10 +94,14 @@ __all__ = [
     "cutile_avg_pool2d",
     "cutile_bmm",
     "cutile_bmm_backward",
+    "cutile_col_permute",
     "cutile_conv2d",
     "cutile_conv2d_backward",
     "cutile_cumsum",
     "cutile_depthwise_conv2d",
+    "cutile_embedding_lookup",
+    "cutile_ew_add",
+    "cutile_ew_mul",
     "cutile_fused_add_rmsnorm_silu",
     "cutile_fused_layernorm_gelu",
     "cutile_fused_rmsnorm_silu",
@@ -101,7 +117,9 @@ __all__ = [
     "cutile_layernorm_backward",
     "cutile_linear_autograd",
     "cutile_linear_backward",
+    "cutile_lm_head_fused",
     "cutile_max_pool2d",
+    "cutile_moe_router_topk",
     "cutile_multi_tensor_adamw",
     "cutile_reduce_max",
     "cutile_reduce_sum",
@@ -124,6 +142,7 @@ __all__ = [
     "fused_gemm_nvfp4_dequant",
     "fused_layernorm_residual",
     "fused_moe_int4_gemm",
+    "fused_moe_int4_native",
     "fused_rmsnorm_residual",
     "fused_topk_gating",
     "gemm_fp8_kernel",

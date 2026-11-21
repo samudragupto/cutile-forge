@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.2.0 (2026-11-21) — Track B: Native Model Runtime (Zero-ATen Compute Hot Path)
+
+- **Native Tensor & Stream Manager (`cutile_forge.runtime`)**: Added `CuTileTensor` (zero-copy `MemoryLifetimeAllocator` + DLPack exchange) and `NativeStreamManager` (`compute_stream`, `dma_stream`, `kv_swap_stream` + pooled CUDA events).
+- **Native Embedding, LM Head & Elementwise (`embedding_lmhead.py`)**: Added `cutile_embedding_lookup`, fused `cutile_lm_head_fused` (`lm_head_tile_argmax_kernel` + `lm_head_reduce_argmax_kernel` with zero `[M, V]` HBM logits allocation for greedy decode; multi-pass CuTile top-k for `top_k > 1`), `cutile_col_permute`, `cutile_ew_mul`, and `cutile_ew_add`.
+- **GPU-Only MoE Routing (`moe_fused.py`)**: Added `cutile_moe_router_topk_kernel` (fused router GEMV + softmax + top-k), atomic `cutile_moe_bucket_kernel`, and `cutile_moe_scatter_combine_kernel` (`fused_moe_int4_native`, zero `.item()` host sync or `torch.topk`/`torch.argsort`).
+- **Native Paged KV Cache & Engine (`native_kv_cache.py`, `native_engine.py`)**: Added in-place `cutile_kv_cache_write_kernel` / `cutile_kv_cache_gather_kernel` (`fp16` & `fp8_e4m3fn`) and `NativeModelRuntime` (`0` forbidden ATen compute calls per decode vs. `66` in `InferenceEngine`, `66.85 tok/s`, `11.1 ms` prefill, exact 32-token greedy parity on real `Mistral-7B-v0.1-GPTQ`).
+
 ## v2.1.0 (2026-11-21) — Track A: Kernel Performance Engineering & Profiling
 
 - **Nsight Profiling Harness (`cutile_forge.bench.profiler`)**: Added `detect_profilers`, `profile_kernel_ncu`, `profile_timeline_nsys`, `analytical_profile_op`, and `save_profile_json` with graceful `ERR_NVGPUCTRPERM` fallback to CUDA-event analytical HBM/occupancy profiling.
