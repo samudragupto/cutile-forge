@@ -162,6 +162,47 @@ class Graph:
             attrs={"dim": dim, "keepdim": keepdim},
         )
 
+    def reduce_max(self, x: TensorHandle, dim: int = -1, keepdim: bool = False) -> TensorHandle:
+        dims = list(x.shape)
+        d = dim if dim >= 0 else len(dims) + dim
+        if keepdim:
+            dims[d] = 1
+        else:
+            dims.pop(d)
+        return self._add_op(
+            OpType.REDUCE_MAX,
+            "max",
+            "ReduceMax",
+            [x],
+            tuple(dims),
+            attrs={"dim": dim, "keepdim": keepdim},
+        )
+
+    def cumsum(self, x: TensorHandle, dim: int = -1) -> TensorHandle:
+        return self._add_op(
+            OpType.CUMSUM,
+            "cumsum",
+            "CumSum",
+            [x],
+            x.shape,
+            attrs={"dim": dim},
+        )
+
+    def bmm(self, a: TensorHandle, b: TensorHandle) -> TensorHandle:
+        if len(a.shape) != 3 or len(b.shape) != 3:
+            raise ValueError(f"bmm requires 3D inputs, got {a.shape} and {b.shape}")
+        if a.shape[0] != b.shape[0] or a.shape[2] != b.shape[1]:
+            raise ValueError(f"bmm shape mismatch: {a.shape} vs {b.shape}")
+        out_shape = (a.shape[0], a.shape[1], b.shape[2])
+        return self._add_op(
+            OpType.BATCHED_MATMUL,
+            "bmm",
+            "BatchedMatMul",
+            [a, b],
+            out_shape,
+            attrs={"M": a.shape[1], "K": a.shape[2], "N": b.shape[2]},
+        )
+
     def custom(
         self,
         op_name: str,

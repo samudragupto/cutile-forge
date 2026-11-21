@@ -1,0 +1,7 @@
+op,shape,dtype,cutile_p50_ms,torch_p50_ms,speedup
+bmm,8x256x1024x1024,float16,0.0356,0.0322,0.91
+bmm,16x128x2048x2048,float16,0.1208,0.2249,1.86
+reduce_sum,256x2048,float16,0.0152,0.0085,0.56
+reduce_max,256x2048,float16,0.0148,0.0121,0.82
+cumsum,256x2048,float16,0.0149,0.0172,1.16
+transpose,256x2048,float16,0.0136,0.0093,0.69

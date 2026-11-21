@@ -2,6 +2,7 @@
 
 from cutile_forge.cuda_tile_init import ct  # noqa: F401
 from cutile_forge.kernels.attention_gqa import flash_decoding_split_kv, fused_attention_gqa
+from cutile_forge.kernels.bmm import cutile_bmm
 from cutile_forge.kernels.ffn_fused import (
     fused_ffn_dequant_up_silu_down,
     fused_ffn_swiglu,
@@ -20,17 +21,25 @@ from cutile_forge.kernels.gemm_dequant_silu import fused_gemm_dequant_silu, fuse
 from cutile_forge.kernels.layernorm import cutile_layernorm
 from cutile_forge.kernels.layernorm_residual import fused_layernorm_residual, fused_rmsnorm_residual
 from cutile_forge.kernels.moe_fused import fused_moe_int4_gemm, fused_topk_gating
+from cutile_forge.kernels.reductions import cutile_reduce_max, cutile_reduce_sum
 from cutile_forge.kernels.rmsnorm import cutile_rmsnorm
 from cutile_forge.kernels.rope import apply_rope, precompute_rope_freqs
 from cutile_forge.kernels.sampling import sample_tokens
+from cutile_forge.kernels.scan import cutile_cumsum
 from cutile_forge.kernels.softmax import online_softmax
+from cutile_forge.kernels.transpose import cutile_transpose
 
 __all__ = [
     "apply_rope",
+    "cutile_bmm",
+    "cutile_cumsum",
     "cutile_gemm_fp8",
     "cutile_gemm_fp16",
     "cutile_layernorm",
+    "cutile_reduce_max",
+    "cutile_reduce_sum",
     "cutile_rmsnorm",
+    "cutile_transpose",
     "flash_decoding_split_kv",
     "fused_attention_gqa",
     "fused_ffn_dequant_up_silu_down",

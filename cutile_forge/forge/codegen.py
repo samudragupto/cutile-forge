@@ -248,15 +248,37 @@ def _execute_node(
     if op in (OpType.ADD, OpType.RESIDUAL_ADD):
         return args[0] + args[1]
 
+    if op == OpType.BATCHED_MATMUL:
+        from cutile_forge.kernels.bmm import cutile_bmm
+
+        return cutile_bmm(args[0], args[1], tile_shape=tile_shape)
+
     if op == OpType.TRANSPOSE:
+        from cutile_forge.kernels.transpose import cutile_transpose
+
         dim0 = int(node.attrs.get("dim0", -2))
         dim1 = int(node.attrs.get("dim1", -1))
-        return args[0].transpose(dim0, dim1).contiguous()
+        return cutile_transpose(args[0], dim0=dim0, dim1=dim1)
 
     if op == OpType.REDUCE_SUM:
+        from cutile_forge.kernels.reductions import cutile_reduce_sum
+
         dim = int(node.attrs.get("dim", -1))
         keepdim = bool(node.attrs.get("keepdim", False))
-        return args[0].sum(dim=dim, keepdim=keepdim)
+        return cutile_reduce_sum(args[0], dim=dim, keepdim=keepdim)
+
+    if op == OpType.REDUCE_MAX:
+        from cutile_forge.kernels.reductions import cutile_reduce_max
+
+        dim = int(node.attrs.get("dim", -1))
+        keepdim = bool(node.attrs.get("keepdim", False))
+        return cutile_reduce_max(args[0], dim=dim, keepdim=keepdim)
+
+    if op == OpType.CUMSUM:
+        from cutile_forge.kernels.scan import cutile_cumsum
+
+        dim = int(node.attrs.get("dim", -1))
+        return cutile_cumsum(args[0], dim=dim)
 
     if op == OpType.CUSTOM:
         op_name = str(node.attrs.get("custom_op", ""))

@@ -54,6 +54,7 @@ class ShapeDtypeInferPass(CompilerPass):
         for node in graph.topological_order():
             if node.op_type in (
                 OpType.MATMUL,
+                OpType.BATCHED_MATMUL,
                 OpType.GEMM,
                 OpType.GEMM_DEQUANT,
                 OpType.QKV_GEMM,

@@ -13,10 +13,13 @@ class OpType(StrEnum):
 
     INPUT = "input"
     MATMUL = "matmul"
+    BATCHED_MATMUL = "batched_matmul"
     ADD = "add"
     GELU = "gelu"
     SOFTMAX = "softmax"
     REDUCE_SUM = "reduce_sum"
+    REDUCE_MAX = "reduce_max"
+    CUMSUM = "cumsum"
     TRANSPOSE = "transpose"
     CUSTOM = "custom"
     DEQUANT = "dequant"
