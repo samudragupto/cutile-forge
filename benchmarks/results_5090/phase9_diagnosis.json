@@ -1,0 +1,128 @@
+{
+  "baseline_rows": [
+    {
+      "mode": "legacy_InferenceEngine_cuda_graph",
+      "label": "real-checkpoint",
+      "checkpoint": "Mistral-7B-v0.1-GPTQ",
+      "max_new_tokens": 256,
+      "runs": 5,
+      "decode_tok_s_median": 99.01,
+      "decode_tok_s_min": 97.4,
+      "decode_tok_s_max": 99.02,
+      "ms_per_token_median": 10.1,
+      "ms_per_token_min": 10.1,
+      "ms_per_token_max": 10.27,
+      "prefill_ms_median": 11.07,
+      "prefill_ms_min": 11.03,
+      "prefill_ms_max": 11.54,
+      "peak_vram_gb": 3.99,
+      "parity_256_vs_legacy_graph": true,
+      "contended": false,
+      "gpu_compute_apps": "813376, 5702 MiB"
+    },
+    {
+      "mode": "legacy_InferenceEngine_eager",
+      "label": "real-checkpoint",
+      "checkpoint": "Mistral-7B-v0.1-GPTQ",
+      "max_new_tokens": 256,
+      "runs": 5,
+      "decode_tok_s_median": 100.05,
+      "decode_tok_s_min": 100.02,
+      "decode_tok_s_max": 100.07,
+      "ms_per_token_median": 10.0,
+      "ms_per_token_min": 9.99,
+      "ms_per_token_max": 10.0,
+      "prefill_ms_median": 10.93,
+      "prefill_ms_min": 10.61,
+      "prefill_ms_max": 10.98,
+      "peak_vram_gb": 4.06,
+      "parity_256_vs_legacy_graph": true,
+      "contended": false,
+      "gpu_compute_apps": "813376, 5702 MiB"
+    },
+    {
+      "mode": "NativeModelRuntime_v230_default",
+      "label": "real-checkpoint",
+      "checkpoint": "Mistral-7B-v0.1-GPTQ",
+      "max_new_tokens": 256,
+      "runs": 5,
+      "decode_tok_s_median": 103.22,
+      "decode_tok_s_min": 101.58,
+      "decode_tok_s_max": 103.24,
+      "ms_per_token_median": 9.69,
+      "ms_per_token_min": 9.69,
+      "ms_per_token_max": 9.84,
+      "prefill_ms_median": 10.14,
+      "prefill_ms_min": 10.13,
+      "prefill_ms_max": 11.03,
+      "peak_vram_gb": 4.28,
+      "parity_256_vs_legacy_graph": true,
+      "contended": false,
+      "gpu_compute_apps": "813376, 5702 MiB"
+    },
+    {
+      "mode": "NativeModelRuntime_v230_eager",
+      "label": "real-checkpoint",
+      "checkpoint": "Mistral-7B-v0.1-GPTQ",
+      "max_new_tokens": 256,
+      "runs": 5,
+      "decode_tok_s_median": 103.67,
+      "decode_tok_s_min": 103.65,
+      "decode_tok_s_max": 103.68,
+      "ms_per_token_median": 9.65,
+      "ms_per_token_min": 9.65,
+      "ms_per_token_max": 9.65,
+      "prefill_ms_median": 10.11,
+      "prefill_ms_min": 10.06,
+      "prefill_ms_max": 10.11,
+      "peak_vram_gb": 4.53,
+      "parity_256_vs_legacy_graph": true,
+      "contended": false,
+      "gpu_compute_apps": "813376, 5702 MiB"
+    }
+  ],
+  "step_breakdown": {
+    "legacy_cuda_graph": {
+      "ct_launches_per_token": 32.0,
+      "tensor_allocs_per_token": 100.0,
+      "gpu_event_ms_per_token": 10.081,
+      "wall_ms_per_token": 10.082,
+      "host_dispatch_ms_per_token": 8.852,
+      "cprofile_py_ms_per_token": 8.002,
+      "host_syncs_per_token_in_generate": 1
+    },
+    "legacy_eager": {
+      "ct_launches_per_token": 385.0,
+      "tensor_allocs_per_token": 776.0,
+      "gpu_event_ms_per_token": 9.835,
+      "wall_ms_per_token": 9.836,
+      "host_dispatch_ms_per_token": 9.439,
+      "cprofile_py_ms_per_token": 10.191,
+      "host_syncs_per_token_in_generate": 1
+    },
+    "native_v230_default_partial_graph": {
+      "ct_launches_per_token": 164.0,
+      "tensor_allocs_per_token": 103.0,
+      "gpu_event_ms_per_token": 9.617,
+      "wall_ms_per_token": 9.617,
+      "host_dispatch_ms_per_token": 8.576,
+      "cprofile_py_ms_per_token": 7.349,
+      "host_syncs_per_token_in_generate": 1
+    },
+    "native_v230_eager": {
+      "ct_launches_per_token": 740.0,
+      "tensor_allocs_per_token": 936.0,
+      "gpu_event_ms_per_token": 9.517,
+      "wall_ms_per_token": 9.517,
+      "host_dispatch_ms_per_token": 9.208,
+      "cprofile_py_ms_per_token": 13.287,
+      "host_syncs_per_token_in_generate": 1
+    }
+  },
+  "native_v230_component_ms_per_token": {
+    "qkv_graphs_32_layers_ms": 3.143,
+    "mlp_graphs_32_layers_ms": 6.727,
+    "eager_rope_kv_write_gather_attn_32_layers_ms": 1.661,
+    "eager_cutile_lm_head_fused_ms": 0.172
+  }
+}

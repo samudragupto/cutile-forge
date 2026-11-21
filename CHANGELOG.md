@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.4.0 (2026-11-21) — Phase 9: Native Runtime Performance, Full-Step CUDA Graphs & Scheduling
+
+- **Full-Step Zero-ATen CUDA Graph Capture (`NativeModelRuntime`)**: Captured the entire 32-layer decode step + LM head argmax + device-side token/position increment (`cutile_record_and_advance_step`) into a single `torch.cuda.CUDAGraph` per context bucket (`512/1024/2048/4096`), eliminating all `164` eager kernel launches and `103` per-token allocations (`0` forbidden ATen calls, `0` eager `ct.launch` calls during replay).
+- **Kernel & Layout Optimizations**: Added `(16, 32, 128)` bit-exact narrow-N INT4 dequant tiling for `M <= 16`, pre-packed QKV INT4 projections, `apply_rope_qk_kv_write_pos`, `fused_attention_gqa_decode_pos`, `fused_swiglu_dequant`, `fused_gemm_dequant_add`, head-major zero-gather `NativePagedKVCache`, and `flash_decoding_reduce_kernel`.
+- **Measured RTX 5090 Results (`Mistral-7B-v0.1-GPTQ`, 256 tokens, 5 runs)**: Decode throughput improved from `103.22 tok/s` (`v2.3.0` 256-tok baseline; `66.85 tok/s` in `v2.2.0` 32-tok) to **`171.60 tok/s`** (`5.83 ms/tok`), prefill latency dropped from `10.14 ms` (`11.10 ms` in `v2.2.0`) to **`6.66 ms`**, batch-4 continuous batching reached **`672.80 tok/s`**, speculative decoding reached **`369.30–752.29 tok/s`**, and 32-layer 32K KV attention dropped from `9.29 ms` to **`4.28 ms/step`**, with **5/5 prompts × 256 tokens** bit-exact greedy parity.
+
 ## v2.3.0 (2026-11-21) — Track C: Unified ModelGraph, Multimodal/MoE & Multi-Format Compatibility
 
 - **Declarative Unified Model IR (`cutile_forge.models.model_graph`, `registry`)**: Added `UnifiedModelGraph` with composable stages (`TextEmbeddingStage`, `VisionPatchEmbedStage`, `MultimodalFusionStage`, `DenseTransformerBlock`, `SparseMoEBlock`, `ViTEncoderBlock`, `LMHeadStage`, `VisionProjectionStage`, `ClassifierHeadStage`), TFG lowering (`to_fusion_graph()`, `compile_tfg()`), scaled RoPE (`compute_scaled_rope_freqs` supporting Linear, NTK/YaRN, and Llama-3 scaling), and portable `UnifiedModelExecutor`.

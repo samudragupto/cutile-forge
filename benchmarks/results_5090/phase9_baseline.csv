@@ -1,0 +1,5 @@
+mode,label,checkpoint,max_new_tokens,runs,decode_tok_s_median,decode_tok_s_min,decode_tok_s_max,ms_per_token_median,ms_per_token_min,ms_per_token_max,prefill_ms_median,prefill_ms_min,prefill_ms_max,peak_vram_gb,parity_256_vs_legacy_graph,contended,gpu_compute_apps
+legacy_InferenceEngine_cuda_graph,real-checkpoint,Mistral-7B-v0.1-GPTQ,256,5,99.01,97.4,99.02,10.1,10.1,10.27,11.07,11.03,11.54,3.99,True,False,"813376, 5702 MiB"
+legacy_InferenceEngine_eager,real-checkpoint,Mistral-7B-v0.1-GPTQ,256,5,100.05,100.02,100.07,10.0,9.99,10.0,10.93,10.61,10.98,4.06,True,False,"813376, 5702 MiB"
+NativeModelRuntime_v230_default,real-checkpoint,Mistral-7B-v0.1-GPTQ,256,5,103.22,101.58,103.24,9.69,9.69,9.84,10.14,10.13,11.03,4.28,True,False,"813376, 5702 MiB"
+NativeModelRuntime_v230_eager,real-checkpoint,Mistral-7B-v0.1-GPTQ,256,5,103.67,103.65,103.68,9.65,9.65,9.65,10.11,10.06,10.11,4.53,True,False,"813376, 5702 MiB"

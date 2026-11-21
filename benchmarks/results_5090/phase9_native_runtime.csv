@@ -1,0 +1,15 @@
+item,label,metric_unit,before_v230,after_median,after_min,after_max,runs,parity,contended,gpu_compute_apps,notes
+legacy_InferenceEngine_cuda_graph_256tok,real-checkpoint,tok/s,99.01,124.55,123.28,124.93,5,True,False,"818238, 5072 MiB",Legacy engine (66 forbidden ATen calls/decode)
+native_full_graph_bucketed_chained_sync32_256tok,real-checkpoint,tok/s,103.22,171.6,169.31,171.66,5,True,False,"818238, 5688 MiB","1 full-step CUDAGraph/token, 0 ATen, 0 eager launches, sync_interval=32"
+native_full_graph_bucketed_step_sync1_256tok,real-checkpoint,tok/s,103.22,171.3,171.29,171.34,5,True,False,"818238, 5688 MiB","1 full-step CUDAGraph/token, per-step host sync (sync_interval=1)"
+native_prefill_latency,real-checkpoint,ms,10.14,6.66,6.6,7.24,5,True,False,"818238, 5688 MiB",Packed QKV + fused SwiGLU native prefill
+native_full_graph_device_masked_2048_sync32_256tok,real-checkpoint,tok/s,103.22,148.9,146.53,149.07,5,True,False,"818238, 6348 MiB",Single fixed-ceiling (2048) device-masked graph (Step 9.1 comparison)
+native_eager_optimized_256tok,real-checkpoint,tok/s,103.67,165.68,164.61,165.72,5,True,False,"818238, 7022 MiB","Eager NativeModelRuntime with packed QKV, fused SwiGLU, (16,32,128) tiles"
+greedy_parity_256tok_5_prompts,real-checkpoint,prompts_matched,1.0,5.0,5.0,5.0,5,True,False,"818238, 7058 MiB",5/5 prompts token-exact over 256 tokens (legacy == eager == graphed)
+prefill_decode_interleave_max_stall_latency_512tok,real-checkpoint,ms,75.83,42.72,42.67,48.56,5,True,False,"818238, 7396 MiB",Max active-decode inter-token stall during 512-tok prefill: monolithic vs chunk_size=128
+continuous_batching_b4_aggregate_throughput,real-checkpoint,tok/s,169.3,672.8,632.12,673.25,5,True,False,"818238, 7730 MiB",4 concurrent requests (64 tokens each): sequential B=1x4 vs batch-bucketed B=4 CUDAGraph
+speculative_native_gamma4_standard_prompt_256tok,real-checkpoint,tok/s,326.16,369.3,313.26,370.2,5,True,False,"818238, 7796 MiB","Standard prompt: native accept_rate=0.540 (legacy_spec=326.16 tok/s, accept=0.700; native_graph=171.60 tok/s)"
+speculative_native_gamma4_ngram_match_prompt_256tok,real-checkpoint,tok/s,502.82,752.29,698.45,756.17,5,True,False,"818238, 7800 MiB","N-gram match prompt: native accept_rate=1.000 (legacy_spec=502.82 tok/s, accept=1.000; native_graph=171.60 tok/s)"
+paged_kv_attention_32layers_8k_step_latency,real-checkpoint,ms/step,1.7,1.41,1.4,1.42,5,True,False,"818238, 5584 MiB",8192-token KV cache (32 layers): full-history kv_gather vs zero-copy head-major pool
+paged_kv_attention_32layers_16k_step_latency,real-checkpoint,ms/step,4.36,2.39,2.38,3.69,5,True,False,"818238, 5648 MiB",16384-token KV cache (32 layers): full-history kv_gather vs zero-copy head-major pool
+paged_kv_attention_32layers_32k_step_latency,real-checkpoint,ms/step,9.29,4.28,4.27,4.3,5,True,False,"818238, 5776 MiB",32768-token KV cache (32 layers): full-history kv_gather vs zero-copy head-major pool

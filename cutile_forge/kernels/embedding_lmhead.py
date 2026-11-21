@@ -240,13 +240,19 @@ def cutile_col_permute(
         return res
     tile_m = 4 if m >= 4 else 1
     tile_d = 256 if d >= 256 else 128
+    x_c = x if x.is_contiguous() else x.contiguous()
+    p_c = (
+        perm
+        if (perm.dtype == torch.int32 and perm.is_contiguous())
+        else perm.to(dtype=torch.int32).contiguous()
+    )
     ct.launch(
         torch.cuda.current_stream(),
         (ct.cdiv(m, tile_m), ct.cdiv(d, tile_d), 1),
         col_permute_kernel,
         (
-            x.contiguous(),
-            perm.to(dtype=torch.int32).contiguous(),
+            x_c,
+            p_c,
             res,
             tile_m,
             tile_d,
@@ -308,6 +314,7 @@ def cutile_lm_head_fused(
     lm_head_weight: torch.Tensor,
     eps: float = 1e-5,
     top_k: int = 1,
+    scratch: dict[str, torch.Tensor] | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Fuse final RMSNorm -> LM head matmul -> in-register argmax / top-k (no aten.mm/topk)."""
     orig_prefix = hidden_states.shape[:-1]
@@ -322,29 +329,39 @@ def cutile_lm_head_fused(
         vals, idx = torch.topk(logits, k=top_k, dim=-1)
         return vals.to(hidden_states.dtype).view(*orig_prefix, top_k), idx.view(*orig_prefix, top_k)
 
-    h_norm = cutile_rmsnorm(hidden_states.view(m, d_model), norm_weight, eps=eps)
+    norm_buf = scratch["norm_out"] if (scratch is not None and "norm_out" in scratch) else None
+    h_norm = cutile_rmsnorm(hidden_states.view(m, d_model), norm_weight, eps=eps, out=norm_buf)
     w_c = lm_head_weight if lm_head_weight.is_contiguous() else lm_head_weight.contiguous()
 
     if top_k == 1:
         tm, tv, tk = (16 if m > 1 else 1), 256, 64
         num_vt = ct.cdiv(v_dim, tv)
         pad_vt = _next_pow2(num_vt)
-        part_val = torch.empty((m, num_vt), device=hidden_states.device, dtype=torch.float32)
-        part_idx = torch.empty((m, num_vt), device=hidden_states.device, dtype=torch.int32)
+        if scratch is not None and "part_val" in scratch:
+            part_val = scratch["part_val"]
+            part_idx = scratch["part_idx"]
+            out_val = scratch["out_val"]
+            out_idx = scratch["out_idx"]
+        else:
+            part_val = torch.empty((m, num_vt), device=hidden_states.device, dtype=torch.float32)
+            part_idx = torch.empty((m, num_vt), device=hidden_states.device, dtype=torch.int32)
+            out_val = torch.empty((m, 1), device=hidden_states.device, dtype=torch.float32)
+            out_idx = torch.empty((m, 1), device=hidden_states.device, dtype=torch.int32)
+
         ct.launch(
             torch.cuda.current_stream(),
             (num_vt, ct.cdiv(m, tm), 1),
             lm_head_tile_argmax_kernel,
             (h_norm, w_c, part_val, part_idx, v_dim, tm, tv, tk),
         )
-        out_val = torch.empty((m, 1), device=hidden_states.device, dtype=torch.float32)
-        out_idx = torch.empty((m, 1), device=hidden_states.device, dtype=torch.int32)
         ct.launch(
             torch.cuda.current_stream(),
             (m, 1, 1),
             lm_head_reduce_argmax_kernel,
             (part_val, part_idx, out_val, out_idx, num_vt, pad_vt),
         )
+        if scratch is not None:
+            return out_val.view(*orig_prefix, 1), out_idx.view(*orig_prefix, 1)
         return (
             out_val.to(hidden_states.dtype).view(*orig_prefix, 1),
             out_idx.to(torch.long).view(*orig_prefix, 1),
@@ -371,4 +388,55 @@ def cutile_lm_head_fused(
     return (
         out_val_k[:, :top_k].to(hidden_states.dtype).view(*orig_prefix, top_k),
         out_idx_k[:, :top_k].to(torch.long).view(*orig_prefix, top_k),
+    )
+
+
+@ct.kernel(occupancy=4)
+def record_and_advance_step_kernel(
+    tok_ptr,  # (B,) int32
+    pos_ptr,  # (B,) int32
+    step_ptr,  # (1,) int32
+    history_ptr,  # (MaxSteps, B) int32
+    bsz: ct.Constant[int],
+) -> None:
+    """Record predicted token(s) into `history_ptr[step]` and increment `pos_ptr` & `step_ptr` on GPU."""
+    step = ct.reshape(
+        ct.astype(
+            ct.load(step_ptr, index=(0,), shape=(1,), padding_mode=ct.PaddingMode.ZERO),
+            ct.int32,
+        ),
+        (1, 1),
+    )
+    b_ids = ct.reshape(ct.arange(bsz, dtype=ct.int32), (1, bsz))
+    toks = ct.reshape(
+        ct.astype(
+            ct.load(tok_ptr, index=(0,), shape=(bsz,), padding_mode=ct.PaddingMode.ZERO),
+            ct.int32,
+        ),
+        (1, bsz),
+    )
+    ct.scatter(history_ptr, (step, b_ids), toks)
+
+    pos = ct.astype(
+        ct.load(pos_ptr, index=(0,), shape=(bsz,), padding_mode=ct.PaddingMode.ZERO),
+        ct.int32,
+    )
+    ct.store(pos_ptr, index=(0,), tile=pos + 1)
+    ct.store(step_ptr, index=(0,), tile=ct.reshape(step + 1, (1,)))
+
+
+def cutile_record_and_advance_step(
+    tok_ptr: torch.Tensor,
+    pos_ptr: torch.Tensor,
+    step_ptr: torch.Tensor,
+    history_ptr: torch.Tensor,
+    bsz: int = 1,
+) -> None:
+    """Launch `record_and_advance_step_kernel` on current CUDA stream (zero ATen ops)."""
+    b_pad = _next_pow2(bsz)
+    ct.launch(
+        torch.cuda.current_stream(),
+        (1, 1, 1),
+        record_and_advance_step_kernel,
+        (tok_ptr.view(-1), pos_ptr.view(-1), step_ptr.view(1), history_ptr, b_pad),
     )

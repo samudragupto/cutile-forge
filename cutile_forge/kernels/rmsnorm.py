@@ -45,19 +45,21 @@ def cutile_rmsnorm(
     x: torch.Tensor,
     weight: torch.Tensor,
     eps: float = 1e-5,
+    out: torch.Tensor | None = None,
 ) -> torch.Tensor:
-    """Compute RMSNorm over the last dimension using CuTile."""
+    """Compute RMSNorm over the last dimension using CuTile (zero-alloc when `out` is given)."""
     orig_shape = x.shape
     d_model = orig_shape[-1]
-    x_2d = x.contiguous().view(-1, d_model)
+    x_2d = x.view(-1, d_model) if x.is_contiguous() else x.contiguous().view(-1, d_model)
     rows = x_2d.shape[0]
     d_pad = _next_pow2(d_model)
-    y_2d = torch.empty_like(x_2d)
+    y_2d = out.view(rows, d_model) if out is not None else torch.empty_like(x_2d)
+    w_c = weight if weight.is_contiguous() else weight.contiguous()
 
     ct.launch(
         torch.cuda.current_stream(),
         (rows, 1, 1),
         rmsnorm_kernel,
-        (x_2d, weight.contiguous(), y_2d, float(eps), 1.0 / d_model, int(d_model), d_pad),
+        (x_2d, w_c, y_2d, float(eps), 1.0 / d_model, int(d_model), d_pad),
     )
     return y_2d.view(orig_shape)

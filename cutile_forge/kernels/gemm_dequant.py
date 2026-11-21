@@ -179,11 +179,93 @@ def gemm_dequant_kernel(
     ct.store(c_ptr, index=(pid_m, pid_n), tile=ct.astype(acc, ct.float16))
 
 
-def _select_gemm_tiles(m: int, group_size: int = 128) -> tuple[int, int, int]:
-    """Select optimal tile shape (TM, TN, TK) based on batch/sequence length M."""
-    tk = 64 if group_size >= 64 else 32
+@ct.kernel(occupancy=2)
+def gemm_dequant_add_kernel(
+    a_ptr,
+    qw_ptr,
+    scales_ptr,
+    zeros_ptr,
+    res_ptr,
+    c_ptr,
+    tm: ct.Constant[int],
+    tn: ct.Constant[int],
+    tk: ct.Constant[int],
+    gs: ct.Constant[int],
+) -> None:
+    """Fused INT4-dequant GEMM + residual epilogue `c = ct.astype(acc, fp16) + res`."""
+    group_m: ct.Constant[int] = 8
+    pid = ct.bid(0)
+    num_m = ct.num_tiles(a_ptr, axis=0, shape=(tm, tk))
+    num_n = ct.num_tiles(qw_ptr, axis=1, shape=(tk // 2, tn))
+    num_pid_in_group = group_m * num_n
+    group_id = pid // num_pid_in_group
+    first_pid_m = group_id * group_m
+    group_size_m = min(num_m - first_pid_m, group_m)
+    pid_m = first_pid_m + (pid % group_size_m)
+    pid_n = (pid % num_pid_in_group) // group_size_m
+
+    num_k = ct.num_tiles(a_ptr, axis=1, shape=(tm, tk))
+    half_tk: ct.Constant[int] = tk // 2
+    acc = ct.zeros((tm, tn), dtype=ct.float32)
+
+    for k in range(num_k):
+        tile_a = ct.load(
+            a_ptr,
+            index=(pid_m, k),
+            shape=(tm, tk),
+            padding_mode=ct.PaddingMode.ZERO,
+            latency=3,
+        )
+        qw = ct.load(
+            qw_ptr,
+            index=(k, pid_n),
+            shape=(half_tk, tn),
+            padding_mode=ct.PaddingMode.ZERO,
+            latency=3,
+        )
+        lo = ct.astype(ct.bitwise_and(qw, 0x0F), ct.float16)
+        hi = ct.astype(ct.bitwise_and(ct.bitwise_rshift(qw, 4), 0x0F), ct.float16)
+        lo_e = ct.reshape(lo, (half_tk, 1, tn))
+        hi_e = ct.reshape(hi, (half_tk, 1, tn))
+        w_int = ct.reshape(ct.cat((lo_e, hi_e), axis=1), (tk, tn))
+
+        g_idx = (k * tk) // gs
+        scale = ct.load(
+            scales_ptr,
+            index=(g_idx, pid_n),
+            shape=(1, tn),
+            padding_mode=ct.PaddingMode.ZERO,
+            latency=3,
+        )
+        zero = ct.load(
+            zeros_ptr,
+            index=(g_idx, pid_n),
+            shape=(1, tn),
+            padding_mode=ct.PaddingMode.ZERO,
+            latency=3,
+        )
+        w_fp16 = (w_int - zero) * scale
+        acc = ct.mma(tile_a, w_fp16, acc)
+
+    res_tile = ct.load(
+        res_ptr,
+        index=(pid_m, pid_n),
+        shape=(tm, tn),
+        padding_mode=ct.PaddingMode.ZERO,
+        latency=2,
+    )
+    out = ct.astype(acc, ct.float16) + res_tile
+    ct.store(c_ptr, index=(pid_m, pid_n), tile=out)
+
+
+def _select_gemm_tiles(m: int, group_size: int = 128, n: int = 4096) -> tuple[int, int, int]:
+    """Select optimal tile shape (TM, TN, TK) based on batch/sequence length M and N."""
     if m <= 16:
+        if group_size >= 128 and n <= 6144 and (n % 32 == 0):
+            return (16, 32, 128)
+        tk = 64 if group_size >= 64 else 32
         return (16, 64, tk)
+    tk = 64 if group_size >= 64 else 32
     if m <= 64:
         return (64, 128, tk)
     return (128, 128, 32 if group_size >= 32 else tk)
@@ -360,29 +442,17 @@ def fused_gemm_dequant(
     zeros: torch.Tensor,
     group_size: int = 128,
     tile_shape: tuple[int, int, int] | None = None,
+    out: torch.Tensor | None = None,
 ) -> torch.Tensor:
-    """Run fused INT4 dequantization + GEMM in a single CuTile kernel.
-
-    Args:
-        a: Input activations of shape (M, K), float16, CUDA.
-        qweight: Packed 4-bit weights of shape (K // 2, N), uint8, CUDA.
-        scales: Per-group scales of shape (K // group_size, N), float16, CUDA.
-        zeros: Per-group zero points of shape (K // group_size, N), float16, CUDA.
-        group_size: Quantization group size along K (default 128).
-        tile_shape: Optional override (TM, TN, TK).
-
-    Returns:
-        Output tensor of shape (M, N), float16, CUDA.
-    """
+    """Run fused INT4 dequantization + GEMM in a single CuTile kernel."""
     m, k = a.shape
     if qweight.dtype == torch.int32:
-        # Convert GPTQ int32 (K // 8, N) to (K // 2, N) uint8
         k_div8, n = qweight.shape
         shifts = torch.arange(0, 32, 4, device=qweight.device, dtype=torch.int32).view(1, 8, 1)
         nibbles = ((qweight.unsqueeze(1) >> shifts) & 0xF).to(torch.uint8).reshape(k_div8 * 8, n)
         qw_u8 = pack_int4_weights(nibbles)
     else:
-        qw_u8 = qweight.contiguous()
+        qw_u8 = qweight if qweight.is_contiguous() else qweight.contiguous()
 
     n = qw_u8.shape[1]
     assert qw_u8.shape == (k // 2, n), f"Weight B must be [K//2, N], got {tuple(qw_u8.shape)}"
@@ -393,14 +463,18 @@ def fused_gemm_dequant(
     if qw_u8.shape[0] * 2 != k:
         raise ValueError(f"Weight K mismatch: {qw_u8.shape[0] * 2} vs {k}")
 
-    tm, tn, tk = tile_shape or _select_gemm_tiles(m, group_size=group_size)
-    if group_size % tk != 0:
-        tk = 64 if group_size % 64 == 0 else (32 if group_size % 32 == 0 else group_size)
+    tm, tn, tk = tile_shape or _select_gemm_tiles(m, group_size=group_size, n=n)
+    if group_size % tk != 0 or k % tk != 0:
+        tk = (
+            64
+            if (group_size % 64 == 0 and k % 64 == 0)
+            else (32 if group_size % 32 == 0 else group_size)
+        )
 
-    a_c = a.contiguous()
-    s_c = scales.contiguous()
-    z_c = zeros.contiguous()
-    c = torch.empty((m, n), device=a.device, dtype=torch.float16)
+    a_c = a if a.is_contiguous() else a.contiguous()
+    s_c = scales if scales.is_contiguous() else scales.contiguous()
+    z_c = zeros if zeros.is_contiguous() else zeros.contiguous()
+    c = out if out is not None else torch.empty((m, n), device=a.device, dtype=torch.float16)
 
     grid = (ct.cdiv(m, tm) * ct.cdiv(n, tn), 1, 1)
     ct.launch(
@@ -408,6 +482,44 @@ def fused_gemm_dequant(
         grid,
         gemm_dequant_kernel,
         (a_c, qw_u8, s_c, z_c, c, tm, tn, tk, group_size),
+    )
+    return c
+
+
+def fused_gemm_dequant_add(
+    a: torch.Tensor,
+    qweight: torch.Tensor,
+    scales: torch.Tensor,
+    zeros: torch.Tensor,
+    residual: torch.Tensor,
+    group_size: int = 128,
+    tile_shape: tuple[int, int, int] | None = None,
+    out: torch.Tensor | None = None,
+) -> torch.Tensor:
+    """Run fused INT4 dequantization + GEMM + residual add (`a @ W + residual`) in one kernel."""
+    m, k = a.shape
+    qw_u8 = qweight if qweight.is_contiguous() else qweight.contiguous()
+    n = qw_u8.shape[1]
+    tm, tn, tk = tile_shape or _select_gemm_tiles(m, group_size=group_size, n=n)
+    if group_size % tk != 0 or k % tk != 0:
+        tk = (
+            64
+            if (group_size % 64 == 0 and k % 64 == 0)
+            else (32 if group_size % 32 == 0 else group_size)
+        )
+
+    a_c = a if a.is_contiguous() else a.contiguous()
+    s_c = scales if scales.is_contiguous() else scales.contiguous()
+    z_c = zeros if zeros.is_contiguous() else zeros.contiguous()
+    r_c = residual if residual.is_contiguous() else residual.contiguous()
+    c = out if out is not None else torch.empty((m, n), device=a.device, dtype=torch.float16)
+
+    grid = (ct.cdiv(m, tm) * ct.cdiv(n, tn), 1, 1)
+    ct.launch(
+        torch.cuda.current_stream(),
+        grid,
+        gemm_dequant_add_kernel,
+        (a_c, qw_u8, s_c, z_c, r_c, c, tm, tn, tk, group_size),
     )
     return c
 

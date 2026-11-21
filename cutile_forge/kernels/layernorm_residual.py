@@ -148,17 +148,24 @@ def fused_rmsnorm_residual(
     residual: torch.Tensor,
     weight: torch.Tensor,
     eps: float = 1e-5,
+    out_norm: torch.Tensor | None = None,
+    out_res: torch.Tensor | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Compute (RMSNorm(x + residual), x + residual) in a single CuTile kernel."""
     orig_shape = x.shape
     d_model = orig_shape[-1]
-    x_2d = x.contiguous().view(-1, d_model)
-    res_2d = residual.contiguous().view(-1, d_model)
+    x_2d = x.view(-1, d_model) if x.is_contiguous() else x.contiguous().view(-1, d_model)
+    res_2d = (
+        residual.view(-1, d_model)
+        if residual.is_contiguous()
+        else residual.contiguous().view(-1, d_model)
+    )
     rows = x_2d.shape[0]
     d_pad = _next_pow2(d_model)
 
-    norm_out = torch.empty_like(x_2d)
-    res_out = torch.empty_like(x_2d)
+    norm_out = out_norm.view(rows, d_model) if out_norm is not None else torch.empty_like(x_2d)
+    res_out = out_res.view(rows, d_model) if out_res is not None else torch.empty_like(x_2d)
+    w_c = weight if weight.is_contiguous() else weight.contiguous()
 
     ct.launch(
         torch.cuda.current_stream(),
@@ -167,7 +174,7 @@ def fused_rmsnorm_residual(
         (
             x_2d,
             res_2d,
-            weight.contiguous(),
+            w_c,
             norm_out,
             res_out,
             float(eps),

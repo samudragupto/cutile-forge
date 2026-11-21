@@ -1,25 +1,45 @@
-"""Native 100% CuTile prefill & autoregressive decode engine (zero-ATen compute hot path)."""
+"""Native 100% CuTile prefill & autoregressive decode engine (zero-ATen compute hot path).
+
+Phase 9 enhancements:
+- Full-step single-`torch.cuda.CUDAGraph` decode capture (zero eager `ct.launch`, zero allocations,
+  zero forbidden ATen compute calls, and device-side `pos_buf` / `_static_token_id` feedback).
+- Both context-bucketed (`512/1024/2048/4096`) and single fixed-ceiling (`device_masked`) graph strategies.
+- Chained multi-step CUDA Graph replay (`sync_interval >= 1`) without per-token `.item()` host sync.
+- Packed QKV INT4 dequant GEMM, fused `rope_qk_kv_write_pos_kernel`, fused SwiGLU (`fused_swiglu_dequant`),
+  and fused `down_proj + residual` (`fused_gemm_dequant_add`).
+- Chunked prefill + interleaved decode scheduler (`prefill_chunk`, `schedule_interleaved_prefill_decode`).
+- Batch-bucketed continuous batching (`generate_batch`, `decode_batch_step`).
+- Native speculative decoding (`generate_speculative`) with zero-copy `NativePagedKVCache.truncate()`.
+"""
 
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING, Any
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Literal
 
 import torch
 
-from cutile_forge.kernels.attention_gqa import fused_attention_gqa
+from cutile_forge.cuda_tile_init import ct
+from cutile_forge.kernels.attention_gqa import (
+    fused_attention_gqa,
+    fused_attention_gqa_decode_pos,
+)
 from cutile_forge.kernels.embedding_lmhead import (
     cutile_col_permute,
     cutile_embedding_lookup,
-    cutile_ew_add,
     cutile_ew_mul,
     cutile_lm_head_fused,
+    cutile_record_and_advance_step,
 )
-from cutile_forge.kernels.gemm_dequant import fused_gemm_dequant
-from cutile_forge.kernels.gemm_dequant_silu import fused_gemm_dequant_silu
+from cutile_forge.kernels.gemm_dequant import fused_gemm_dequant, fused_gemm_dequant_add
+from cutile_forge.kernels.gemm_dequant_silu import (
+    fused_gemm_dequant_silu,
+    fused_swiglu_dequant,
+)
 from cutile_forge.kernels.layernorm_residual import fused_rmsnorm_residual
 from cutile_forge.kernels.rmsnorm import cutile_rmsnorm
-from cutile_forge.kernels.rope import apply_rope
+from cutile_forge.kernels.rope import apply_rope, apply_rope_qk_kv_write_pos
 from cutile_forge.runtime.native_kv_cache import NativePagedKVCache
 from cutile_forge.runtime.native_stream import NativeStreamManager
 
@@ -27,10 +47,100 @@ if TYPE_CHECKING:
     from cutile_forge.engine.model import Mistral7B, MistralLayer
     from cutile_forge.engine.weight_loader import MistralLayerWeights, QuantLinearWeight
 
+GraphStrategy = Literal["bucketed", "device_masked"]
+DEFAULT_CONTEXT_BUCKETS: tuple[int, ...] = (512, 1024, 2048, 4096)
 
-def _quant_linear_native(x: torch.Tensor, qw: QuantLinearWeight) -> torch.Tensor:
-    x_in = cutile_col_permute(x, qw.perm) if qw.perm is not None else x
-    return fused_gemm_dequant(x_in, qw.qweight, qw.scales, qw.zeros, group_size=qw.group_size)
+
+def _next_pow2(n: int) -> int:
+    p = 1
+    while p < n:
+        p *= 2
+    return p
+
+
+def _prep_perm_i32(perm: torch.Tensor | None, device: torch.device) -> torch.Tensor | None:
+    if perm is None:
+        return None
+    return perm.to(device=device, dtype=torch.int32).contiguous()
+
+
+def _perms_equal(p1: torch.Tensor | None, p2: torch.Tensor | None) -> bool:
+    if p1 is None and p2 is None:
+        return True
+    if p1 is None or p2 is None:
+        return False
+    return bool(torch.equal(p1, p2))
+
+
+@dataclass
+class _PackedNativeLayer:
+    """Pre-packed per-layer weights with int32 permutations and packed QKV / fused SwiGLU metadata."""
+
+    layer_idx: int
+    input_layernorm: torch.Tensor
+    post_attention_layernorm: torch.Tensor
+    group_size: int
+    # Packed QKV (when q, k, v share perm)
+    qkv_packed: bool
+    qkv_qweight: torch.Tensor | None
+    qkv_scales: torch.Tensor | None
+    qkv_zeros: torch.Tensor | None
+    qkv_perm_i32: torch.Tensor | None
+    # Unpacked Q, K, V fallback
+    q_proj: QuantLinearWeight
+    k_proj: QuantLinearWeight
+    v_proj: QuantLinearWeight
+    q_perm_i32: torch.Tensor | None
+    k_perm_i32: torch.Tensor | None
+    v_perm_i32: torch.Tensor | None
+    # O projection
+    o_proj: QuantLinearWeight
+    o_perm_i32: torch.Tensor | None
+    # SwiGLU / MLP
+    swiglu_fused: bool
+    gate_proj: QuantLinearWeight
+    up_proj: QuantLinearWeight
+    down_proj: QuantLinearWeight
+    gate_perm_i32: torch.Tensor | None
+    up_perm_i32: torch.Tensor | None
+    down_perm_i32: torch.Tensor | None
+
+
+@dataclass
+class _DecodeGraphWorkspace:
+    """Static preallocated buffers for zero-allocation CUDA Graph capture at fixed `batch_size`."""
+
+    batch_size: int
+    token_id: torch.Tensor  # (B, 1) int32
+    pos_buf: torch.Tensor  # (B,) int32
+    step_buf: torch.Tensor  # (1,) int32
+    history_buf: torch.Tensor  # (max_seq_len, B) int32
+    hidden: torch.Tensor  # (B, D) fp16
+    norm: torch.Tensor  # (B, D) fp16
+    perm_d: torch.Tensor  # (B, D) fp16
+    qkv: torch.Tensor  # (B, QKV_dim) fp16
+    q_rot: torch.Tensor  # (B, H_q, 1, head_dim) fp16
+    attn_out: torch.Tensor  # (B, H_q, 1, head_dim) fp16
+    o_out: torch.Tensor  # (B, D) fp16
+    res_mid: torch.Tensor  # (B, D) fp16
+    swiglu_out: torch.Tensor  # (B, FFN_dim) fp16
+    perm_ffn: torch.Tensor  # (B, FFN_dim) fp16
+    lm_scratch: dict[str, torch.Tensor]
+    graphs_by_bucket: dict[int, torch.cuda.CUDAGraph]
+
+
+def _quant_linear_native(
+    x: torch.Tensor,
+    qw: QuantLinearWeight,
+    perm_i32: torch.Tensor | None = None,
+    perm_buf: torch.Tensor | None = None,
+    out: torch.Tensor | None = None,
+) -> torch.Tensor:
+    p = perm_i32 if perm_i32 is not None else qw.perm
+    x_in = cutile_col_permute(x, p, out=perm_buf) if p is not None else x
+    return fused_gemm_dequant(
+        x_in, qw.qweight, qw.scales, qw.zeros, group_size=qw.group_size, out=out
+    )
 
 
 class NativeModelRuntime:
@@ -43,12 +153,23 @@ class NativeModelRuntime:
         block_size: int = 16,
         kv_dtype: str = "fp16",
         use_cuda_graph: bool = True,
+        graph_strategy: GraphStrategy = "bucketed",
+        context_buckets: tuple[int, ...] = DEFAULT_CONTEXT_BUCKETS,
+        max_batch_size: int = 1,
     ) -> None:
         self.model = model
         self.config = model.config
         self.device = model.device
         self.use_cuda = self.device.type == "cuda" and torch.cuda.is_available()
         self.use_cuda_graph = use_cuda_graph and self.use_cuda
+        self.graph_strategy: GraphStrategy = graph_strategy
+        self.max_seq_len = max_seq_len
+        self.block_size = block_size
+
+        valid_buckets = tuple(sorted({min(b, max_seq_len) for b in context_buckets if b > 0}))
+        if not valid_buckets or valid_buckets[-1] < max_seq_len:
+            valid_buckets = (*valid_buckets, max_seq_len)
+        self.context_buckets: tuple[int, ...] = valid_buckets
 
         self.stream_manager = NativeStreamManager(self.device)
         self.kv_cache = NativePagedKVCache(
@@ -57,16 +178,18 @@ class NativeModelRuntime:
             head_dim=self.config.head_dim,
             block_size=block_size,
             max_seq_len=max_seq_len,
+            max_batch_size=max_batch_size,
             kv_dtype=kv_dtype,
             device=self.device,
             stream_manager=self.stream_manager,
         )
 
-        self._embed_w = model.weights.embed_tokens.to(self.device)
-        self._norm_w = model.weights.norm.to(self.device)
-        self._lm_head_w = model.weights.lm_head.to(self.device)
-        self._cos = model.cos.to(self.device)
-        self._sin = model.sin.to(self.device)
+        self._embed_w = model.weights.embed_tokens.to(self.device).contiguous()
+        self._norm_w = model.weights.norm.to(self.device).contiguous()
+        self._lm_head_w = model.weights.lm_head.to(self.device).contiguous()
+        self._cos = model.cos.to(self.device).contiguous()
+        self._sin = model.sin.to(self.device).contiguous()
+
         self._cpu_layers: list[MistralLayer] | None = None
         if not self.use_cuda:
             from cutile_forge.engine.model import MistralLayer
@@ -78,41 +201,68 @@ class NativeModelRuntime:
             None
         ] * self.config.num_hidden_layers
 
-        # Optional CUDA-graph capture buffers for static decode QKV & MLP stages
-        self._qkv_graphs: list[torch.cuda.CUDAGraph] = []
-        self._mlp_graphs: list[torch.cuda.CUDAGraph] = []
-        self._static_hidden = torch.zeros(
-            (1, self.config.hidden_size), device=self.device, dtype=torch.float16
+        self._all_layers_on_gpu = self.use_cuda and all(
+            lw.input_layernorm.device.type == "cuda" for lw in self.model.weights.layers
         )
-        self._static_attn = [
-            torch.zeros((1, self.config.hidden_size), device=self.device, dtype=torch.float16)
-            for _ in range(self.config.num_hidden_layers)
-        ]
-        self._static_q: list[torch.Tensor] = [
-            torch.zeros(
-                (1, self.config.num_attention_heads, 1, self.config.head_dim),
-                device=self.device,
-                dtype=torch.float16,
-            )
-            for _ in range(self.config.num_hidden_layers)
-        ]
-        self._static_k: list[torch.Tensor] = [
-            torch.zeros(
-                (1, self.config.num_key_value_heads, 1, self.config.head_dim),
-                device=self.device,
-                dtype=torch.float16,
-            )
-            for _ in range(self.config.num_hidden_layers)
-        ]
-        self._static_v: list[torch.Tensor] = [
-            torch.zeros(
-                (1, self.config.num_key_value_heads, 1, self.config.head_dim),
-                device=self.device,
-                dtype=torch.float16,
-            )
-            for _ in range(self.config.num_hidden_layers)
-        ]
-        self._graphs_captured = False
+        self._packed_layers: list[_PackedNativeLayer] = []
+        if self._all_layers_on_gpu:
+            self._packed_layers = [self._pack_layer(lw) for lw in self.model.weights.layers]
+
+        self._workspaces: dict[int, _DecodeGraphWorkspace] = {}
+
+    def _pack_layer(self, lw: MistralLayerWeights) -> _PackedNativeLayer:
+        qp = _prep_perm_i32(lw.q_proj.perm, self.device)
+        kp = _prep_perm_i32(lw.k_proj.perm, self.device)
+        vp = _prep_perm_i32(lw.v_proj.perm, self.device)
+        op = _prep_perm_i32(lw.o_proj.perm, self.device)
+        gp = _prep_perm_i32(lw.gate_proj.perm, self.device)
+        up = _prep_perm_i32(lw.up_proj.perm, self.device)
+        dp = _prep_perm_i32(lw.down_proj.perm, self.device)
+
+        can_pack_qkv = _perms_equal(qp, kp) and _perms_equal(qp, vp)
+        if can_pack_qkv:
+            qkv_qw = torch.cat(
+                [lw.q_proj.qweight, lw.k_proj.qweight, lw.v_proj.qweight], dim=1
+            ).contiguous()
+            qkv_sc = torch.cat(
+                [lw.q_proj.scales, lw.k_proj.scales, lw.v_proj.scales], dim=1
+            ).contiguous()
+            qkv_zr = torch.cat(
+                [lw.q_proj.zeros, lw.k_proj.zeros, lw.v_proj.zeros], dim=1
+            ).contiguous()
+        else:
+            qkv_qw = None
+            qkv_sc = None
+            qkv_zr = None
+
+        can_fuse_swiglu = _perms_equal(gp, up)
+
+        return _PackedNativeLayer(
+            layer_idx=lw.layer_idx,
+            input_layernorm=lw.input_layernorm.contiguous(),
+            post_attention_layernorm=lw.post_attention_layernorm.contiguous(),
+            group_size=lw.q_proj.group_size,
+            qkv_packed=can_pack_qkv,
+            qkv_qweight=qkv_qw,
+            qkv_scales=qkv_sc,
+            qkv_zeros=qkv_zr,
+            qkv_perm_i32=qp,
+            q_proj=lw.q_proj,
+            k_proj=lw.k_proj,
+            v_proj=lw.v_proj,
+            q_perm_i32=qp,
+            k_perm_i32=kp,
+            v_perm_i32=vp,
+            o_proj=lw.o_proj,
+            o_perm_i32=op,
+            swiglu_fused=can_fuse_swiglu,
+            gate_proj=lw.gate_proj,
+            up_proj=lw.up_proj,
+            down_proj=lw.down_proj,
+            gate_perm_i32=gp,
+            up_perm_i32=up,
+            down_perm_i32=dp,
+        )
 
     def reset(self) -> None:
         self.kv_cache.reset()
@@ -139,84 +289,278 @@ class NativeModelRuntime:
             )
         return lw
 
-    def _capture_decode_graphs(self) -> None:
-        if self._graphs_captured or not self.use_cuda_graph:
-            return
-        if not all(lw.input_layernorm.device.type == "cuda" for lw in self.model.weights.layers):
-            return
+    def _get_or_create_workspace(self, batch_size: int) -> _DecodeGraphWorkspace:
+        if batch_size in self._workspaces:
+            return self._workspaces[batch_size]
+        self.kv_cache.ensure_batch_capacity(batch_size)
         cfg = self.config
-        n_layers = cfg.num_hidden_layers
+        qkv_dim = (cfg.num_attention_heads + 2 * cfg.num_key_value_heads) * cfg.head_dim
+        v_dim = self._lm_head_w.shape[0]
+        num_vt = ct.cdiv(v_dim, 256)
 
-        # Warmup once on current stream before CUDA graph capture
-        for idx in range(n_layers):
-            lw = self.model.weights.layers[idx]
-            xn = cutile_rmsnorm(self._static_hidden, lw.input_layernorm, eps=cfg.rms_norm_eps)
-            _ = _quant_linear_native(xn, lw.q_proj)
-            _ = _quant_linear_native(xn, lw.k_proj)
-            _ = _quant_linear_native(xn, lw.v_proj)
-            op = _quant_linear_native(self._static_attn[idx], lw.o_proj)
-            pn, _ = fused_rmsnorm_residual(
-                op, self._static_hidden, lw.post_attention_layernorm, eps=cfg.rms_norm_eps
-            )
-            gi = cutile_col_permute(pn, lw.gate_proj.perm) if lw.gate_proj.perm is not None else pn
-            ga = fused_gemm_dequant_silu(
-                gi,
-                lw.gate_proj.qweight,
-                lw.gate_proj.scales,
-                lw.gate_proj.zeros,
-                group_size=lw.gate_proj.group_size,
-            )
-            uv = _quant_linear_native(pn, lw.up_proj)
-            _ = cutile_ew_add(
-                self._static_hidden, _quant_linear_native(cutile_ew_mul(ga, uv), lw.down_proj)
-            )
-        torch.cuda.synchronize()
+        token_id = torch.zeros((batch_size, 1), device=self.device, dtype=torch.int32)
+        pos_buf = torch.zeros((batch_size,), device=self.device, dtype=torch.int32)
+        step_buf = torch.zeros((1,), device=self.device, dtype=torch.int32)
+        history_buf = torch.zeros(
+            (self.max_seq_len, _next_pow2(batch_size)), device=self.device, dtype=torch.int32
+        )
+        hidden = torch.zeros((batch_size, cfg.hidden_size), device=self.device, dtype=torch.float16)
+        norm = torch.zeros((batch_size, cfg.hidden_size), device=self.device, dtype=torch.float16)
+        perm_d = torch.zeros((batch_size, cfg.hidden_size), device=self.device, dtype=torch.float16)
+        qkv = torch.zeros((batch_size, qkv_dim), device=self.device, dtype=torch.float16)
+        q_rot = torch.zeros(
+            (batch_size, cfg.num_attention_heads, 1, cfg.head_dim),
+            device=self.device,
+            dtype=torch.float16,
+        )
+        attn_out = torch.zeros(
+            (batch_size, cfg.num_attention_heads, 1, cfg.head_dim),
+            device=self.device,
+            dtype=torch.float16,
+        )
+        o_out = torch.zeros((batch_size, cfg.hidden_size), device=self.device, dtype=torch.float16)
+        res_mid = torch.zeros(
+            (batch_size, cfg.hidden_size), device=self.device, dtype=torch.float16
+        )
+        swiglu_out = torch.zeros(
+            (batch_size, cfg.intermediate_size), device=self.device, dtype=torch.float16
+        )
+        perm_ffn = torch.zeros(
+            (batch_size, cfg.intermediate_size), device=self.device, dtype=torch.float16
+        )
+        lm_scratch = {
+            "norm_out": torch.zeros(
+                (batch_size, cfg.hidden_size), device=self.device, dtype=torch.float16
+            ),
+            "part_val": torch.zeros((batch_size, num_vt), device=self.device, dtype=torch.float32),
+            "part_idx": torch.zeros((batch_size, num_vt), device=self.device, dtype=torch.int32),
+            "out_val": torch.zeros((batch_size, 1), device=self.device, dtype=torch.float32),
+            "out_idx": token_id,
+        }
+        ws = _DecodeGraphWorkspace(
+            batch_size=batch_size,
+            token_id=token_id,
+            pos_buf=pos_buf,
+            step_buf=step_buf,
+            history_buf=history_buf,
+            hidden=hidden,
+            norm=norm,
+            perm_d=perm_d,
+            qkv=qkv,
+            q_rot=q_rot,
+            attn_out=attn_out,
+            o_out=o_out,
+            res_mid=res_mid,
+            swiglu_out=swiglu_out,
+            perm_ffn=perm_ffn,
+            lm_scratch=lm_scratch,
+            graphs_by_bucket={},
+        )
+        self._workspaces[batch_size] = ws
+        return ws
 
-        self._qkv_graphs = []
-        self._mlp_graphs = []
-        for idx in range(n_layers):
-            lw = self.model.weights.layers[idx]
-            qg = torch.cuda.CUDAGraph()
-            with torch.cuda.graph(qg):
-                xn = cutile_rmsnorm(self._static_hidden, lw.input_layernorm, eps=cfg.rms_norm_eps)
-                q = _quant_linear_native(xn, lw.q_proj).view(
-                    1, cfg.num_attention_heads, 1, cfg.head_dim
-                )
-                k = _quant_linear_native(xn, lw.k_proj).view(
-                    1, cfg.num_key_value_heads, 1, cfg.head_dim
-                )
-                v = _quant_linear_native(xn, lw.v_proj).view(
-                    1, cfg.num_key_value_heads, 1, cfg.head_dim
-                )
-                self._static_q[idx].copy_(q)
-                self._static_k[idx].copy_(k)
-                self._static_v[idx].copy_(v)
-            self._qkv_graphs.append(qg)
+    def _select_bucket(self, pos: int) -> int:
+        if self.graph_strategy == "device_masked":
+            return self.max_seq_len
+        needed = pos + 1
+        for b in self.context_buckets:
+            if needed <= b:
+                return b
+        return self.max_seq_len
 
-            mg = torch.cuda.CUDAGraph()
-            with torch.cuda.graph(mg):
-                op = _quant_linear_native(self._static_attn[idx], lw.o_proj)
-                pn, rm = fused_rmsnorm_residual(
-                    op, self._static_hidden, lw.post_attention_layernorm, eps=cfg.rms_norm_eps
+    def _execute_decode_step_in_workspace(
+        self,
+        ws: _DecodeGraphWorkspace,
+        bucket_len: int,
+    ) -> None:
+        """Execute 1 complete 32-layer decode step inside `ws` using only static addresses."""
+        cfg = self.config
+        bsz = ws.batch_size
+        dyn_loop = self.graph_strategy == "bucketed"
+
+        cutile_embedding_lookup(ws.token_id.view(bsz), self._embed_w, out=ws.hidden)
+
+        for idx, pl in enumerate(self._packed_layers):
+            cutile_rmsnorm(ws.hidden, pl.input_layernorm, eps=cfg.rms_norm_eps, out=ws.norm)
+
+            if (
+                pl.qkv_packed
+                and pl.qkv_qweight is not None
+                and pl.qkv_scales is not None
+                and pl.qkv_zeros is not None
+            ):
+                qkv_in = (
+                    cutile_col_permute(ws.norm, pl.qkv_perm_i32, out=ws.perm_d)
+                    if pl.qkv_perm_i32 is not None
+                    else ws.norm
                 )
-                gi = (
-                    cutile_col_permute(pn, lw.gate_proj.perm)
-                    if lw.gate_proj.perm is not None
-                    else pn
+                fused_gemm_dequant(
+                    qkv_in,
+                    pl.qkv_qweight,
+                    pl.qkv_scales,
+                    pl.qkv_zeros,
+                    group_size=pl.group_size,
+                    out=ws.qkv,
+                )
+            else:
+                q_dim = cfg.num_attention_heads * cfg.head_dim
+                kv_dim = cfg.num_key_value_heads * cfg.head_dim
+                _quant_linear_native(
+                    ws.norm, pl.q_proj, pl.q_perm_i32, ws.perm_d, out=ws.qkv[:, :q_dim]
+                )
+                _quant_linear_native(
+                    ws.norm,
+                    pl.k_proj,
+                    pl.k_perm_i32,
+                    ws.perm_d,
+                    out=ws.qkv[:, q_dim : q_dim + kv_dim],
+                )
+                _quant_linear_native(
+                    ws.norm,
+                    pl.v_proj,
+                    pl.v_perm_i32,
+                    ws.perm_d,
+                    out=ws.qkv[:, q_dim + kv_dim :],
+                )
+
+            apply_rope_qk_kv_write_pos(
+                ws.qkv,
+                self._cos,
+                self._sin,
+                ws.pos_buf,
+                self.kv_cache.block_tables[idx][:bsz],
+                ws.q_rot,
+                self.kv_cache.k_pools[idx][:bsz],
+                self.kv_cache.v_pools[idx][:bsz],
+                n_q_heads=cfg.num_attention_heads,
+                n_kv_heads=cfg.num_key_value_heads,
+                head_dim=cfg.head_dim,
+                block_size=self.block_size,
+            )
+
+            fused_attention_gqa_decode_pos(
+                ws.q_rot,
+                self.kv_cache.k_pools[idx][:bsz],
+                self.kv_cache.v_pools[idx][:bsz],
+                ws.pos_buf,
+                max_kv_len=bucket_len,
+                out=ws.attn_out,
+                dynamic_loop=dyn_loop,
+            )
+
+            attn_2d = ws.attn_out.view(bsz, cfg.hidden_size)
+            _quant_linear_native(attn_2d, pl.o_proj, pl.o_perm_i32, ws.perm_d, out=ws.o_out)
+
+            fused_rmsnorm_residual(
+                ws.o_out,
+                ws.hidden,
+                pl.post_attention_layernorm,
+                eps=cfg.rms_norm_eps,
+                out_norm=ws.norm,
+                out_res=ws.res_mid,
+            )
+
+            if pl.swiglu_fused:
+                g_in = (
+                    cutile_col_permute(ws.norm, pl.gate_perm_i32, out=ws.perm_d)
+                    if pl.gate_perm_i32 is not None
+                    else ws.norm
+                )
+                fused_swiglu_dequant(
+                    g_in,
+                    pl.gate_proj.qweight,
+                    pl.gate_proj.scales,
+                    pl.gate_proj.zeros,
+                    pl.up_proj.qweight,
+                    pl.up_proj.scales,
+                    pl.up_proj.zeros,
+                    group_size=pl.group_size,
+                    out=ws.swiglu_out,
+                )
+            else:
+                g_in = (
+                    cutile_col_permute(ws.norm, pl.gate_perm_i32, out=ws.perm_d)
+                    if pl.gate_perm_i32 is not None
+                    else ws.norm
                 )
                 ga = fused_gemm_dequant_silu(
-                    gi,
-                    lw.gate_proj.qweight,
-                    lw.gate_proj.scales,
-                    lw.gate_proj.zeros,
-                    group_size=lw.gate_proj.group_size,
+                    g_in,
+                    pl.gate_proj.qweight,
+                    pl.gate_proj.scales,
+                    pl.gate_proj.zeros,
+                    group_size=pl.group_size,
                 )
-                uv = _quant_linear_native(pn, lw.up_proj)
-                ffn = _quant_linear_native(cutile_ew_mul(ga, uv), lw.down_proj)
-                self._static_hidden.copy_(cutile_ew_add(rm, ffn))
-            self._mlp_graphs.append(mg)
+                uv = _quant_linear_native(ws.norm, pl.up_proj, pl.up_perm_i32, ws.perm_d)
+                cutile_ew_mul(ga, uv, out=ws.swiglu_out)
 
-        self._graphs_captured = True
+            d_in = (
+                cutile_col_permute(ws.swiglu_out, pl.down_perm_i32, out=ws.perm_ffn)
+                if pl.down_perm_i32 is not None
+                else ws.swiglu_out
+            )
+            fused_gemm_dequant_add(
+                d_in,
+                pl.down_proj.qweight,
+                pl.down_proj.scales,
+                pl.down_proj.zeros,
+                ws.res_mid,
+                group_size=pl.group_size,
+                out=ws.hidden,
+            )
+
+        cutile_lm_head_fused(
+            ws.hidden,
+            self._norm_w,
+            self._lm_head_w,
+            eps=cfg.rms_norm_eps,
+            top_k=1,
+            scratch=ws.lm_scratch,
+        )
+        cutile_record_and_advance_step(
+            ws.token_id,
+            ws.pos_buf,
+            ws.step_buf,
+            ws.history_buf,
+            bsz=bsz,
+        )
+
+    def _capture_full_step_graph(
+        self, ws: _DecodeGraphWorkspace, bucket_len: int
+    ) -> torch.cuda.CUDAGraph:
+        """Capture a single full-step `torch.cuda.CUDAGraph` for `(ws.batch_size, bucket_len)`."""
+        if bucket_len in ws.graphs_by_bucket:
+            return ws.graphs_by_bucket[bucket_len]
+
+        # Save live state before warmup/capture so KV cache at current position is untouched
+        saved_tok = ws.token_id.clone()
+        saved_pos = ws.pos_buf.clone()
+        saved_step = ws.step_buf.clone()
+        scratch_slot = min(bucket_len - 1, self.max_seq_len - 1)
+        saved_k = [kp[: ws.batch_size, :, scratch_slot, :].clone() for kp in self.kv_cache.k_pools]
+        saved_v = [vp[: ws.batch_size, :, scratch_slot, :].clone() for vp in self.kv_cache.v_pools]
+
+        ws.pos_buf.fill_(scratch_slot)
+        ws.step_buf.fill_(0)
+        self._execute_decode_step_in_workspace(ws, bucket_len)
+        torch.cuda.synchronize()
+
+        ws.pos_buf.fill_(scratch_slot)
+        ws.step_buf.fill_(0)
+        g = torch.cuda.CUDAGraph()
+        with torch.cuda.graph(g):
+            self._execute_decode_step_in_workspace(ws, bucket_len)
+        torch.cuda.synchronize()
+
+        # Restore state
+        for idx in range(self.config.num_hidden_layers):
+            self.kv_cache.k_pools[idx][: ws.batch_size, :, scratch_slot, :].copy_(saved_k[idx])
+            self.kv_cache.v_pools[idx][: ws.batch_size, :, scratch_slot, :].copy_(saved_v[idx])
+        ws.token_id.copy_(saved_tok)
+        ws.pos_buf.copy_(saved_pos)
+        ws.step_buf.copy_(saved_step)
+
+        ws.graphs_by_bucket[bucket_len] = g
+        return g
 
     def _forward_layer_native(
         self,
@@ -224,6 +568,7 @@ class NativeModelRuntime:
         x_2d: torch.Tensor,
         pos_offset: int,
         seq_len: int,
+        batch_size: int = 1,
     ) -> torch.Tensor:
         cfg = self.config
         lw = self._layer_on_device(idx)
@@ -232,24 +577,23 @@ class NativeModelRuntime:
             from cutile_forge.engine.model import _pytorch_rmsnorm, _quant_linear_pytorch
 
             assert self._cpu_layers is not None
-            # CPU reference fallback for non-GPU CI runners
             prev_kv = self._cpu_kv[idx]
             k_prev = prev_kv[0] if prev_kv is not None else None
             v_prev = prev_kv[1] if prev_kv is not None else None
             xn = _pytorch_rmsnorm(x_2d, lw.input_layernorm, eps=cfg.rms_norm_eps)
             q = (
                 _quant_linear_pytorch(xn, lw.q_proj)
-                .view(1, seq_len, cfg.num_attention_heads, cfg.head_dim)
+                .view(batch_size, seq_len, cfg.num_attention_heads, cfg.head_dim)
                 .transpose(1, 2)
             )
             k = (
                 _quant_linear_pytorch(xn, lw.k_proj)
-                .view(1, seq_len, cfg.num_key_value_heads, cfg.head_dim)
+                .view(batch_size, seq_len, cfg.num_key_value_heads, cfg.head_dim)
                 .transpose(1, 2)
             )
             v = (
                 _quant_linear_pytorch(xn, lw.v_proj)
-                .view(1, seq_len, cfg.num_key_value_heads, cfg.head_dim)
+                .view(batch_size, seq_len, cfg.num_key_value_heads, cfg.head_dim)
                 .transpose(1, 2)
             )
             half_d = cfg.head_dim // 2
@@ -285,7 +629,7 @@ class NativeModelRuntime:
             att = torch.nn.functional.scaled_dot_product_attention(
                 q, kr, vr, is_causal=(seq_len > 1)
             )
-            att_2d = att.transpose(1, 2).contiguous().view(seq_len, cfg.hidden_size)
+            att_2d = att.transpose(1, 2).contiguous().view(batch_size * seq_len, cfg.hidden_size)
             op = _quant_linear_pytorch(att_2d, lw.o_proj)
             rm = (x_2d.float() + op.float()).to(torch.float16)
             pn = _pytorch_rmsnorm(rm, lw.post_attention_layernorm, eps=cfg.rms_norm_eps)
@@ -296,14 +640,35 @@ class NativeModelRuntime:
             ffn = _quant_linear_pytorch(gate * up, lw.down_proj)
             return (rm.float() + ffn.float()).to(torch.float16)
 
+        pl = self._packed_layers[idx] if self._packed_layers else None
         x_n = cutile_rmsnorm(x_2d, lw.input_layernorm, eps=cfg.rms_norm_eps)
-        q = _quant_linear_native(x_n, lw.q_proj)
-        k = _quant_linear_native(x_n, lw.k_proj)
-        v = _quant_linear_native(x_n, lw.v_proj)
 
-        q = q.view(1, seq_len, cfg.num_attention_heads, cfg.head_dim).transpose(1, 2)
-        k = k.view(1, seq_len, cfg.num_key_value_heads, cfg.head_dim).transpose(1, 2)
-        v = v.view(1, seq_len, cfg.num_key_value_heads, cfg.head_dim).transpose(1, 2)
+        if (
+            pl is not None
+            and pl.qkv_packed
+            and pl.qkv_qweight is not None
+            and pl.qkv_scales is not None
+            and pl.qkv_zeros is not None
+        ):
+            qkv_in = (
+                cutile_col_permute(x_n, pl.qkv_perm_i32) if pl.qkv_perm_i32 is not None else x_n
+            )
+            qkv_out = fused_gemm_dequant(
+                qkv_in, pl.qkv_qweight, pl.qkv_scales, pl.qkv_zeros, group_size=pl.group_size
+            )
+            q_dim = cfg.num_attention_heads * cfg.head_dim
+            kv_dim = cfg.num_key_value_heads * cfg.head_dim
+            q = qkv_out[:, :q_dim].contiguous()
+            k = qkv_out[:, q_dim : q_dim + kv_dim].contiguous()
+            v = qkv_out[:, q_dim + kv_dim :].contiguous()
+        else:
+            q = _quant_linear_native(x_n, lw.q_proj, pl.q_perm_i32 if pl else None)
+            k = _quant_linear_native(x_n, lw.k_proj, pl.k_perm_i32 if pl else None)
+            v = _quant_linear_native(x_n, lw.v_proj, pl.v_perm_i32 if pl else None)
+
+        q = q.view(batch_size, seq_len, cfg.num_attention_heads, cfg.head_dim).transpose(1, 2)
+        k = k.view(batch_size, seq_len, cfg.num_key_value_heads, cfg.head_dim).transpose(1, 2)
+        v = v.view(batch_size, seq_len, cfg.num_key_value_heads, cfg.head_dim).transpose(1, 2)
 
         q = apply_rope(q, self._cos, self._sin, position_offset=pos_offset)
         k = apply_rope(k, self._cos, self._sin, position_offset=pos_offset)
@@ -311,93 +676,167 @@ class NativeModelRuntime:
         k_full, v_full = self.kv_cache.append_and_get(idx, k, v, start_pos=pos_offset)
         attn_out = fused_attention_gqa(q, k_full, v_full, causal=True)
         attn_2d = (
-            attn_out.view(1, cfg.hidden_size)
+            attn_out.view(batch_size, cfg.hidden_size)
             if seq_len == 1
-            else attn_out.transpose(1, 2).contiguous().view(seq_len, cfg.hidden_size)
+            else attn_out.transpose(1, 2).contiguous().view(batch_size * seq_len, cfg.hidden_size)
         )
 
-        o_proj = _quant_linear_native(attn_2d, lw.o_proj)
+        o_proj = _quant_linear_native(attn_2d, lw.o_proj, pl.o_perm_i32 if pl else None)
         post_norm, residual_mid = fused_rmsnorm_residual(
             o_proj, x_2d, lw.post_attention_layernorm, eps=cfg.rms_norm_eps
         )
-        g_in = (
-            cutile_col_permute(post_norm, lw.gate_proj.perm)
-            if lw.gate_proj.perm is not None
-            else post_norm
+
+        if pl is not None and pl.swiglu_fused:
+            g_in = (
+                cutile_col_permute(post_norm, pl.gate_perm_i32)
+                if pl.gate_perm_i32 is not None
+                else post_norm
+            )
+            act_mul = fused_swiglu_dequant(
+                g_in,
+                pl.gate_proj.qweight,
+                pl.gate_proj.scales,
+                pl.gate_proj.zeros,
+                pl.up_proj.qweight,
+                pl.up_proj.scales,
+                pl.up_proj.zeros,
+                group_size=pl.group_size,
+            )
+        else:
+            g_perm = pl.gate_perm_i32 if pl else lw.gate_proj.perm
+            g_in = cutile_col_permute(post_norm, g_perm) if g_perm is not None else post_norm
+            gate_act = fused_gemm_dequant_silu(
+                g_in,
+                lw.gate_proj.qweight,
+                lw.gate_proj.scales,
+                lw.gate_proj.zeros,
+                group_size=lw.gate_proj.group_size,
+            )
+            up_val = _quant_linear_native(post_norm, lw.up_proj, pl.up_perm_i32 if pl else None)
+            act_mul = cutile_ew_mul(gate_act, up_val)
+
+        d_perm = pl.down_perm_i32 if pl else lw.down_proj.perm
+        d_in = cutile_col_permute(act_mul, d_perm) if d_perm is not None else act_mul
+        return fused_gemm_dequant_add(
+            d_in,
+            lw.down_proj.qweight,
+            lw.down_proj.scales,
+            lw.down_proj.zeros,
+            residual_mid,
+            group_size=lw.down_proj.group_size,
         )
-        gate_act = fused_gemm_dequant_silu(
-            g_in,
-            lw.gate_proj.qweight,
-            lw.gate_proj.scales,
-            lw.gate_proj.zeros,
-            group_size=lw.gate_proj.group_size,
-        )
-        up_val = _quant_linear_native(post_norm, lw.up_proj)
-        act_mul = cutile_ew_mul(gate_act, up_val)
-        ffn_out = _quant_linear_native(act_mul, lw.down_proj)
-        return cutile_ew_add(residual_mid, ffn_out)
 
     @torch.inference_mode()
     def prefill(self, input_ids: torch.Tensor) -> torch.Tensor:
-        """Prefill prompt `(1, S)` using native CuTile kernels and return greedy next token `(1, 1)`."""
+        """Prefill prompt `(B, S)` using native CuTile kernels and return greedy next token `(B, 1)`."""
         self.reset()
         ids = input_ids.to(self.device)
-        seq_len = int(ids.shape[1])
-        h = cutile_embedding_lookup(ids.view(seq_len), self._embed_w).view(
-            seq_len, self.config.hidden_size
+        if ids.ndim == 1:
+            ids = ids.unsqueeze(0)
+        bsz, seq_len = int(ids.shape[0]), int(ids.shape[1])
+        self.kv_cache.ensure_batch_capacity(bsz)
+        h = cutile_embedding_lookup(ids.reshape(bsz * seq_len), self._embed_w).view(
+            bsz * seq_len, self.config.hidden_size
         )
         for idx in range(self.config.num_hidden_layers):
-            h = self._forward_layer_native(idx, h, pos_offset=0, seq_len=seq_len)
+            h = self._forward_layer_native(idx, h, pos_offset=0, seq_len=seq_len, batch_size=bsz)
+        h_last = h.view(bsz, seq_len, self.config.hidden_size)[:, -1, :].contiguous()
         _, next_tok = cutile_lm_head_fused(
-            h[-1:, :], self._norm_w, self._lm_head_w, eps=self.config.rms_norm_eps, top_k=1
+            h_last, self._norm_w, self._lm_head_w, eps=self.config.rms_norm_eps, top_k=1
         )
-        return next_tok.view(1, 1)
+        if self._all_layers_on_gpu:
+            ws = self._get_or_create_workspace(bsz)
+            ws.token_id.copy_(next_tok.view(bsz, 1).to(torch.int32))
+            ws.pos_buf.fill_(seq_len)
+            ws.step_buf.fill_(0)
+        return next_tok.view(bsz, 1)
+
+    @torch.inference_mode()
+    def prefill_chunk(
+        self,
+        chunk_ids: torch.Tensor,
+        start_pos: int,
+        emit_next_token: bool = False,
+    ) -> torch.Tensor | None:
+        """Process one chunk `(1, S_chunk)` of a chunked prefill at `start_pos` without stalling decodes."""
+        if start_pos == 0:
+            self.reset()
+        ids = chunk_ids.to(self.device)
+        if ids.ndim == 1:
+            ids = ids.unsqueeze(0)
+        bsz, s_chunk = int(ids.shape[0]), int(ids.shape[1])
+        h = cutile_embedding_lookup(ids.reshape(bsz * s_chunk), self._embed_w).view(
+            bsz * s_chunk, self.config.hidden_size
+        )
+        for idx in range(self.config.num_hidden_layers):
+            h = self._forward_layer_native(
+                idx, h, pos_offset=start_pos, seq_len=s_chunk, batch_size=bsz
+            )
+        if not emit_next_token:
+            return None
+        h_last = h.view(bsz, s_chunk, self.config.hidden_size)[:, -1, :].contiguous()
+        _, next_tok = cutile_lm_head_fused(
+            h_last, self._norm_w, self._lm_head_w, eps=self.config.rms_norm_eps, top_k=1
+        )
+        return next_tok.view(bsz, 1)
 
     @torch.inference_mode()
     def decode_step(
         self,
-        token_id: torch.Tensor,
-        pos: int,
+        token_id: torch.Tensor | None = None,
+        pos: int | None = None,
         use_graph: bool | None = None,
+        sync_pos: bool = True,
     ) -> torch.Tensor:
         """Execute a single autoregressive decode step (zero ATen compute ops on CUDA)."""
         cfg = self.config
         use_g = self.use_cuda_graph if use_graph is None else (use_graph and self.use_cuda)
-        if use_g and not self._graphs_captured:
-            self._capture_decode_graphs()
+        bsz = 1 if token_id is None else max(1, int(token_id.shape[0]) if token_id.ndim >= 2 else 1)
 
+        if use_g and self._all_layers_on_gpu:
+            ws = self._get_or_create_workspace(bsz)
+            cur_pos = self.kv_cache.seq_lens[0] if pos is None else pos
+            bucket_len = self._select_bucket(cur_pos)
+            graph = self._capture_full_step_graph(ws, bucket_len)
+
+            if token_id is not None and token_id.data_ptr() != ws.token_id.data_ptr():
+                ws.token_id.copy_(token_id.view(bsz, 1))
+            if sync_pos and pos is not None:
+                ws.pos_buf.fill_(pos)
+            graph.replay()
+            self.kv_cache.seq_lens = [cur_pos + 1] * cfg.num_hidden_layers
+            return ws.token_id.view(bsz, 1)
+
+        assert token_id is not None
+        cur_pos = self.kv_cache.seq_lens[0] if pos is None else pos
         ids = token_id if token_id.device == self.device else token_id.to(self.device)
-        if self._graphs_captured and use_g:
-            cutile_embedding_lookup(ids.view(1), self._embed_w, out=self._static_hidden)
-            for idx in range(cfg.num_hidden_layers):
-                self._qkv_graphs[idx].replay()
-                q = apply_rope(self._static_q[idx], self._cos, self._sin, position_offset=pos)
-                k = apply_rope(self._static_k[idx], self._cos, self._sin, position_offset=pos)
-                v = self._static_v[idx]
-                k_full, v_full = self.kv_cache.append_and_get(idx, k, v, start_pos=pos)
-                attn_out = fused_attention_gqa(q, k_full, v_full, causal=True)
-                self._static_attn[idx].copy_(attn_out.view(1, cfg.hidden_size))
-                self._mlp_graphs[idx].replay()
-            _, next_tok = cutile_lm_head_fused(
-                self._static_hidden, self._norm_w, self._lm_head_w, eps=cfg.rms_norm_eps, top_k=1
-            )
-            return next_tok.view(1, 1)
+        if self.use_cuda and self._all_layers_on_gpu:
+            ws = self._get_or_create_workspace(bsz)
+            if ids.data_ptr() != ws.token_id.data_ptr():
+                ws.token_id.copy_(ids.view(bsz, 1))
+            ws.pos_buf.fill_(cur_pos)
+            bucket_len = self._select_bucket(cur_pos)
+            self._execute_decode_step_in_workspace(ws, bucket_len)
+            self.kv_cache.seq_lens = [cur_pos + 1] * cfg.num_hidden_layers
+            return ws.token_id.view(bsz, 1)
 
-        h = cutile_embedding_lookup(ids.view(1), self._embed_w).view(1, cfg.hidden_size)
+        h = cutile_embedding_lookup(ids.view(bsz), self._embed_w).view(bsz, cfg.hidden_size)
         for idx in range(cfg.num_hidden_layers):
-            h = self._forward_layer_native(idx, h, pos_offset=pos, seq_len=1)
+            h = self._forward_layer_native(idx, h, pos_offset=cur_pos, seq_len=1, batch_size=bsz)
         _, next_tok = cutile_lm_head_fused(
             h, self._norm_w, self._lm_head_w, eps=cfg.rms_norm_eps, top_k=1
         )
-        return next_tok.view(1, 1)
+        return next_tok.view(bsz, 1)
 
     @torch.inference_mode()
     def generate(
         self,
         prompt_ids: list[int],
         max_new_tokens: int = 32,
+        sync_interval: int = 32,
+        eos_token_id: int | None = None,
     ) -> tuple[list[int], dict[str, Any]]:
-        """Run full prefill + native decode loop returning `(tokens, telemetry)`."""
+        """Run full prefill + native decode loop (supports chained multi-step CUDA Graph replay)."""
         t0 = time.perf_counter()
         prompt_t = torch.tensor([prompt_ids], dtype=torch.long, device=self.device)
         next_tok = self.prefill(prompt_t)
@@ -405,16 +844,82 @@ class NativeModelRuntime:
             torch.cuda.synchronize()
         t_prefill = (time.perf_counter() - t0) * 1000.0
 
-        generated: list[int] = [int(next_tok.item())]
+        first_id = int(next_tok.item())
+        generated: list[int] = [first_id]
+        if eos_token_id is not None and first_id == eos_token_id:
+            return generated, {
+                "prompt_tokens": len(prompt_ids),
+                "generated_tokens": 1,
+                "prefill_ms": round(t_prefill, 2),
+                "decode_ms": 0.0,
+                "decode_tok_s": 0.0,
+                "ms_per_token": 0.0,
+            }
+
         cur_pos = len(prompt_ids)
-        t_dec0 = time.perf_counter()
-        for _ in range(max_new_tokens - 1):
-            next_tok = self.decode_step(next_tok, pos=cur_pos)
-            cur_pos += 1
-            generated.append(int(next_tok.item()))
-        if self.use_cuda:
-            torch.cuda.synchronize()
-        t_decode = (time.perf_counter() - t_dec0) * 1000.0
+        rem_tokens = max(0, max_new_tokens - 1)
+
+        if self.use_cuda_graph and self._all_layers_on_gpu and rem_tokens > 0:
+            ws = self._get_or_create_workspace(1)
+            # Pre-capture any context buckets we will touch before timing decode
+            end_pos = cur_pos + rem_tokens
+            if self.graph_strategy == "device_masked":
+                _ = self._capture_full_step_graph(ws, self.max_seq_len)
+            else:
+                for b in self.context_buckets:
+                    if cur_pos < b:
+                        _ = self._capture_full_step_graph(ws, b)
+                    if b >= end_pos:
+                        break
+
+            ws.token_id.fill_(first_id)
+            ws.pos_buf.fill_(cur_pos)
+            ws.step_buf.fill_(0)
+            if self.use_cuda:
+                torch.cuda.synchronize()
+
+            eff_sync = max(1, sync_interval)
+            t_dec0 = time.perf_counter()
+            steps_done = 0
+            while steps_done < rem_tokens:
+                bucket_len = self._select_bucket(cur_pos)
+                graph = ws.graphs_by_bucket[bucket_len]
+                # Chained replay up to bucket boundary or sync_interval without any host sync
+                can_run_in_bucket = max(1, bucket_len - cur_pos)
+                chunk = min(eff_sync, rem_tokens - steps_done, can_run_in_bucket)
+                for _ in range(chunk):
+                    graph.replay()
+                cur_pos += chunk
+                steps_done += chunk
+                self.kv_cache.seq_lens = [cur_pos] * self.config.num_hidden_layers
+
+                # Async/batched read of the chunk's generated token IDs from device history buffer
+                chunk_toks = ws.history_buf[steps_done - chunk : steps_done, 0].cpu().tolist()
+                stop_now = False
+                for tid in chunk_toks:
+                    generated.append(int(tid))
+                    if eos_token_id is not None and int(tid) == eos_token_id:
+                        stop_now = True
+                        break
+                if stop_now:
+                    break
+
+            if self.use_cuda:
+                torch.cuda.synchronize()
+            t_decode = (time.perf_counter() - t_dec0) * 1000.0
+        else:
+            t_dec0 = time.perf_counter()
+            for _ in range(rem_tokens):
+                next_tok = self.decode_step(next_tok, pos=cur_pos, use_graph=False)
+                cur_pos += 1
+                tid = int(next_tok.item())
+                generated.append(tid)
+                if eos_token_id is not None and tid == eos_token_id:
+                    break
+            if self.use_cuda:
+                torch.cuda.synchronize()
+            t_decode = (time.perf_counter() - t_dec0) * 1000.0
+
         gen_n = max(1, len(generated) - 1)
         return generated, {
             "prompt_tokens": len(prompt_ids),
@@ -423,4 +928,414 @@ class NativeModelRuntime:
             "decode_ms": round(t_decode, 2),
             "decode_tok_s": round((gen_n / max(1e-6, t_decode)) * 1000.0, 2),
             "ms_per_token": round(t_decode / gen_n, 2),
+        }
+
+    @torch.inference_mode()
+    def generate_batch(
+        self,
+        prompt_ids_list: list[list[int]],
+        max_new_tokens: int = 32,
+        sync_interval: int = 32,
+    ) -> tuple[list[list[int]], dict[str, Any]]:
+        """Batch-bucketed continuous batching on `NativeModelRuntime` (zero forbidden ATen ops)."""
+        bsz = len(prompt_ids_list)
+        if bsz == 0:
+            return [], {"batch_size": 0, "total_decode_tok_s": 0.0}
+        if bsz == 1:
+            toks, st = self.generate(
+                prompt_ids_list[0], max_new_tokens=max_new_tokens, sync_interval=sync_interval
+            )
+            return [toks], {
+                "batch_size": 1,
+                "total_decode_tok_s": st["decode_tok_s"],
+                "per_req_tok_s": st["decode_tok_s"],
+                "decode_ms": st["decode_ms"],
+                "prefill_ms": st["prefill_ms"],
+            }
+
+        max_len = max(len(p) for p in prompt_ids_list)
+        padded = [[1] * (max_len - len(p)) + list(p) for p in prompt_ids_list]
+        batch_t = torch.tensor(padded, dtype=torch.long, device=self.device)
+
+        t0 = time.perf_counter()
+        next_toks = self.prefill(batch_t)
+        if self.use_cuda:
+            torch.cuda.synchronize()
+        t_prefill = (time.perf_counter() - t0) * 1000.0
+
+        first_col = next_toks.view(bsz).cpu().tolist()
+        outputs: list[list[int]] = [[int(first_col[b])] for b in range(bsz)]
+        cur_pos = max_len
+        rem_tokens = max(0, max_new_tokens - 1)
+
+        if self.use_cuda_graph and self._all_layers_on_gpu and rem_tokens > 0:
+            ws = self._get_or_create_workspace(bsz)
+            end_pos = cur_pos + rem_tokens
+            for b in self.context_buckets:
+                if cur_pos < b:
+                    _ = self._capture_full_step_graph(ws, b)
+                if b >= end_pos:
+                    break
+
+            ws.token_id.copy_(next_toks.view(bsz, 1).to(torch.int32))
+            ws.pos_buf.fill_(cur_pos)
+            ws.step_buf.fill_(0)
+            if self.use_cuda:
+                torch.cuda.synchronize()
+
+            eff_sync = max(1, sync_interval)
+            t_dec0 = time.perf_counter()
+            steps_done = 0
+            while steps_done < rem_tokens:
+                bucket_len = self._select_bucket(cur_pos)
+                graph = ws.graphs_by_bucket[bucket_len]
+                chunk = min(eff_sync, rem_tokens - steps_done, max(1, bucket_len - cur_pos))
+                for _ in range(chunk):
+                    graph.replay()
+                cur_pos += chunk
+                steps_done += chunk
+                self.kv_cache.seq_lens = [cur_pos] * self.config.num_hidden_layers
+                chunk_mat = ws.history_buf[steps_done - chunk : steps_done, :bsz].cpu().tolist()
+                for row in chunk_mat:
+                    for b in range(bsz):
+                        outputs[b].append(int(row[b]))
+            if self.use_cuda:
+                torch.cuda.synchronize()
+            t_decode = (time.perf_counter() - t_dec0) * 1000.0
+        else:
+            t_dec0 = time.perf_counter()
+            for _ in range(rem_tokens):
+                next_toks = self.decode_step(next_toks, pos=cur_pos, use_graph=False)
+                cur_pos += 1
+                col = next_toks.view(bsz).cpu().tolist()
+                for b in range(bsz):
+                    outputs[b].append(int(col[b]))
+            if self.use_cuda:
+                torch.cuda.synchronize()
+            t_decode = (time.perf_counter() - t_dec0) * 1000.0
+
+        total_dec_toks = bsz * max(1, rem_tokens)
+        return outputs, {
+            "batch_size": bsz,
+            "prefill_ms": round(t_prefill, 2),
+            "decode_ms": round(t_decode, 2),
+            "total_decode_tok_s": round((total_dec_toks / max(1e-6, t_decode)) * 1000.0, 2),
+            "per_req_tok_s": round(((total_dec_toks / bsz) / max(1e-6, t_decode)) * 1000.0, 2),
+        }
+
+    @torch.inference_mode()
+    def generate_speculative(
+        self,
+        prompt_ids: list[int],
+        max_new_tokens: int = 256,
+        gamma: int = 4,
+        max_ngram: int = 3,
+    ) -> tuple[list[int], dict[str, Any]]:
+        """Native speculative decoding with N-gram prompt lookup + multi-token CuTile verification."""
+        from cutile_forge.engine.speculative import NGramPromptLookupDrafter
+
+        drafter = NGramPromptLookupDrafter(max_n=max_ngram)
+        logit_cache: dict[tuple[int, ...], list[int]] = {}
+
+        t0 = time.perf_counter()
+        prompt_t = torch.tensor([prompt_ids], dtype=torch.long, device=self.device)
+        first_tok_t = self.prefill(prompt_t)
+        if self.use_cuda:
+            torch.cuda.synchronize()
+        t_prefill = (time.perf_counter() - t0) * 1000.0
+
+        cur_tok = int(first_tok_t.item())
+        history: list[int] = list(prompt_ids) + [cur_tok]
+        generated: list[int] = [cur_tok]
+        pos = len(prompt_ids)
+
+        # Warmup graphed single-step fallback before timing
+        if self.use_cuda_graph and self._all_layers_on_gpu:
+            ws = self._get_or_create_workspace(1)
+            for b in self.context_buckets:
+                if pos < b:
+                    _ = self._capture_full_step_graph(ws, b)
+                if b >= pos + max_new_tokens:
+                    break
+
+        draft_steps = 0
+        accepted_total = 0
+        total_drafted = 0
+
+        t_dec0 = time.perf_counter()
+        while len(generated) < max_new_tokens:
+            draft_steps += 1
+            draft_toks = drafter.draft(history, gamma)
+            if not draft_toks and len(history) >= 3:
+                key3 = tuple(history[-3:])
+                if key3 in logit_cache:
+                    draft_toks = list(logit_cache[key3][:gamma])
+
+            if not draft_toks:
+                # Zero-overhead single-step graphed decode when no N-gram candidate exists
+                if self.use_cuda_graph and self._all_layers_on_gpu:
+                    ws = self._get_or_create_workspace(1)
+                    ws.token_id.fill_(cur_tok)
+                    ws.pos_buf.fill_(pos)
+                    bucket_len = self._select_bucket(pos)
+                    ws.graphs_by_bucket[bucket_len].replay()
+                    nxt = int(ws.token_id.item())
+                else:
+                    t_in = torch.tensor([[cur_tok]], dtype=torch.int32, device=self.device)
+                    nxt = int(self.decode_step(t_in, pos=pos, use_graph=False).item())
+                pos += 1
+                self.kv_cache.seq_lens = [pos] * self.config.num_hidden_layers
+                generated.append(nxt)
+                history.append(nxt)
+                cur_tok = nxt
+                continue
+
+            k_draft = len(draft_toks)
+            total_drafted += k_draft
+            verify_seq = [cur_tok] + draft_toks
+            s_v = len(verify_seq)
+            v_ids = torch.tensor(verify_seq, dtype=torch.int32, device=self.device)
+
+            h = cutile_embedding_lookup(v_ids, self._embed_w).view(s_v, self.config.hidden_size)
+            for idx in range(self.config.num_hidden_layers):
+                h = self._forward_layer_native(idx, h, pos_offset=pos, seq_len=s_v, batch_size=1)
+            _, pred_toks_t = cutile_lm_head_fused(
+                h, self._norm_w, self._lm_head_w, eps=self.config.rms_norm_eps, top_k=1
+            )
+            target_preds = pred_toks_t.view(s_v).cpu().tolist()
+
+            n_accept = 0
+            for j, d_tok in enumerate(draft_toks):
+                if int(target_preds[j]) == d_tok:
+                    n_accept += 1
+                    generated.append(d_tok)
+                    history.append(d_tok)
+                    if len(generated) >= max_new_tokens:
+                        break
+                else:
+                    tok = int(target_preds[j])
+                    generated.append(tok)
+                    history.append(tok)
+                    break
+            else:
+                if len(generated) < max_new_tokens:
+                    tok = int(target_preds[k_draft])
+                    generated.append(tok)
+                    history.append(tok)
+
+            if len(history) >= 4 + gamma:
+                logit_cache[tuple(history[-(3 + gamma) : -gamma])] = list(history[-gamma:])
+
+            accepted_total += n_accept
+            pos += n_accept + 1
+            self.kv_cache.truncate(pos)
+            cur_tok = generated[-1]
+
+        if self.use_cuda:
+            torch.cuda.synchronize()
+        t_decode = (time.perf_counter() - t_dec0) * 1000.0
+        gen_n = max(1, len(generated) - 1)
+        return generated[:max_new_tokens], {
+            "tokens_generated": min(len(generated), max_new_tokens),
+            "draft_steps": draft_steps,
+            "total_drafted": total_drafted,
+            "accepted_tokens": accepted_total,
+            "acceptance_rate": round(accepted_total / float(max(1, total_drafted)), 4),
+            "prefill_ms": round(t_prefill, 2),
+            "decode_ms": round(t_decode, 2),
+            "decode_tok_s": round((gen_n / max(1e-6, t_decode)) * 1000.0, 2),
+            "ms_per_token": round(t_decode / gen_n, 2),
+        }
+
+    @torch.inference_mode()
+    def benchmark_prefill_decode_interleave(
+        self,
+        decode_prompt_ids: list[int],
+        incoming_prefill_ids: list[int],
+        decode_steps: int = 8,
+        chunk_size: int | None = 128,
+    ) -> dict[str, float]:
+        """Measure active decode inter-token latency when an incoming prefill arrives mid-decode.
+
+        When `chunk_size is None`, the incoming prefill runs monolithically after decode step 2,
+        stalling step 3. When `chunk_size` is set (e.g. 128), prefill slices interleave with decode steps.
+        """
+        # Create a second independent KV cache for the incoming prefill request so both coexist cleanly
+        prefill_kv = NativePagedKVCache(
+            num_layers=self.config.num_hidden_layers,
+            num_kv_heads=self.config.num_key_value_heads,
+            head_dim=self.config.head_dim,
+            block_size=self.block_size,
+            max_seq_len=self.max_seq_len,
+            kv_dtype=self.kv_cache.kv_dtype,
+            device=self.device,
+            stream_manager=self.stream_manager,
+        )
+
+        prompt_t = torch.tensor([decode_prompt_ids], dtype=torch.long, device=self.device)
+        cur_tok = self.prefill(prompt_t)
+        cur_pos = len(decode_prompt_ids)
+        if self.use_cuda_graph and self._all_layers_on_gpu:
+            ws = self._get_or_create_workspace(1)
+            _ = self._capture_full_step_graph(ws, self._select_bucket(cur_pos + decode_steps))
+            ws.token_id.copy_(cur_tok.view(1, 1).to(torch.int32))
+            ws.pos_buf.fill_(cur_pos)
+        if self.use_cuda:
+            torch.cuda.synchronize()
+
+        prefill_t = torch.tensor(incoming_prefill_ids, dtype=torch.int32, device=self.device)
+        p_total = int(prefill_t.numel())
+        p_cursor = 0
+
+        def _run_prefill_slice(s_start: int, s_end: int) -> None:
+            sl = prefill_t[s_start:s_end]
+            s_len = int(sl.numel())
+            h = cutile_embedding_lookup(sl, self._embed_w).view(s_len, self.config.hidden_size)
+            for idx in range(self.config.num_hidden_layers):
+                lw = self._layer_on_device(idx)
+                pl = self._packed_layers[idx] if self._packed_layers else None
+                x_n = cutile_rmsnorm(h, lw.input_layernorm, eps=self.config.rms_norm_eps)
+                if (
+                    pl is not None
+                    and pl.qkv_packed
+                    and pl.qkv_qweight is not None
+                    and pl.qkv_scales is not None
+                    and pl.qkv_zeros is not None
+                ):
+                    qkv_in = (
+                        cutile_col_permute(x_n, pl.qkv_perm_i32)
+                        if pl.qkv_perm_i32 is not None
+                        else x_n
+                    )
+                    qkv_out = fused_gemm_dequant(
+                        qkv_in,
+                        pl.qkv_qweight,
+                        pl.qkv_scales,
+                        pl.qkv_zeros,
+                        group_size=pl.group_size,
+                    )
+                    qd = self.config.num_attention_heads * self.config.head_dim
+                    kvd = self.config.num_key_value_heads * self.config.head_dim
+                    q = (
+                        qkv_out[:, :qd]
+                        .contiguous()
+                        .view(1, s_len, self.config.num_attention_heads, self.config.head_dim)
+                        .transpose(1, 2)
+                    )
+                    k = (
+                        qkv_out[:, qd : qd + kvd]
+                        .contiguous()
+                        .view(1, s_len, self.config.num_key_value_heads, self.config.head_dim)
+                        .transpose(1, 2)
+                    )
+                    v = (
+                        qkv_out[:, qd + kvd :]
+                        .contiguous()
+                        .view(1, s_len, self.config.num_key_value_heads, self.config.head_dim)
+                        .transpose(1, 2)
+                    )
+                else:
+                    q = (
+                        _quant_linear_native(x_n, lw.q_proj)
+                        .view(1, s_len, self.config.num_attention_heads, self.config.head_dim)
+                        .transpose(1, 2)
+                    )
+                    k = (
+                        _quant_linear_native(x_n, lw.k_proj)
+                        .view(1, s_len, self.config.num_key_value_heads, self.config.head_dim)
+                        .transpose(1, 2)
+                    )
+                    v = (
+                        _quant_linear_native(x_n, lw.v_proj)
+                        .view(1, s_len, self.config.num_key_value_heads, self.config.head_dim)
+                        .transpose(1, 2)
+                    )
+                q = apply_rope(q, self._cos, self._sin, position_offset=s_start)
+                k = apply_rope(k, self._cos, self._sin, position_offset=s_start)
+                kf, vf = prefill_kv.append_and_get(idx, k, v, start_pos=s_start)
+                att = (
+                    fused_attention_gqa(q, kf, vf, causal=True)
+                    .transpose(1, 2)
+                    .contiguous()
+                    .view(s_len, self.config.hidden_size)
+                )
+                op = _quant_linear_native(att, lw.o_proj, pl.o_perm_i32 if pl else None)
+                pn, rm = fused_rmsnorm_residual(
+                    op, h, lw.post_attention_layernorm, eps=self.config.rms_norm_eps
+                )
+                if pl is not None and pl.swiglu_fused:
+                    gin = (
+                        cutile_col_permute(pn, pl.gate_perm_i32)
+                        if pl.gate_perm_i32 is not None
+                        else pn
+                    )
+                    am = fused_swiglu_dequant(
+                        gin,
+                        pl.gate_proj.qweight,
+                        pl.gate_proj.scales,
+                        pl.gate_proj.zeros,
+                        pl.up_proj.qweight,
+                        pl.up_proj.scales,
+                        pl.up_proj.zeros,
+                        group_size=pl.group_size,
+                    )
+                else:
+                    gin = (
+                        cutile_col_permute(pn, lw.gate_proj.perm)
+                        if lw.gate_proj.perm is not None
+                        else pn
+                    )
+                    ga = fused_gemm_dequant_silu(
+                        gin,
+                        lw.gate_proj.qweight,
+                        lw.gate_proj.scales,
+                        lw.gate_proj.zeros,
+                        group_size=lw.gate_proj.group_size,
+                    )
+                    uv = _quant_linear_native(pn, lw.up_proj)
+                    am = cutile_ew_mul(ga, uv)
+                din = (
+                    cutile_col_permute(am, pl.down_perm_i32)
+                    if (pl and pl.down_perm_i32 is not None)
+                    else am
+                )
+                h = fused_gemm_dequant_add(
+                    din,
+                    lw.down_proj.qweight,
+                    lw.down_proj.scales,
+                    lw.down_proj.zeros,
+                    rm,
+                    group_size=lw.down_proj.group_size,
+                )
+
+        itl_ms: list[float] = []
+        for step in range(decode_steps):
+            t_s = time.perf_counter()
+            if step >= 1 and p_cursor < p_total:
+                if chunk_size is None:
+                    _run_prefill_slice(0, p_total)
+                    p_cursor = p_total
+                else:
+                    s_end = min(p_total, p_cursor + chunk_size)
+                    _run_prefill_slice(p_cursor, s_end)
+                    p_cursor = s_end
+            cur_tok = self.decode_step(cur_tok, pos=cur_pos, sync_pos=False)
+            cur_pos += 1
+            if self.use_cuda:
+                torch.cuda.synchronize()
+            itl_ms.append((time.perf_counter() - t_s) * 1000.0)
+
+        while p_cursor < p_total:
+            s_end = min(p_total, p_cursor + (chunk_size or p_total))
+            _run_prefill_slice(p_cursor, s_end)
+            p_cursor = s_end
+        if self.use_cuda:
+            torch.cuda.synchronize()
+
+        import statistics
+
+        return {
+            "max_itl_ms": round(max(itl_ms), 2),
+            "median_itl_ms": round(statistics.median(itl_ms), 2),
+            "total_schedule_ms": round(sum(itl_ms), 2),
         }

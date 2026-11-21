@@ -62,6 +62,7 @@ def apply_rope(
     cos: torch.Tensor,
     sin: torch.Tensor,
     position_offset: int = 0,
+    out: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """Apply RoPE to `x` of shape (B, H, S, D) using CuTile."""
     if x.ndim != 4:
@@ -73,7 +74,9 @@ def apply_rope(
     sin_slice = sin[position_offset : position_offset + seq_len, :half_d].contiguous()
 
     x_3d = x.contiguous().view(bsz * n_heads * seq_len, 2, half_d)
-    out_3d = torch.empty_like(x_3d)
+    out_3d = (
+        out.view(bsz * n_heads * seq_len, 2, half_d) if out is not None else torch.empty_like(x_3d)
+    )
     rows = x_3d.shape[0]
 
     ct.launch(
@@ -83,3 +86,145 @@ def apply_rope(
         (x_3d, cos_slice, sin_slice, out_3d, int(n_heads), int(seq_len), half_d),
     )
     return out_3d.view(bsz, n_heads, seq_len, d_head)
+
+
+@ct.kernel(occupancy=4)
+def rope_qk_kv_write_pos_kernel(
+    qkv_ptr,  # (B, H_total, 2, half_d) float16
+    cos_ptr,  # (MaxPos, half_d) float16
+    sin_ptr,  # (MaxPos, half_d) float16
+    pos_ptr,  # (B,) int32
+    block_table_ptr,  # (B, MaxBlocks) int32
+    q_out_ptr,  # (B * H_q, 2, half_d) float16
+    k_pool_ptr,  # (B * H_kv, TotalSlots, 2, half_d) float16 / fp8
+    v_pool_ptr,  # (B * H_kv, TotalSlots, 2, half_d) float16 / fp8
+    n_q_heads: ct.Constant[int],
+    n_kv_heads: ct.Constant[int],
+    block_size: ct.Constant[int],
+    half_d: ct.Constant[int],
+) -> None:
+    """Fused Q/K RoPE + Paged KV-cache in-place write reading position from device `pos_ptr`."""
+    head_idx = ct.bid(0)
+    b_idx = ct.bid(1)
+
+    pos_tile = ct.astype(
+        ct.load(pos_ptr, index=(b_idx,), shape=(1,), padding_mode=ct.PaddingMode.ZERO),
+        ct.int32,
+    )
+    pos_2d = ct.reshape(pos_tile, (1, 1))
+    d_idx = ct.reshape(ct.arange(half_d, dtype=ct.int32), (1, half_d))
+
+    x_pair = ct.load(
+        qkv_ptr,
+        index=(b_idx, head_idx, 0, 0),
+        shape=(1, 1, 2, half_d),
+        padding_mode=ct.PaddingMode.ZERO,
+    )
+
+    if head_idx < n_q_heads:
+        xf = ct.astype(x_pair, ct.float32)
+        x0 = ct.reshape(ct.extract(xf, index=(0, 0, 0, 0), shape=(1, 1, 1, half_d)), (1, half_d))
+        x1 = ct.reshape(ct.extract(xf, index=(0, 0, 1, 0), shape=(1, 1, 1, half_d)), (1, half_d))
+        c = ct.astype(ct.gather(cos_ptr, (pos_2d, d_idx), padding_value=0), ct.float32)
+        s = ct.astype(ct.gather(sin_ptr, (pos_2d, d_idx), padding_value=0), ct.float32)
+        o0 = x0 * c - x1 * s
+        o1 = x1 * c + x0 * s
+        out_pair = ct.cat((ct.reshape(o0, (1, 1, half_d)), ct.reshape(o1, (1, 1, half_d))), axis=1)
+        ct.store(
+            q_out_ptr,
+            index=(b_idx * n_q_heads + head_idx, 0, 0),
+            tile=ct.astype(out_pair, q_out_ptr.dtype),
+        )
+    else:
+        blk_idx = ct.reshape(pos_tile // block_size, (1, 1))
+        blk_off = pos_tile % block_size
+        b_row = ct.reshape(ct.full((1,), b_idx, dtype=ct.int32), (1, 1))
+        phys_blk = ct.reshape(
+            ct.astype(ct.gather(block_table_ptr, (b_row, blk_idx), padding_value=0), ct.int32),
+            (1,),
+        )
+        phys_slot = ct.reshape(phys_blk * block_size + blk_off, (1, 1, 1, 1))
+        p_idx = ct.reshape(ct.arange(2, dtype=ct.int32), (1, 1, 2, 1))
+        d_4d = ct.reshape(ct.arange(half_d, dtype=ct.int32), (1, 1, 1, half_d))
+
+        if head_idx < n_q_heads + n_kv_heads:
+            kv_h = head_idx - n_q_heads
+            bh_kv = ct.reshape(
+                ct.full((1,), b_idx * n_kv_heads + kv_h, dtype=ct.int32), (1, 1, 1, 1)
+            )
+            xf = ct.astype(x_pair, ct.float32)
+            x0 = ct.reshape(
+                ct.extract(xf, index=(0, 0, 0, 0), shape=(1, 1, 1, half_d)), (1, half_d)
+            )
+            x1 = ct.reshape(
+                ct.extract(xf, index=(0, 0, 1, 0), shape=(1, 1, 1, half_d)), (1, half_d)
+            )
+            c = ct.astype(ct.gather(cos_ptr, (pos_2d, d_idx), padding_value=0), ct.float32)
+            s = ct.astype(ct.gather(sin_ptr, (pos_2d, d_idx), padding_value=0), ct.float32)
+            o0 = x0 * c - x1 * s
+            o1 = x1 * c + x0 * s
+            k_rot = ct.cat(
+                (ct.reshape(o0, (1, 1, 1, half_d)), ct.reshape(o1, (1, 1, 1, half_d))), axis=2
+            )
+            ct.scatter(
+                k_pool_ptr,
+                (bh_kv, phys_slot, p_idx, d_4d),
+                ct.astype(k_rot, k_pool_ptr.dtype),
+            )
+        else:
+            kv_h = head_idx - n_q_heads - n_kv_heads
+            bh_kv = ct.reshape(
+                ct.full((1,), b_idx * n_kv_heads + kv_h, dtype=ct.int32), (1, 1, 1, 1)
+            )
+            ct.scatter(
+                v_pool_ptr,
+                (bh_kv, phys_slot, p_idx, d_4d),
+                ct.astype(x_pair, v_pool_ptr.dtype),
+            )
+
+
+def apply_rope_qk_kv_write_pos(
+    qkv_2d: torch.Tensor,
+    cos: torch.Tensor,
+    sin: torch.Tensor,
+    pos_ptr: torch.Tensor,
+    block_table: torch.Tensor,
+    q_out: torch.Tensor,
+    k_pool: torch.Tensor,
+    v_pool: torch.Tensor,
+    n_q_heads: int,
+    n_kv_heads: int,
+    head_dim: int,
+    block_size: int = 16,
+) -> torch.Tensor:
+    """Fuse Q/K RoPE + Paged KV write for `S_q=1` reading device `pos_ptr` (zero alloc/host sync)."""
+    bsz = qkv_2d.shape[0]
+    h_total = n_q_heads + 2 * n_kv_heads
+    half_d = head_dim // 2
+    qkv_4d = qkv_2d.view(bsz, h_total, 2, half_d)
+    q_out_3d = q_out.view(bsz * n_q_heads, 2, half_d)
+    total_slots = k_pool.shape[-2]
+    k_pool_4d = k_pool.view(bsz * n_kv_heads, total_slots, 2, half_d)
+    v_pool_4d = v_pool.view(bsz * n_kv_heads, total_slots, 2, half_d)
+    bt_2d = block_table.view(bsz, -1)
+
+    ct.launch(
+        torch.cuda.current_stream(),
+        (h_total, bsz, 1),
+        rope_qk_kv_write_pos_kernel,
+        (
+            qkv_4d,
+            cos,
+            sin,
+            pos_ptr.view(bsz),
+            bt_2d,
+            q_out_3d,
+            k_pool_4d,
+            v_pool_4d,
+            n_q_heads,
+            n_kv_heads,
+            block_size,
+            half_d,
+        ),
+    )
+    return q_out.view(bsz, n_q_heads, 1, head_dim)

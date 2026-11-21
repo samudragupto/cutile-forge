@@ -140,6 +140,7 @@ def fused_gemm_dequant_silu(
     zeros: torch.Tensor,
     group_size: int = 128,
     tile_shape: tuple[int, int, int] | None = None,
+    out: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """Compute SiLU(a @ dequant(qweight)) in one fused CuTile kernel."""
     m, k = a.shape
@@ -149,28 +150,157 @@ def fused_gemm_dequant_silu(
         nibbles = ((qweight.unsqueeze(1) >> shifts) & 0xF).to(torch.uint8).reshape(k_div8 * 8, n)
         qw_u8 = pack_int4_weights(nibbles)
     else:
-        qw_u8 = qweight.contiguous()
+        qw_u8 = qweight if qweight.is_contiguous() else qweight.contiguous()
 
     n = qw_u8.shape[1]
-    tm, tn, tk = tile_shape or _select_gemm_tiles(m, group_size=group_size)
-    if group_size % tk != 0:
-        tk = 64 if group_size % 64 == 0 else 32
-    c = torch.empty((m, n), device=a.device, dtype=torch.float16)
+    tm, tn, tk = tile_shape or _select_gemm_tiles(m, group_size=group_size, n=n)
+    if group_size % tk != 0 or k % tk != 0:
+        tk = 64 if (group_size % 64 == 0 and k % 64 == 0) else 32
+    c = out if out is not None else torch.empty((m, n), device=a.device, dtype=torch.float16)
+    a_c = a if a.is_contiguous() else a.contiguous()
+    s_c = scales if scales.is_contiguous() else scales.contiguous()
+    z_c = zeros if zeros.is_contiguous() else zeros.contiguous()
     grid = (ct.cdiv(m, tm) * ct.cdiv(n, tn), 1, 1)
     ct.launch(
         torch.cuda.current_stream(),
         grid,
         gemm_dequant_silu_kernel,
         (
-            a.contiguous(),
+            a_c,
             qw_u8,
-            scales.contiguous(),
-            zeros.contiguous(),
+            s_c,
+            z_c,
             c,
             tm,
             tn,
             tk,
             group_size,
         ),
+    )
+    return c
+
+
+@ct.kernel(occupancy=2)
+def gemm_dequant_swiglu_kernel(
+    a_ptr,
+    gw_ptr,
+    gs_ptr,
+    gz_ptr,
+    uw_ptr,
+    us_ptr,
+    uz_ptr,
+    c_ptr,
+    tm: ct.Constant[int],
+    tn: ct.Constant[int],
+    tk: ct.Constant[int],
+    gs: ct.Constant[int],
+) -> None:
+    """Fused INT4-dequant Gate + Up + SwiGLU (`SiLU(a @ W_gate) * (a @ W_up)`) in one kernel."""
+    group_m: ct.Constant[int] = 8
+    pid = ct.bid(0)
+    num_m = ct.num_tiles(a_ptr, axis=0, shape=(tm, tk))
+    num_n = ct.num_tiles(gw_ptr, axis=1, shape=(tk // 2, tn))
+    num_pid_in_group = group_m * num_n
+    group_id = pid // num_pid_in_group
+    first_pid_m = group_id * group_m
+    group_size_m = min(num_m - first_pid_m, group_m)
+    pid_m = first_pid_m + (pid % group_size_m)
+    pid_n = (pid % num_pid_in_group) // group_size_m
+
+    num_k = ct.num_tiles(a_ptr, axis=1, shape=(tm, tk))
+    half_tk: ct.Constant[int] = tk // 2
+    acc_g = ct.zeros((tm, tn), dtype=ct.float32)
+    acc_u = ct.zeros((tm, tn), dtype=ct.float32)
+
+    for k in range(num_k):
+        tile_a = ct.load(
+            a_ptr, index=(pid_m, k), shape=(tm, tk), padding_mode=ct.PaddingMode.ZERO, latency=3
+        )
+        g_idx = (k * tk) // gs
+
+        gw = ct.load(
+            gw_ptr,
+            index=(k, pid_n),
+            shape=(half_tk, tn),
+            padding_mode=ct.PaddingMode.ZERO,
+            latency=3,
+        )
+        g_lo = ct.astype(ct.bitwise_and(gw, 0x0F), ct.float16)
+        g_hi = ct.astype(ct.bitwise_and(ct.bitwise_rshift(gw, 4), 0x0F), ct.float16)
+        g_int = ct.reshape(
+            ct.cat(
+                (ct.reshape(g_lo, (half_tk, 1, tn)), ct.reshape(g_hi, (half_tk, 1, tn))), axis=1
+            ),
+            (tk, tn),
+        )
+        g_sc = ct.load(
+            gs_ptr, index=(g_idx, pid_n), shape=(1, tn), padding_mode=ct.PaddingMode.ZERO, latency=3
+        )
+        g_zr = ct.load(
+            gz_ptr, index=(g_idx, pid_n), shape=(1, tn), padding_mode=ct.PaddingMode.ZERO, latency=3
+        )
+        acc_g = ct.mma(tile_a, (g_int - g_zr) * g_sc, acc_g)
+
+        uw = ct.load(
+            uw_ptr,
+            index=(k, pid_n),
+            shape=(half_tk, tn),
+            padding_mode=ct.PaddingMode.ZERO,
+            latency=3,
+        )
+        u_lo = ct.astype(ct.bitwise_and(uw, 0x0F), ct.float16)
+        u_hi = ct.astype(ct.bitwise_and(ct.bitwise_rshift(uw, 4), 0x0F), ct.float16)
+        u_int = ct.reshape(
+            ct.cat(
+                (ct.reshape(u_lo, (half_tk, 1, tn)), ct.reshape(u_hi, (half_tk, 1, tn))), axis=1
+            ),
+            (tk, tn),
+        )
+        u_sc = ct.load(
+            us_ptr, index=(g_idx, pid_n), shape=(1, tn), padding_mode=ct.PaddingMode.ZERO, latency=3
+        )
+        u_zr = ct.load(
+            uz_ptr, index=(g_idx, pid_n), shape=(1, tn), padding_mode=ct.PaddingMode.ZERO, latency=3
+        )
+        acc_u = ct.mma(tile_a, (u_int - u_zr) * u_sc, acc_u)
+
+    sig = 1.0 / (1.0 + ct.exp(-acc_g))
+    g_fp16 = ct.astype(acc_g * sig, ct.float16)
+    u_fp16 = ct.astype(acc_u, ct.float16)
+    ct.store(c_ptr, index=(pid_m, pid_n), tile=g_fp16 * u_fp16)
+
+
+def fused_swiglu_dequant(
+    a: torch.Tensor,
+    gate_qweight: torch.Tensor,
+    gate_scales: torch.Tensor,
+    gate_zeros: torch.Tensor,
+    up_qweight: torch.Tensor,
+    up_scales: torch.Tensor,
+    up_zeros: torch.Tensor,
+    group_size: int = 128,
+    tile_shape: tuple[int, int, int] | None = None,
+    out: torch.Tensor | None = None,
+) -> torch.Tensor:
+    """Compute `SiLU(a @ dequant(W_gate)) * (a @ dequant(W_up))` in a single CuTile kernel."""
+    m, k = a.shape
+    gw = gate_qweight if gate_qweight.is_contiguous() else gate_qweight.contiguous()
+    uw = up_qweight if up_qweight.is_contiguous() else up_qweight.contiguous()
+    n = gw.shape[1]
+    tm, tn, tk = tile_shape or (16, 64, 64 if group_size >= 64 else 32)
+    if group_size % tk != 0 or k % tk != 0:
+        tk = 64 if (group_size % 64 == 0 and k % 64 == 0) else 32
+    c = out if out is not None else torch.empty((m, n), device=a.device, dtype=torch.float16)
+    a_c = a if a.is_contiguous() else a.contiguous()
+    gs_c = gate_scales if gate_scales.is_contiguous() else gate_scales.contiguous()
+    gz_c = gate_zeros if gate_zeros.is_contiguous() else gate_zeros.contiguous()
+    us_c = up_scales if up_scales.is_contiguous() else up_scales.contiguous()
+    uz_c = up_zeros if up_zeros.is_contiguous() else up_zeros.contiguous()
+    grid = (ct.cdiv(m, tm) * ct.cdiv(n, tn), 1, 1)
+    ct.launch(
+        torch.cuda.current_stream(),
+        grid,
+        gemm_dequant_swiglu_kernel,
+        (a_c, gw, gs_c, gz_c, uw, us_c, uz_c, c, tm, tn, tk, group_size),
     )
     return c
