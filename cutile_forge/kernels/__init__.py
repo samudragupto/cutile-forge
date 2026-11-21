@@ -3,9 +3,12 @@
 from cutile_forge.cuda_tile_init import ct  # noqa: F401
 from cutile_forge.kernels.activations import (
     cutile_gelu,
+    cutile_gelu_backward,
+    cutile_layernorm_backward,
     cutile_rmsnorm_backward,
     cutile_silu,
     cutile_silu_backward,
+    cutile_softmax_backward,
 )
 from cutile_forge.kernels.attention_gqa import flash_decoding_split_kv, fused_attention_gqa
 from cutile_forge.kernels.bmm import cutile_bmm
@@ -35,27 +38,49 @@ from cutile_forge.kernels.sampling import sample_tokens
 from cutile_forge.kernels.scan import cutile_cumsum
 from cutile_forge.kernels.softmax import online_softmax
 from cutile_forge.kernels.training import (
+    CuTileGELUFn,
+    CuTileLayerNormFn,
+    CuTileLinearFn,
     CuTileRMSNormFn,
     CuTileSiLUFn,
     cutile_adamw_step,
+    cutile_bmm_backward,
+    cutile_gelu_autograd,
+    cutile_grad_clip_norm,
+    cutile_layernorm_autograd,
+    cutile_linear_autograd,
+    cutile_linear_backward,
+    cutile_multi_tensor_adamw,
     cutile_rmsnorm_autograd,
     cutile_silu_autograd,
 )
 from cutile_forge.kernels.transpose import cutile_transpose
 
 __all__ = [
+    "CuTileGELUFn",
+    "CuTileLayerNormFn",
+    "CuTileLinearFn",
     "CuTileRMSNormFn",
     "CuTileSiLUFn",
     "apply_rope",
     "cutile_adamw_step",
     "cutile_bmm",
+    "cutile_bmm_backward",
     "cutile_conv2d",
     "cutile_cumsum",
     "cutile_gather",
     "cutile_gelu",
+    "cutile_gelu_autograd",
+    "cutile_gelu_backward",
     "cutile_gemm_fp8",
     "cutile_gemm_fp16",
+    "cutile_grad_clip_norm",
     "cutile_layernorm",
+    "cutile_layernorm_autograd",
+    "cutile_layernorm_backward",
+    "cutile_linear_autograd",
+    "cutile_linear_backward",
+    "cutile_multi_tensor_adamw",
     "cutile_reduce_max",
     "cutile_reduce_sum",
     "cutile_rmsnorm",
@@ -64,6 +89,7 @@ __all__ = [
     "cutile_silu",
     "cutile_silu_autograd",
     "cutile_silu_backward",
+    "cutile_softmax_backward",
     "cutile_transpose",
     "flash_decoding_split_kv",
     "fused_attention_gqa",
