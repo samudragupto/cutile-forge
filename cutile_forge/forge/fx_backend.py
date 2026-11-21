@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import operator
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import torch
@@ -26,9 +27,20 @@ class FXCompileStats:
     attn_fusions: int
     tfg_nodes_before: int
     tfg_nodes_after: int
+    gemm_silu_fusions: int = 0
+    bmm_lowerings: int = 0
+    softmax_lowerings: int = 0
+    cache_hit: bool = False
+    fallback_ops: list[str] = field(default_factory=list)
 
 
 LAST_FX_STATS: FXCompileStats | None = None
+FX_COMPILE_CACHE: dict[str, tuple[Callable[..., Any], FXCompileStats]] = {}
+
+
+def clear_fx_cache() -> None:
+    """Clear the compiled FX graph cache."""
+    FX_COMPILE_CACHE.clear()
 
 
 def _cu_fused_ffn_linear(
@@ -111,13 +123,180 @@ def _cu_fused_sdpa(
     )
 
 
+def _cu_fused_linear_silu(
+    x: torch.Tensor,
+    w: torch.Tensor,
+    bias: torch.Tensor | None = None,
+) -> torch.Tensor:
+    """Execute F.silu(F.linear(x, w, bias)) via CuTile fused_gemm_fp16_silu when eligible."""
+    if (
+        x.is_cuda
+        and x.dtype == torch.float16
+        and bias is None
+        and x.ndim in (2, 3)
+        and w.shape[0] % 64 == 0
+    ):
+        from cutile_forge.kernels.gemm_dequant_silu import fused_gemm_fp16_silu
+
+        orig_shape = x.shape
+        out_2d = fused_gemm_fp16_silu(x.reshape(-1, orig_shape[-1]), w.t().contiguous())
+        return out_2d.view(*orig_shape[:-1], w.shape[0])
+    return F.silu(F.linear(x, w, bias))
+
+
+def _cu_bmm(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
+    """Execute torch.bmm via CuTile cutile_bmm when eligible."""
+    if (
+        a.is_cuda
+        and a.dtype in (torch.float16, torch.bfloat16, torch.float32)
+        and a.dtype == b.dtype
+    ):
+        from cutile_forge.kernels.bmm import cutile_bmm
+
+        return cutile_bmm(a, b)
+    return torch.bmm(a, b)
+
+
+def _cu_softmax(
+    x: torch.Tensor,
+    dim: int | None = None,
+    _stacklevel: int = 3,
+    dtype: torch.dtype | None = None,
+) -> torch.Tensor:
+    """Execute F.softmax over the last axis via CuTile online_softmax when eligible."""
+    if (
+        x.is_cuda
+        and x.dtype == torch.float16
+        and dtype is None
+        and (dim == -1 or dim == x.ndim - 1)
+    ):
+        from cutile_forge.kernels.softmax import online_softmax
+
+        return online_softmax(x)
+    return F.softmax(x, dim=dim, _stacklevel=_stacklevel, dtype=dtype)
+
+
+_LOWERED_TARGETS = {
+    _cu_fused_ffn_linear,
+    _cu_fused_ln_residual,
+    _cu_fused_sdpa,
+    _cu_fused_linear_silu,
+    _cu_bmm,
+    _cu_softmax,
+}
+
+
+def _fx_cache_key(gm: fx.GraphModule, example_inputs: list[torch.Tensor]) -> str:
+    tensor_sig = [
+        (tuple(t.shape), str(t.dtype), str(t.device))
+        for t in example_inputs
+        if isinstance(t, torch.Tensor)
+    ]
+    param_sig = [
+        (name, t.data_ptr(), tuple(t.shape), str(t.dtype))
+        for name, t in list(gm.named_parameters()) + list(gm.named_buffers())
+    ]
+    raw = f"{gm.code}|{tensor_sig}|{param_sig}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _cu_fused_linear_silu(
+    x: torch.Tensor,
+    w: torch.Tensor,
+    bias: torch.Tensor | None = None,
+) -> torch.Tensor:
+    """Execute F.silu(F.linear(x, w, bias)) via CuTile fused_gemm_fp16_silu when eligible."""
+    if (
+        x.is_cuda
+        and x.dtype == torch.float16
+        and bias is None
+        and x.ndim in (2, 3)
+        and w.shape[0] % 64 == 0
+    ):
+        from cutile_forge.kernels.gemm_dequant_silu import fused_gemm_fp16_silu
+
+        orig_shape = x.shape
+        out_2d = fused_gemm_fp16_silu(x.reshape(-1, orig_shape[-1]), w.t().contiguous())
+        return out_2d.view(*orig_shape[:-1], w.shape[0])
+    return F.silu(F.linear(x, w, bias))
+
+
+def _cu_bmm(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
+    """Execute torch.bmm via CuTile cutile_bmm when eligible."""
+    if a.is_cuda and a.dtype in (torch.float16, torch.bfloat16, torch.float32) and a.dtype == b.dtype:
+        from cutile_forge.kernels.bmm import cutile_bmm
+
+        return cutile_bmm(a, b)
+    return torch.bmm(a, b)
+
+
+def _cu_softmax(
+    x: torch.Tensor,
+    dim: int | None = None,
+    _stacklevel: int = 3,
+    dtype: torch.dtype | None = None,
+) -> torch.Tensor:
+    """Execute F.softmax over the last axis via CuTile online_softmax when eligible."""
+    if (
+        x.is_cuda
+        and x.dtype == torch.float16
+        and dtype is None
+        and (dim == -1 or dim == x.ndim - 1)
+    ):
+        from cutile_forge.kernels.softmax import online_softmax
+
+        return online_softmax(x)
+    return F.softmax(x, dim=dim, _stacklevel=_stacklevel, dtype=dtype)
+
+
+_LOWERED_TARGETS = {
+    _cu_fused_ffn_linear,
+    _cu_fused_ln_residual,
+    _cu_fused_sdpa,
+    _cu_fused_linear_silu,
+    _cu_bmm,
+    _cu_softmax,
+}
+
+
+def _fx_cache_key(gm: fx.GraphModule, example_inputs: list[torch.Tensor]) -> str:
+    tensor_sig = [
+        (tuple(t.shape), str(t.dtype), str(t.device))
+        for t in example_inputs
+        if isinstance(t, torch.Tensor)
+    ]
+    param_sig = [
+        (name, t.data_ptr(), tuple(t.shape), str(t.dtype))
+        for name, t in list(gm.named_parameters()) + list(gm.named_buffers())
+    ]
+    raw = f"{gm.code}|{tensor_sig}|{param_sig}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
 def cutile_forge_backend(
     gm: fx.GraphModule,
     example_inputs: list[torch.Tensor],
 ) -> Callable[..., Any]:
     """PyTorch FX/Dynamo backend lowering transformer subgraphs to fused CuTile kernels."""
     global LAST_FX_STATS
-    _ = example_inputs
+    cache_key = _fx_cache_key(gm, example_inputs)
+    if cache_key in FX_COMPILE_CACHE:
+        cached_fn, cached_stats = FX_COMPILE_CACHE[cache_key]
+        LAST_FX_STATS = FXCompileStats(
+            original_nodes=cached_stats.original_nodes,
+            fused_nodes=cached_stats.fused_nodes,
+            ffn_fusions=cached_stats.ffn_fusions,
+            ln_res_fusions=cached_stats.ln_res_fusions,
+            attn_fusions=cached_stats.attn_fusions,
+            tfg_nodes_before=cached_stats.tfg_nodes_before,
+            tfg_nodes_after=cached_stats.tfg_nodes_after,
+            gemm_silu_fusions=cached_stats.gemm_silu_fusions,
+            bmm_lowerings=cached_stats.bmm_lowerings,
+            softmax_lowerings=cached_stats.softmax_lowerings,
+            cache_hit=True,
+            fallback_ops=list(cached_stats.fallback_ops),
+        )
+        return cached_fn
 
     graph = gm.graph
     orig_nodes = len([n for n in graph.nodes if n.op in ("call_function", "call_method")])
@@ -126,6 +305,9 @@ def cutile_forge_backend(
     ffn_fusions = 0
     ln_res_fusions = 0
     attn_fusions = 0
+    gemm_silu_fusions = 0
+    bmm_lowerings = 0
+    softmax_lowerings = 0
 
     # Pass 1: Match `linear -> silu -> linear`
     nodes_snapshot = list(graph.nodes)
@@ -215,6 +397,49 @@ def cutile_forge_backend(
             graph.erase_node(node)
             attn_fusions += 1
 
+    # Pass 4: Match standalone `linear -> silu` -> `_cu_fused_linear_silu`
+    for node in list(graph.nodes):
+        if node.op == "call_function" and node.target is F.silu and len(node.args) >= 1:
+            lin_node = node.args[0]
+            if (
+                isinstance(lin_node, fx.Node)
+                and lin_node.op == "call_function"
+                and lin_node.target is F.linear
+                and len(lin_node.users) == 1
+            ):
+                x_arg = lin_node.args[0]
+                w_arg = lin_node.args[1]
+                b_arg = lin_node.args[2] if len(lin_node.args) > 2 else lin_node.kwargs.get("bias")
+                with graph.inserting_before(node):
+                    fused = graph.call_function(_cu_fused_linear_silu, args=(x_arg, w_arg, b_arg))
+                node.replace_all_uses_with(fused)
+                graph.erase_node(node)
+                graph.erase_node(lin_node)
+                gemm_silu_fusions += 1
+
+    # Pass 5: Lower `torch.bmm` -> `_cu_bmm`
+    for node in list(graph.nodes):
+        if node.op == "call_function" and node.target is torch.bmm and len(node.args) >= 2:
+            with graph.inserting_before(node):
+                fused = graph.call_function(_cu_bmm, args=(node.args[0], node.args[1]))
+            node.replace_all_uses_with(fused)
+            graph.erase_node(node)
+            bmm_lowerings += 1
+
+    # Pass 6: Lower `F.softmax` -> `_cu_softmax`
+    for node in list(graph.nodes):
+        if node.op == "call_function" and node.target is F.softmax:
+            with graph.inserting_before(node):
+                fused = graph.call_function(_cu_softmax, args=node.args, kwargs=node.kwargs)
+            node.replace_all_uses_with(fused)
+            graph.erase_node(node)
+            softmax_lowerings += 1
+
+    fallback_ops: list[str] = []
+    for node in graph.nodes:
+        if node.op in ("call_function", "call_method") and node.target not in _LOWERED_TARGETS:
+            fallback_ops.append(str(getattr(node.target, "__name__", node.target)))
+
     tfg_before = len(fg.nodes)
     if tfg_before > 0:
         apply_fusion_rules(fg)
@@ -224,7 +449,7 @@ def cutile_forge_backend(
     gm.recompile()
     fused_nodes = len([n for n in graph.nodes if n.op in ("call_function", "call_method")])
 
-    LAST_FX_STATS = FXCompileStats(
+    stats = FXCompileStats(
         original_nodes=orig_nodes,
         fused_nodes=fused_nodes,
         ffn_fusions=ffn_fusions,
@@ -232,7 +457,14 @@ def cutile_forge_backend(
         attn_fusions=attn_fusions,
         tfg_nodes_before=tfg_before,
         tfg_nodes_after=tfg_after,
+        gemm_silu_fusions=gemm_silu_fusions,
+        bmm_lowerings=bmm_lowerings,
+        softmax_lowerings=softmax_lowerings,
+        cache_hit=False,
+        fallback_ops=fallback_ops,
     )
+    LAST_FX_STATS = stats
+    FX_COMPILE_CACHE[cache_key] = (gm.forward, stats)
     return gm.forward
 
 
