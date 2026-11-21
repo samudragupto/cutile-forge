@@ -1,0 +1,248 @@
+{
+  "schema_version": "1.0.0",
+  "run_id": "phase14g_reliability_fault_injection",
+  "cutile_forge_version": "3.1.0",
+  "git_commit": "3488ebb2b5160c70b9ef1b1e49c11ce001165123",
+  "dirty_worktree": true,
+  "dirty_diff_sha256": "327fe2e45ac6c63518dc028e815d359aef41c4f18c70a8ec05c621dc188b1303",
+  "utc_start": "2026-11-21T17:41:19.418713+00:00",
+  "utc_end": "2026-11-21T17:42:19.493098+00:00",
+  "environment": {
+    "hostname": "prashant-lab",
+    "os": "Linux 7.0.0-43-generic",
+    "kernel": "#43~24.04.1-Ubuntu SMP PREEMPT_DYNAMIC Sat Oct 31 06:52:47 UTC 2",
+    "cpu_model": "Intel(R) Core(TM) Ultra 9 285K",
+    "ram_gb": 62.26,
+    "gpu_name": "NVIDIA GeForce RTX 5090",
+    "gpu_count": 1,
+    "compute_capability": "sm_120",
+    "vram_gb": 31.35,
+    "nvidia_driver": "595.58.03",
+    "cuda_runtime": "13.2",
+    "torch_version": "2.15.0+cu132",
+    "cutile_version": "1.8.1",
+    "python_version": "3.12.3",
+    "dependencies": {
+      "numpy": "2.5.5",
+      "transformers": "5.23.0",
+      "tokenizers": "0.23.3",
+      "safetensors": "0.8.0",
+      "huggingface-hub": "2.4.0",
+      "gguf": "0.19.0",
+      "fastapi": "0.165.0",
+      "uvicorn": "0.54.0",
+      "httpx": "0.28.1",
+      "nvidia-ml-py": "not-installed"
+    },
+    "nvml_available": false,
+    "gpu_temp_c": null,
+    "gpu_power_w": null
+  },
+  "env_vars": {
+    "CUTILE_ARCH": "sm_120",
+    "HF_HOME": "/var/tmp/arrhat_models/hf_cache"
+  },
+  "command": "benchmarks/production/bench_reliability_faults.py",
+  "cwd": "/home/arrhat/cutile-forge",
+  "checkpoint": {
+    "model_id": "mistral-7b-v0.1-gptq",
+    "local_path": "/home/arrhat/models/mistral_7b_4bit",
+    "revision": null,
+    "files": [
+      {
+        "path": "added_tokens.json",
+        "bytes": 42,
+        "sha256": "d606246b713e31b1b43dfe913554dd47819089b9e44b9ebaa294eda2589a6b4c"
+      },
+      {
+        "path": "config.json",
+        "bytes": 963,
+        "sha256": "ecd4b068d5b218beb3310efe5dbfc7ee07559bd148834a8145599826fd9be323"
+      },
+      {
+        "path": "generation_config.json",
+        "bytes": 116,
+        "sha256": "afcf2a1da583dbeb66bb367a759713901e23ce19ed83ed8f5a21b0e877addd5b"
+      },
+      {
+        "path": "model.safetensors",
+        "bytes": 4158662096,
+        "sha256": "62d41823b37ce262a25ee6d47fcbcbae5ab4d178edfc40eade58ddd8e80c74c5"
+      },
+      {
+        "path": "quantize_config.json",
+        "bytes": 186,
+        "sha256": "63ee0b7e7666c745211a6c95390abd3cb8fc55625abeada8836fa1461bacf612"
+      },
+      {
+        "path": "special_tokens_map.json",
+        "bytes": 72,
+        "sha256": "96bdbb8504d9967606e5f661ccc7cbbac44a3661af863a7a58614670a0ccab33"
+      },
+      {
+        "path": "tokenizer.json",
+        "bytes": 1795300,
+        "sha256": "cdce92069938e6540fec77069211fa6ec7ea3ab5eb123c3aadad50a6f0c1e496"
+      },
+      {
+        "path": "tokenizer_config.json",
+        "bytes": 962,
+        "sha256": "842a192a75cc0245a959a00258b9ef4249377a46900da8e3c675e1ff6803019b"
+      }
+    ],
+    "total_bytes": 4160459737,
+    "sha256_manifest": {
+      "added_tokens.json": "d606246b713e31b1b43dfe913554dd47819089b9e44b9ebaa294eda2589a6b4c",
+      "config.json": "ecd4b068d5b218beb3310efe5dbfc7ee07559bd148834a8145599826fd9be323",
+      "generation_config.json": "afcf2a1da583dbeb66bb367a759713901e23ce19ed83ed8f5a21b0e877addd5b",
+      "model.safetensors": "62d41823b37ce262a25ee6d47fcbcbae5ab4d178edfc40eade58ddd8e80c74c5",
+      "quantize_config.json": "63ee0b7e7666c745211a6c95390abd3cb8fc55625abeada8836fa1461bacf612",
+      "special_tokens_map.json": "96bdbb8504d9967606e5f661ccc7cbbac44a3661af863a7a58614670a0ccab33",
+      "tokenizer.json": "cdce92069938e6540fec77069211fa6ec7ea3ab5eb123c3aadad50a6f0c1e496",
+      "tokenizer_config.json": "842a192a75cc0245a959a00258b9ef4249377a46900da8e3c675e1ff6803019b"
+    }
+  },
+  "quant_config": {
+    "quant_format": "gptq",
+    "group_size": 128,
+    "desc_act": true,
+    "kv_dtype": "fp16",
+    "mixed_precision": {},
+    "disk_format": null,
+    "kernel_format": null
+  },
+  "prompt_ids_or_checksum": "f018b46d325d35e34fc1f399af4d5665d55a33ce366813e6070bdea0462ceec6",
+  "workload": {
+    "batch_size": 1,
+    "concurrency": 8,
+    "prompt_len": 16,
+    "output_len": 8,
+    "temperature": 0.0,
+    "seed": 42,
+    "warmup_iters": 0,
+    "measured_iters": 1,
+    "sync_method": "torch.cuda.synchronize"
+  },
+  "contention_before": {
+    "timestamp_utc": "2026-11-21T17:41:19.596424+00:00",
+    "contended": false,
+    "compute_apps": [],
+    "query_error": null
+  },
+  "contention_after": {
+    "timestamp_utc": "2026-11-21T17:42:19.493102+00:00",
+    "contended": false,
+    "compute_apps": [
+      {
+        "pid": "877901",
+        "used_memory": "748 MiB"
+      }
+    ],
+    "query_error": null
+  },
+  "execution_mode": "real-checkpoint",
+  "reproduction_status": "MEASURED",
+  "notes": "10 controlled fault-injection scenarios against real 127.0.0.1 HTTP servers & runtime. Final client peak_vram_mb=34.3",
+  "records": [
+    {
+      "fault": "1. Invalid JSON & unsupported API fields",
+      "detection": "FastAPI/Pydantic strict schema (extra=forbid)",
+      "expected": "HTTP 422 rejection without server impact",
+      "user_visible_behavior": "HTTP 422 / 422",
+      "recovery_ms": 18.11,
+      "residual_rss_mb": 904.3,
+      "data_kv_integrity": "Untouched",
+      "status": "VERIFIED"
+    },
+    {
+      "fault": "2. Missing / invalid API key (auth enabled)",
+      "detection": "Bearer check before queueing/execution",
+      "expected": "HTTP 401 Unauthorized",
+      "user_visible_behavior": "HTTP 401 / 401",
+      "recovery_ms": 18.58,
+      "residual_rss_mb": 905.0,
+      "data_kv_integrity": "Auth bypass blocked",
+      "status": "VERIFIED"
+    },
+    {
+      "fault": "3. Oversized prompt & excessive max_tokens",
+      "detection": "Tokenizer prompt length bound + Field(le=4096)",
+      "expected": "HTTP 400 / 422 pre-execution rejection",
+      "user_visible_behavior": "HTTP 400 / 422",
+      "recovery_ms": 20.98,
+      "residual_rss_mb": 905.0,
+      "data_kv_integrity": "KV bounds protected",
+      "status": "VERIFIED"
+    },
+    {
+      "fault": "4. Client disconnect mid-SSE stream",
+      "detection": "request.is_disconnected() + finally slot release",
+      "expected": "Abort stream, release GPU lock, inflight=0, follow-up HTTP 200",
+      "user_visible_behavior": "Follow-up HTTP 200, inflight=0",
+      "recovery_ms": 1087.52,
+      "residual_rss_mb": 905.8,
+      "data_kv_integrity": "Subsequent completion uncorrupted",
+      "status": "VERIFIED"
+    },
+    {
+      "fault": "5. Queue saturation & backpressure (max_concurrent=2)",
+      "detection": "requests_inflight >= max_concurrent_requests guard",
+      "expected": "HTTP 429 on excess load + immediate healthy recovery",
+      "user_visible_behavior": "Status codes=[200, 429, 200, 429, 429, 429]",
+      "recovery_ms": 434.88,
+      "residual_rss_mb": 909.9,
+      "data_kv_integrity": "200 responses valid; rejected clean",
+      "status": "VERIFIED"
+    },
+    {
+      "fault": "9. Owned worker termination (SIGTERM) & restart",
+      "detection": "Supervisor detects exit, spawns replacement server",
+      "expected": "Fresh worker answers /health=200 & valid generation",
+      "user_visible_behavior": "Restarted pid 877937->878075 HTTP 200",
+      "recovery_ms": 11556.13,
+      "residual_rss_mb": 915.9,
+      "data_kv_integrity": "Clean cold-start KV pool",
+      "status": "VERIFIED"
+    },
+    {
+      "fault": "6. Missing model path & corrupt checkpoint",
+      "detection": "Startup FileNotFoundError / JSONDecodeError",
+      "expected": "Non-zero exit with diagnostic error, zero residual VRAM",
+      "user_visible_behavior": "exit codes 1 / 1",
+      "recovery_ms": 3752.43,
+      "residual_rss_mb": 915.9,
+      "data_kv_integrity": "Fail-fast prior to serving",
+      "status": "VERIFIED"
+    },
+    {
+      "fault": "7. CUDA Graph capture failure -> eager fallback",
+      "detection": "RuntimeError catch on _capture_decode_graph",
+      "expected": "Automatic fallback to eager CuTile forward without crash",
+      "user_visible_behavior": "fallback_count=1, logits finite=True",
+      "recovery_ms": 536.14,
+      "residual_rss_mb": 1668.7,
+      "data_kv_integrity": "Decode output finite & valid",
+      "status": "VERIFIED"
+    },
+    {
+      "fault": "8. KV-cache pressure / capacity exhaustion",
+      "detection": "Bounds check prior to pool scatter",
+      "expected": "Explicit RuntimeError; subsequent reset + valid sequence intact",
+      "user_visible_behavior": "KV sequence length 32 exceeds max_seq_len=16",
+      "recovery_ms": 11.77,
+      "residual_rss_mb": 1669.3,
+      "data_kv_integrity": "No OOB pool overwrite",
+      "status": "VERIFIED"
+    },
+    {
+      "fault": "10. Repeated server start/stop cycles (3 cycles)",
+      "detection": "Per-cycle server /metrics RSS tracking",
+      "expected": "Clean shutdown + bounded host/GPU memory across restarts",
+      "user_visible_behavior": "RSS per cycle MB=[5440.1, 5438.1, 5437.2]",
+      "recovery_ms": 31670.26,
+      "residual_rss_mb": 5437.2,
+      "data_kv_integrity": "Owned PIDs cleanly reaped",
+      "status": "VERIFIED"
+    }
+  ]
+}
