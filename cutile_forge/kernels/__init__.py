@@ -24,6 +24,7 @@ from cutile_forge.kernels.gemm_dequant import (
     unpack_int4_weights_torch,
 )
 from cutile_forge.kernels.gemm_dequant_silu import fused_gemm_dequant_silu, fused_gemm_fp16_silu
+from cutile_forge.kernels.indexing import cutile_conv2d, cutile_gather
 from cutile_forge.kernels.layernorm import cutile_layernorm
 from cutile_forge.kernels.layernorm_residual import fused_layernorm_residual, fused_rmsnorm_residual
 from cutile_forge.kernels.moe_fused import fused_moe_int4_gemm, fused_topk_gating
@@ -48,7 +49,9 @@ __all__ = [
     "apply_rope",
     "cutile_adamw_step",
     "cutile_bmm",
+    "cutile_conv2d",
     "cutile_cumsum",
+    "cutile_gather",
     "cutile_gelu",
     "cutile_gemm_fp8",
     "cutile_gemm_fp16",

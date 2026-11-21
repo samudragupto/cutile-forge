@@ -10,7 +10,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -123,11 +123,27 @@ def create_app(
     model_id: str = "mistral-7b-4bit",
     max_batch_size: int = 16,
     batch_wait_ms: float = 8.0,
+    api_key: str | None = None,
+    max_concurrent_requests: int = 64,
 ) -> FastAPI:
-    """Create FastAPI app exposing `/health`, `/v1/models`, and `/v1/chat/completions`."""
+    """Create FastAPI app exposing `/health`, `/metrics`, `/v1/models`, and `/v1/chat/completions`."""
     app = FastAPI(title="CuTileForge OpenAI Server", version=__version__)
     batcher = DynamicBatcher(engine, max_batch_size=max_batch_size, batch_wait_ms=batch_wait_ms)
     batch_lock = batcher._gpu_lock
+    telemetry: dict[str, int] = {
+        "requests_total": 0,
+        "requests_inflight": 0,
+        "errors_total": 0,
+        "tokens_generated_total": 0,
+    }
+
+    def _authorize(request: Request) -> None:
+        if api_key is None:
+            return
+        auth = request.headers.get("authorization", "")
+        if auth != f"Bearer {api_key}":
+            telemetry["errors_total"] += 1
+            raise HTTPException(status_code=401, detail="Unauthorized")
 
     @app.get("/health")
     async def health() -> dict[str, Any]:
@@ -137,8 +153,13 @@ def create_app(
             "target": getattr(engine, "target", "sm_120"),
         }
 
+    @app.get("/metrics")
+    async def metrics() -> dict[str, Any]:
+        return dict(telemetry)
+
     @app.get("/v1/models")
-    async def list_models() -> dict[str, Any]:
+    async def list_models(request: Request) -> dict[str, Any]:
+        _authorize(request)
         return {
             "object": "list",
             "data": [
@@ -165,7 +186,14 @@ def create_app(
         return " ".join(str(t) for t in token_ids)
 
     @app.post("/v1/chat/completions")
-    async def chat_completions(req: ChatCompletionRequest) -> Any:
+    async def chat_completions(req: ChatCompletionRequest, request: Request) -> Any:
+        _authorize(request)
+        if telemetry["requests_inflight"] >= max_concurrent_requests:
+            telemetry["errors_total"] += 1
+            raise HTTPException(status_code=429, detail="Too many concurrent requests")
+
+        telemetry["requests_total"] += 1
+        telemetry["requests_inflight"] += 1
         prompt_text = _format_prompt(req.messages)
         prompt_ids = _encode_prompt(prompt_text)
         req_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
@@ -174,48 +202,59 @@ def create_app(
         if req.stream:
 
             async def event_stream() -> AsyncIterator[str]:
-                async with batch_lock:
-                    for tok_id in engine.stream_ids(
-                        prompt_ids,
-                        max_new_tokens=req.max_tokens,
-                        temperature=req.temperature,
-                        top_k=req.top_k,
-                        top_p=req.top_p,
-                    ):
-                        chunk_text = _decode_tokens([tok_id])
-                        payload = {
+                try:
+                    async with batch_lock:
+                        for tok_id in engine.stream_ids(
+                            prompt_ids,
+                            max_new_tokens=req.max_tokens,
+                            temperature=req.temperature,
+                            top_k=req.top_k,
+                            top_p=req.top_p,
+                        ):
+                            telemetry["tokens_generated_total"] += 1
+                            chunk_text = _decode_tokens([tok_id])
+                            payload = {
+                                "id": req_id,
+                                "object": "chat.completion.chunk",
+                                "created": created,
+                                "model": req.model,
+                                "choices": [
+                                    {
+                                        "index": 0,
+                                        "delta": {"content": chunk_text},
+                                        "finish_reason": None,
+                                    }
+                                ],
+                            }
+                            yield f"data: {json.dumps(payload)}\n\n"
+                        done_payload = {
                             "id": req_id,
                             "object": "chat.completion.chunk",
                             "created": created,
                             "model": req.model,
-                            "choices": [
-                                {
-                                    "index": 0,
-                                    "delta": {"content": chunk_text},
-                                    "finish_reason": None,
-                                }
-                            ],
+                            "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
                         }
-                        yield f"data: {json.dumps(payload)}\n\n"
-                    done_payload = {
-                        "id": req_id,
-                        "object": "chat.completion.chunk",
-                        "created": created,
-                        "model": req.model,
-                        "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
-                    }
-                    yield f"data: {json.dumps(done_payload)}\n\n"
-                    yield "data: [DONE]\n\n"
+                        yield f"data: {json.dumps(done_payload)}\n\n"
+                        yield "data: [DONE]\n\n"
+                finally:
+                    telemetry["requests_inflight"] = max(0, telemetry["requests_inflight"] - 1)
 
             return StreamingResponse(event_stream(), media_type="text/event-stream")
 
-        out_ids = await batcher.submit(
-            prompt_ids,
-            max_tokens=req.max_tokens,
-            temperature=req.temperature,
-            top_k=req.top_k,
-            top_p=req.top_p,
-        )
+        try:
+            out_ids = await batcher.submit(
+                prompt_ids,
+                max_tokens=req.max_tokens,
+                temperature=req.temperature,
+                top_k=req.top_k,
+                top_p=req.top_p,
+            )
+            telemetry["tokens_generated_total"] += len(out_ids)
+        except Exception:
+            telemetry["errors_total"] += 1
+            raise
+        finally:
+            telemetry["requests_inflight"] = max(0, telemetry["requests_inflight"] - 1)
         text = _decode_tokens(out_ids)
         return {
             "id": req_id,
