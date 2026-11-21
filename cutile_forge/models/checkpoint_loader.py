@@ -806,6 +806,7 @@ def extract_hf_whisper_encoder_weights(
         "intermediate_size": int(cfg.encoder_ffn_dim),
         "num_hidden_layers": int(cfg.encoder_layers),
         "num_attention_heads": int(cfg.encoder_attention_heads),
+        "activation_function": str(getattr(cfg, "activation_function", "gelu")),
         "layer_norm_eps": 1e-5,
     }
     graph = from_hf_config(cfg_dict, name="whisper_encoder")

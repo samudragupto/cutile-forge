@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import torch
 
@@ -17,6 +17,7 @@ class PrefetchSlot:
     gpu_tensors: dict[str, torch.Tensor]
     ready_event: torch.cuda.Event | None
     bytes_transferred: int
+    host_refs: list[torch.Tensor] = field(default_factory=list)
 
 
 class HybridLayerBudgeter:
@@ -121,6 +122,7 @@ class WeightStreamer:
             del self._slots[oldest_key]
 
         gpu_tensors: dict[str, torch.Tensor] = {}
+        host_refs: list[torch.Tensor] = []
         total_bytes = 0
         event: torch.cuda.Event | None = None
 
@@ -131,6 +133,7 @@ class WeightStreamer:
                     gpu_t = torch.empty_like(pinned, device=self.device)
                     gpu_t.copy_(pinned, non_blocking=True)
                     gpu_tensors[name] = gpu_t
+                    host_refs.append(pinned)
                     total_bytes += t.numel() * t.element_size()
             event = torch.cuda.Event()
             event.record(self.copy_stream)
@@ -145,6 +148,7 @@ class WeightStreamer:
             gpu_tensors=gpu_tensors,
             ready_event=event,
             bytes_transferred=total_bytes,
+            host_refs=host_refs,
         )
         self._slots[layer_idx] = slot
         return slot
@@ -165,6 +169,8 @@ class WeightStreamer:
         if self.use_cuda and slot.ready_event is not None:
             stream = compute_stream or torch.cuda.current_stream(self.device)
             stream.wait_event(slot.ready_event)
+            for gpu_t in slot.gpu_tensors.values():
+                gpu_t.record_stream(stream)
         return slot.gpu_tensors
 
     def release_layer(self, layer_idx: int) -> None:

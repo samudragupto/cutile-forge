@@ -27,7 +27,11 @@ from cutile_forge.forge.fusion_graph import build_mistral_layer_tfg
 from cutile_forge.forge.fusion_rules import apply_fusion_rules
 from cutile_forge.forge.weight_streamer import WeightStreamer
 from cutile_forge.kernels.attention_gqa import fused_attention_gqa
-from cutile_forge.kernels.gemm_dequant import fused_gemm_dequant, unpack_int4_weights_torch
+from cutile_forge.kernels.gemm_dequant import (
+    cutile_gemm_fp16,
+    fused_gemm_dequant,
+    unpack_int4_weights_torch,
+)
 from cutile_forge.kernels.gemm_dequant_silu import fused_gemm_dequant_silu
 from cutile_forge.kernels.layernorm_residual import fused_rmsnorm_residual
 from cutile_forge.kernels.moe_fused import fused_moe_int4_gemm, fused_topk_gating
@@ -418,10 +422,22 @@ class Mistral7B:
         h_2d = hidden.view(bsz * seq_len, h_dim)
         if backend == "cutile" and self.device.type == "cuda":
             normed = cutile_rmsnorm(h_2d, self.weights.norm, eps=self.config.rms_norm_eps)
+            if (
+                normed.dtype == torch.float16
+                and self.weights.lm_head.dtype == torch.float16
+                and h_dim % 64 == 0
+                and self.config.vocab_size % 64 == 0
+            ):
+                lm_w_t = getattr(self, "_lm_head_t_cache", None)
+                if lm_w_t is None or lm_w_t.data_ptr() == 0:
+                    lm_w_t = self.weights.lm_head.t().contiguous()
+                    self._lm_head_t_cache = lm_w_t
+                logits = cutile_gemm_fp16(normed, lm_w_t)
+            else:
+                logits = torch.matmul(normed, self.weights.lm_head.t())
         else:
             normed = _pytorch_rmsnorm(h_2d, self.weights.norm, eps=self.config.rms_norm_eps)
-
-        logits = torch.matmul(normed, self.weights.lm_head.t())
+            logits = torch.matmul(normed, self.weights.lm_head.t())
         return logits.view(bsz, seq_len, self.config.vocab_size)
 
 

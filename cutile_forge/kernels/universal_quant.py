@@ -32,6 +32,7 @@ class QuantFormat(StrEnum):
     GGUF_Q4_K_M = "gguf_q4_k_m"
     INT8 = "int8"
     FP8 = "fp8"
+    FP8_CHANNEL = "fp8_channel"
     FP8_BLOCK = "fp8_block"
 
 
@@ -993,6 +994,69 @@ def cutile_gemm_fp8_w8a16(
     return c
 
 
+@ct.kernel(occupancy=2)
+def gemm_fp8_channel_w8a16_kernel(
+    a_ptr,  # (M, K) fp16
+    w_fp8_ptr,  # (K, N) float8_e4m3fn
+    scale_n_ptr,  # (N,) float32
+    c_ptr,  # (M, N) fp16
+    tm: ct.Constant[int],
+    tn: ct.Constant[int],
+    tk: ct.Constant[int],
+) -> None:
+    """Native per-output-channel W8A16 FP8 (`float8_e4m3fn` weight x `fp16` activation) GEMM."""
+    pid_m = ct.bid(0)
+    pid_n = ct.bid(1)
+    num_k = ct.num_tiles(a_ptr, axis=1, shape=(tm, tk))
+    acc = ct.zeros((tm, tn), dtype=ct.float32)
+
+    for k in range(num_k):
+        tile_a = ct.load(
+            a_ptr, index=(pid_m, k), shape=(tm, tk), padding_mode=ct.PaddingMode.ZERO, latency=3
+        )
+        w_f8 = ct.load(
+            w_fp8_ptr,
+            index=(k, pid_n),
+            shape=(tk, tn),
+            padding_mode=ct.PaddingMode.ZERO,
+            latency=3,
+        )
+        acc = ct.mma(tile_a, ct.astype(w_f8, ct.float16), acc)
+
+    s_n = ct.load(scale_n_ptr, index=(pid_n,), shape=(tn,), padding_mode=ct.PaddingMode.ZERO)
+    s_row = ct.reshape(s_n, (1, tn))
+    ct.store(c_ptr, index=(pid_m, pid_n), tile=ct.astype(acc * s_row, ct.float16))
+
+
+def cutile_gemm_fp8_channel_w8a16(
+    a: torch.Tensor,
+    weight_fp8: torch.Tensor,
+    scale_n: torch.Tensor,
+    tile_shape: tuple[int, int, int] | None = None,
+    out: torch.Tensor | None = None,
+) -> torch.Tensor:
+    """Execute per-channel FP8 weight x FP16 activation GEMM natively in CuTile."""
+    m, _ = a.shape
+    n = weight_fp8.shape[1]
+    tm, tn, tk = tile_shape or ((16, 64, 64) if m <= 16 else (64, 64, 64))
+    c = out if out is not None else torch.empty((m, n), device=a.device, dtype=torch.float16)
+
+    sc_f32 = scale_n.reshape(-1).to(device=a.device, dtype=torch.float32).contiguous()
+    if not a.is_cuda:
+        w_ref = weight_fp8.float() * sc_f32.view(1, n)
+        c.copy_(torch.matmul(a.float(), w_ref).to(torch.float16))
+        return c
+
+    grid = (ct.cdiv(m, tm), ct.cdiv(n, tn), 1)
+    ct.launch(
+        torch.cuda.current_stream(),
+        grid,
+        gemm_fp8_channel_w8a16_kernel,
+        (a.contiguous(), weight_fp8.contiguous(), sc_f32, c, tm, tn, tk),
+    )
+    return c
+
+
 def quantize_fp8_block_scaled(
     weight: torch.Tensor,
     block_size: tuple[int, int] = (128, 128),
@@ -1299,6 +1363,14 @@ class UniversalQuantLinear:
                 tile_shape=self.tile_shape,
                 out=out,
             )
+        elif self.fmt == QuantFormat.FP8_CHANNEL:
+            res = cutile_gemm_fp8_channel_w8a16(
+                x_2d,
+                self.tensors["weight_fp8"],
+                self.tensors["scale_n"],
+                tile_shape=self.tile_shape,
+                out=out,
+            )
         elif self.fmt == QuantFormat.FP8_BLOCK:
             res = cutile_gemm_fp8_block_scaled(
                 x_2d,
@@ -1363,6 +1435,9 @@ class UniversalQuantLinear:
             return (self.tensors["weight_fp8"].float() * float(self.tensors["scale"].item())).to(
                 torch.float16
             )
+        if self.fmt == QuantFormat.FP8_CHANNEL:
+            sc_n = self.tensors["scale_n"].float().view(1, self.n_dim)
+            return (self.tensors["weight_fp8"].float() * sc_n).to(torch.float16)
         if self.fmt == QuantFormat.FP8_BLOCK:
             bk, bn = self.block_size
             s_exp = (
@@ -1433,6 +1508,9 @@ class UniversalQuantLayer:
     gate_proj: UniversalQuantLinear
     up_proj: UniversalQuantLinear
     down_proj: UniversalQuantLinear
+    q_bias: torch.Tensor | None = None
+    k_bias: torch.Tensor | None = None
+    v_bias: torch.Tensor | None = None
 
 
 class UniversalQuantModel:
@@ -1448,6 +1526,7 @@ class UniversalQuantModel:
         sin: torch.Tensor,
         layers: list[UniversalQuantLayer],
         format_table: MixedPrecisionFormatTable,
+        rotary_style: str = "half",
     ) -> None:
         self.config = config
         self.device = embed_tokens.device
@@ -1458,6 +1537,7 @@ class UniversalQuantModel:
         self.sin = sin.contiguous()
         self.layers = layers
         self.format_table = format_table
+        self.rotary_style = rotary_style
 
     @classmethod
     def from_mistral_model(
@@ -1571,15 +1651,25 @@ class UniversalQuantModel:
                 if mode == "native"
                 else lyr.v_proj.forward_reference(norm_in)
             )
+            if lyr.q_bias is not None:
+                q = q + lyr.q_bias.to(q.dtype)
+            if lyr.k_bias is not None:
+                k = k + lyr.k_bias.to(k.dtype)
+            if lyr.v_bias is not None:
+                v = v + lyr.v_bias.to(v.dtype)
 
             q = q.view(b, s, cfg.num_attention_heads, cfg.head_dim).transpose(1, 2).contiguous()
             k = k.view(b, s, cfg.num_key_value_heads, cfg.head_dim).transpose(1, 2).contiguous()
             v = v.view(b, s, cfg.num_key_value_heads, cfg.head_dim).transpose(1, 2).contiguous()
+            if self.rotary_style == "interleaved":
+                q = torch.cat([q[..., 0::2], q[..., 1::2]], dim=-1).contiguous()
+                k = torch.cat([k[..., 0::2], k[..., 1::2]], dim=-1).contiguous()
 
+            sw = int(getattr(cfg, "sliding_window", 0) or 0)
             if use_native:
                 q = apply_rope(q, self.cos, self.sin, 0)
                 k = apply_rope(k, self.cos, self.sin, 0)
-                attn_out = fused_attention_gqa(q, k, v, causal=True)
+                attn_out = fused_attention_gqa(q, k, v, causal=True, sliding_window=sw)
             else:
                 half_d = cfg.head_dim // 2
                 c = self.cos[:s, :half_d].view(1, 1, s, half_d).float()
@@ -1591,9 +1681,17 @@ class UniversalQuantModel:
                 gqa_groups = cfg.num_attention_heads // cfg.num_key_value_heads
                 k_exp = k.repeat_interleave(gqa_groups, dim=1)
                 v_exp = v.repeat_interleave(gqa_groups, dim=1)
-                attn_out = torch.nn.functional.scaled_dot_product_attention(
-                    q.float(), k_exp.float(), v_exp.float(), is_causal=True
-                ).to(h.dtype)
+                if sw > 0:
+                    q_p = torch.arange(s, device=q.device).view(s, 1)
+                    k_p = torch.arange(s, device=q.device).view(1, s)
+                    mask = (k_p <= q_p) & (k_p > q_p - sw)
+                    attn_out = torch.nn.functional.scaled_dot_product_attention(
+                        q.float(), k_exp.float(), v_exp.float(), attn_mask=mask
+                    ).to(h.dtype)
+                else:
+                    attn_out = torch.nn.functional.scaled_dot_product_attention(
+                        q.float(), k_exp.float(), v_exp.float(), is_causal=True
+                    ).to(h.dtype)
 
             attn_flat = attn_out.transpose(1, 2).contiguous().view(b, s, cfg.hidden_size)
             o_out = (

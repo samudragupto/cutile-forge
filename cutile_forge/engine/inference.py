@@ -38,12 +38,20 @@ class GenerationStats:
 class BatchedKVCache:
     """Lightweight batched `(B, H_kv, S_kv, D)` KV cache for coalesced GPU decode."""
 
-    def __init__(self, num_layers: int) -> None:
+    def __init__(self, num_layers: int, sliding_window: int | None = None) -> None:
         self.num_layers = num_layers
+        self.sliding_window = sliding_window
         self._k: list[torch.Tensor | None] = [None] * num_layers
         self._v: list[torch.Tensor | None] = [None] * num_layers
 
-    def update(self, layer_idx: int, k_new: torch.Tensor, v_new: torch.Tensor) -> int:
+    def update(
+        self,
+        layer_idx: int,
+        k_new: torch.Tensor,
+        v_new: torch.Tensor,
+        defer_prune: bool = False,
+    ) -> int:
+        del defer_prune
         prev_k = self._k[layer_idx]
         prev_v = self._v[layer_idx]
         if prev_k is None or prev_v is None:
@@ -55,6 +63,10 @@ class BatchedKVCache:
         cur = self._k[layer_idx]
         assert cur is not None
         return int(cur.shape[2])
+
+    def prune_outside_window(self, layer_idx: int) -> None:
+        """No-op compatibility hook for sliding-window pruning."""
+        _ = layer_idx
 
     def get_kv(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor]:
         k = self._k[layer_idx]

@@ -1,0 +1,11 @@
+[Phase 15.3] Computing FP16 baseline (Qwen/Qwen2.5-0.5B-Instruct, 512 tokens)...
+  Qwen2.5-0.5B-Instruct FP16 PPL (512 tok): 20.5126
+  [Qwen2.5-0.5B GPTQ_Int4   ] status=PASS ppl_nat=23.3620 ppl_fmt_ref=23.3692 (0.0306%) vs_fp16=+13.89% cos=0.999997 med=14.17ms [14.16..14.21]
+  [Qwen2.5-0.5B AWQ_Int4    ] status=PASS ppl_nat=24.0754 ppl_fmt_ref=24.0677 (0.0320%) vs_fp16=+17.37% cos=0.999995 med=9.16ms [9.15..9.19]
+  [Qwen2.5-0.5B FP8_channel ] status=PASS ppl_nat=20.5325 ppl_fmt_ref=20.5327 (0.0009%) vs_fp16=+0.10% cos=0.999993 med=8.57ms [8.55..8.58]
+  [Qwen2.5-0.5B GGUF_Q4_0   ] status=PASS ppl_nat=25.2525 ppl_fmt_ref=25.2525 (0.0001%) vs_fp16=+23.11% cos=0.999996 med=11.16ms [9.52..11.56]
+  [Qwen2.5-0.5B GGUF_Q8_0   ] status=PASS ppl_nat=21.6398 ppl_fmt_ref=21.6381 (0.0081%) vs_fp16=+5.50% cos=0.999993 med=12.54ms [12.52..12.57]
+  [Qwen2.5-0.5B GGUF_Q6_K   ] status=PASS ppl_nat=21.5887 ppl_fmt_ref=21.5857 (0.0141%) vs_fp16=+5.25% cos=0.999995 med=11.84ms [11.81..11.86]
+  [Qwen2.5-0.5B GGUF_Q4_K_M ] UNSUPPORTED: GGML tensor type 'Q5_0' has no native CuTile kernel (blk.0.attn_q.weight)
+  [Mistral-7B   GPTQ_32L    ] status=PASS ppl_nat=6.2596 ppl_fmt_ref=6.2595 (0.0010%) cos=1.000000 med=72.09ms
+  [Mistral-7B   GGUF_Q4_K_M ] status=PASS ppl_nat=6.0710 ppl_fmt_ref=6.0716 (0.0094%) cos=1.000000 med=70.43ms

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from cutile_forge.models.model_graph import (
     AudioConvEmbedStage,
@@ -400,6 +400,10 @@ def from_hf_config(config: dict[str, Any], name: str | None = None) -> UnifiedMo
             num_mel_bins=int(merged.get("num_mel_bins", 80)),
             max_source_positions=int(merged.get("max_source_positions", 1500)),
         )
+        act_fn = str(merged.get("activation_function", "gelu")).lower()
+        aud_act: Literal["gelu", "silu", "quick_gelu", "gelu_erf"] = (
+            "gelu_erf" if act_fn == "gelu" else "gelu"
+        )
         aud_blocks: list[BlockStage] = [
             ViTEncoderBlock(
                 hidden_size=d,
@@ -407,6 +411,7 @@ def from_hf_config(config: dict[str, Any], name: str | None = None) -> UnifiedMo
                 num_attention_heads=n_heads,
                 head_dim=head_dim,
                 layer_norm_eps=eps,
+                activation=aud_act,
             )
             for _ in range(n_layers)
         ]

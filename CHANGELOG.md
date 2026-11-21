@@ -1,5 +1,15 @@
 # Changelog
 
+## [3.2.0] (2026-11-22) — Phase 15: Correctness Closure & 8-Model Regression Collection
+
+**Authors:** Arrhat Nag (`@samudragupto`) and Rupesh Nasre
+
+CuTileForge `v3.2.0` resolves critical long-context Sliding-Window Attention and FP8 W8A16 quantization correctness bugs, verifies end-to-end all-layer quantization across real checkpoints, and adds the permanent 8-model CLI regression suite:
+
+- **Sliding-Window Attention Fix (`cutile_forge/kernels/attention_gqa.py`, `engine/kv_cache.py`, `engine/config.py`, `engine/model.py`, `runtime/native_engine.py`, `tests/test_phase15_correctness_repro.py`)**: Parsed `sliding_window` into `ModelConfig`, implemented exact `k_pos > q_pos - sliding_window` masking with dead prefix tile skipping in prefill, decode, and FlashDecoding kernels, and pruned evicted KV entries outside `[pos - W + 1, pos]` so real `Mistral-7B-v0.1-GPTQ` 8K tail perplexity drops from `602.03` to `3.1108` (`16K` tail perplexity `3.1532` with exact next-token match).
+- **FP8 W8A16 & Real-Checkpoint Quantization Validation (`cutile_forge/kernels/universal_quant.py`, `benchmarks/production/bench_phase15_quant_real.py`)**: Replaced lossy E4M3 activation quantization with native W8A16 dequant-on-the-fly (`cutile_gemm_fp8_w8a16`, `cutile_gemm_fp8_channel_w8a16`), added Q/K/V biases and `rotary_style` handling (`half`/`interleaved`), and measured full all-layer `>= 512`-token perplexity across real `Qwen2.5-0.5B-Instruct` (`GPTQ_Int4`, `AWQ_Int4`, `FP8_channel`, `GGUF_Q4_0`, `GGUF_Q8_0`, `GGUF_Q6_K`) and `Mistral-7B-v0.1` (`GPTQ_Int4_desc_act`, `GGUF_Q4_K_M`) checkpoints while logging `Qwen2.5-0.5B GGUF_Q4_K_M` (`Q5_0` tensors) as honestly `UNSUPPORTED`.
+- **8-Model Regression Collection & Release CLI (`cutile_forge/regress.py`, `cutile_forge/cli.py`, `cutile_forge/models/model_graph.py`)**: Added `cutile-forge regress --tier {fast,full}` covering Dense, MoE, Vision, Audio, Multimodal, and Diffusion models (`Mistral-7B`, `Qwen2.5-0.5B`, `Mixtral-8x7B`, `Llama-2-70B` NVMe streaming, `SigLIP`, `Whisper-Tiny`, `LLaVA-1.5-7B`, `DiT-XL-2-256`) alongside `cutile-forge bench release`.
+
 ## [3.1.0] (2026-11-21) — Phase 14: Production Validation & Hardware Scaling
 
 **Authors:** Arrhat Nag (`@samudragupto`) and Rupesh Nasre

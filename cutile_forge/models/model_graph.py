@@ -155,7 +155,7 @@ class ViTEncoderBlock(BlockStage):
     num_attention_heads: int = 12
     head_dim: int = 64
     layer_norm_eps: float = 1e-5
-    activation: Literal["gelu", "silu"] = "gelu"
+    activation: Literal["gelu", "silu", "quick_gelu", "gelu_erf"] = "gelu"
     qkv_bias: bool = True
 
 
@@ -1124,6 +1124,10 @@ class UnifiedModelExecutor:
         return out.view(*shape_prefix, w.shape[-1])
 
     def _act(self, x: torch.Tensor, kind: str, use_cutile: bool) -> torch.Tensor:
+        if kind == "quick_gelu":
+            return (x.float() * torch.sigmoid(1.702 * x.float())).to(x.dtype)
+        if kind == "gelu_erf":
+            return F.gelu(x.float(), approximate="none").to(x.dtype)
         if use_cutile and x.is_cuda and x.dtype in (torch.float16, torch.bfloat16, torch.float32):
             return cutile_gelu(x) if kind == "gelu" else cutile_silu(x)
         return (
@@ -1196,6 +1200,23 @@ class UnifiedModelExecutor:
         args = timesteps.float().view(-1, 1) * freqs.view(1, -1)
         return torch.cat([torch.cos(args), torch.sin(args)], dim=-1).to(dtype)
 
+    def _dit_conditioning(
+        self,
+        t_emb_raw: torch.Tensor,
+        class_labels: torch.Tensor | None,
+        cond_weights: dict[str, Any],
+        use_cutile: bool,
+    ) -> torch.Tensor:
+        t_h = self._act(
+            self._linear(t_emb_raw, cond_weights["t_fc1_w"], cond_weights["t_fc1_b"], use_cutile),
+            "silu",
+            use_cutile,
+        )
+        cond = self._linear(t_h, cond_weights["t_fc2_w"], cond_weights["t_fc2_b"], use_cutile)
+        if class_labels is not None and "class_embed" in cond_weights:
+            cond = cond + F.embedding(class_labels.long(), cond_weights["class_embed"])
+        return cond
+
     def _run_dit_block(
         self,
         x: torch.Tensor,
@@ -1203,9 +1224,16 @@ class UnifiedModelExecutor:
         blk: DiTBlock,
         bw: dict[str, Any],
         use_cutile: bool,
+        t_emb_raw: torch.Tensor | None = None,
+        class_labels: torch.Tensor | None = None,
     ) -> torch.Tensor:
         bsz, seq_len, d = x.shape
-        t_act = self._act(t_cond, "silu", use_cutile)
+        blk_cond = (
+            self._dit_conditioning(t_emb_raw, class_labels, bw, use_cutile)
+            if (t_emb_raw is not None and "t_fc1_w" in bw)
+            else t_cond
+        )
+        t_act = self._act(blk_cond, "silu", use_cutile)
         mod = self._linear(t_act, bw["adaln_w"], bw["adaln_b"], use_cutile).unsqueeze(1)
         shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = mod.chunk(6, dim=-1)
 
@@ -1312,10 +1340,12 @@ class UnifiedModelExecutor:
         pixel_values: torch.Tensor | None = None,
         mel_features: torch.Tensor | None = None,
         timesteps: torch.Tensor | None = None,
+        class_labels: torch.Tensor | None = None,
         use_cutile: bool = True,
     ) -> torch.Tensor:
         g = self.graph
         t_cond: torch.Tensor | None = None
+        t_emb_raw: torch.Tensor | None = None
 
         if isinstance(g.input_stage, TextEmbeddingStage):
             if input_ids is None:
@@ -1353,11 +1383,22 @@ class UnifiedModelExecutor:
                     (pixel_values.shape[0],), 500, device=pixel_values.device, dtype=torch.long
                 )
             )
-            t_emb = self._timestep_embedding(ts, g.input_stage.hidden_size, pixel_values.dtype)
-            t_h = self._act(
-                self._linear(t_emb, dw["t_fc1_w"], dw["t_fc1_b"], use_cutile), "silu", use_cutile
-            )
-            t_cond = self._linear(t_h, dw["t_fc2_w"], dw["t_fc2_b"], use_cutile)
+            if "t_fc1_w" in dw:
+                t_dim = int(dw["t_fc1_w"].shape[0])
+                t_emb = self._timestep_embedding(ts, t_dim, pixel_values.dtype)
+                t_emb_raw = t_emb
+                t_cond = self._dit_conditioning(t_emb, class_labels, dw, use_cutile)
+            elif weights["blocks"] and "t_fc1_w" in weights["blocks"][0]:
+                t_dim = int(weights["blocks"][0]["t_fc1_w"].shape[0])
+                t_emb = self._timestep_embedding(ts, t_dim, pixel_values.dtype)
+                t_emb_raw = t_emb
+                t_cond = self._dit_conditioning(
+                    t_emb, class_labels, weights["blocks"][0], use_cutile
+                )
+            else:
+                raise KeyError(
+                    "Diffusion weights missing 't_fc1_w' in diffusion_embed or blocks[0]"
+                )
         elif isinstance(g.input_stage, MultimodalFusionStage):
             if input_ids is None or pixel_values is None:
                 raise ValueError("Both input_ids and pixel_values required for multimodal model")
@@ -1381,7 +1422,25 @@ class UnifiedModelExecutor:
                 use_cutile,
             )
             txt_h = F.embedding(input_ids, weights["embed_tokens"])
-            hidden = torch.cat([vis_proj, txt_h], dim=1)
+            img_tok_id = proj.get("image_token_index")
+            if img_tok_id is not None and bool((input_ids == int(img_tok_id)).any()):
+                img_mask = input_ids == int(img_tok_id)
+                n_img_slots = int(img_mask.sum().item())
+                if n_img_slots == vis_proj.shape[0] * vis_proj.shape[1]:
+                    hidden = txt_h.clone()
+                    hidden[img_mask] = vis_proj.to(txt_h.dtype).reshape(-1, txt_h.shape[-1])
+                else:
+                    img_pos = img_mask[0].nonzero(as_tuple=False)[0].item()
+                    hidden = torch.cat(
+                        [
+                            txt_h[:, :img_pos, :],
+                            vis_proj.to(txt_h.dtype),
+                            txt_h[:, img_pos + 1 :, :],
+                        ],
+                        dim=1,
+                    )
+            else:
+                hidden = torch.cat([vis_proj, txt_h], dim=1)
         else:
             raise TypeError(f"Unsupported input_stage: {type(g.input_stage)}")
 
@@ -1484,7 +1543,15 @@ class UnifiedModelExecutor:
             elif isinstance(blk, DiTBlock):
                 if t_cond is None:
                     raise ValueError("DiTBlock requires timestep conditioning")
-                hidden = self._run_dit_block(hidden, t_cond, blk, bw, use_cutile)
+                hidden = self._run_dit_block(
+                    hidden,
+                    t_cond,
+                    blk,
+                    bw,
+                    use_cutile,
+                    t_emb_raw=t_emb_raw,
+                    class_labels=class_labels,
+                )
 
         if isinstance(g.output_stage, LMHeadStage):
             if g.output_stage.norm_type == "layernorm":
@@ -1578,6 +1645,7 @@ class UnifiedModelExecutor:
         pixel_values: torch.Tensor | None = None,
         mel_features: torch.Tensor | None = None,
         timesteps: torch.Tensor | None = None,
+        class_labels: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Execute `UnifiedModelGraph` using CuTile kernels on CUDA (and PyTorch on CPU)."""
         return self._run_forward(
@@ -1586,6 +1654,7 @@ class UnifiedModelExecutor:
             pixel_values=pixel_values,
             mel_features=mel_features,
             timesteps=timesteps,
+            class_labels=class_labels,
             use_cutile=True,
         )
 
@@ -1596,6 +1665,7 @@ class UnifiedModelExecutor:
         pixel_values: torch.Tensor | None = None,
         mel_features: torch.Tensor | None = None,
         timesteps: torch.Tensor | None = None,
+        class_labels: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Execute pure-PyTorch reference forward pass for parity verification."""
         return self._run_forward(
@@ -1604,5 +1674,6 @@ class UnifiedModelExecutor:
             pixel_values=pixel_values,
             mel_features=mel_features,
             timesteps=timesteps,
+            class_labels=class_labels,
             use_cutile=False,
         )

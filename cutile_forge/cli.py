@@ -91,11 +91,25 @@ def main() -> None:
     serve_p.add_argument("--native-runtime", action="store_true")
 
     bench_p = sub.add_parser("bench", help="Run CuTileForge benchmark suite")
+    bench_p.add_argument("target_suite", nargs="?", default=None, help="Optional suite: release")
     bench_p.add_argument("--model", type=Path, default=Path("/home/arrhat/models/mistral_7b_4bit"))
     bench_p.add_argument("--output", type=Path, default=Path("benchmarks/results_5090"))
     bench_p.add_argument("--target", default="sm_120")
     bench_p.add_argument("--gpu", default="rtx5090")
     bench_p.add_argument("--micro-only", action="store_true")
+    bench_p.add_argument("--soak-seconds", type=int, default=60)
+    bench_p.add_argument("--bench-set", choices=["quick", "full"], default="quick")
+
+    reg_p = sub.add_parser("regress", help="Run 8-model production correctness regression suite")
+    reg_p.add_argument("--tier", choices=["fast", "full"], default="fast")
+    reg_p.add_argument(
+        "--output",
+        type=Path,
+        default=Path("benchmarks/validation_artifacts/v3.2.0/phase15_regression"),
+    )
+    reg_p.add_argument("--max-tokens", type=int, default=256)
+    reg_p.add_argument("--num-prompts", type=int, default=5)
+    reg_p.add_argument("--target", default="sm_120")
 
     doc_p = sub.add_parser("doctor", help="Diagnose CUDA, cuda.tile, and system compatibility")
     doc_p.add_argument("--json", action="store_true", help="Emit structured JSON report")
@@ -186,15 +200,42 @@ def main() -> None:
     elif args.command == "bench":
         import importlib
 
-        run_all = importlib.import_module("benchmarks.run_all").run_all
+        if args.target_suite == "release":
+            old_argv = sys.argv
+            sys.argv = [
+                "run_release_validation.py",
+                "--model-dir",
+                str(args.model),
+                "--soak-seconds",
+                str(args.soak_seconds),
+                "--bench-set",
+                args.bench_set,
+            ]
+            try:
+                importlib.import_module("benchmarks.production.run_release_validation").main()
+            finally:
+                sys.argv = old_argv
+        else:
+            run_all = importlib.import_module("benchmarks.run_all").run_all
 
-        run_all(
-            model_dir=args.model,
+            run_all(
+                model_dir=args.model,
+                output_dir=args.output,
+                micro_only=args.micro_only,
+                target=args.target,
+                gpu=args.gpu,
+            )
+    elif args.command == "regress":
+        from cutile_forge.regress import run_regression_suite
+
+        reg_report = run_regression_suite(
+            tier=args.tier,
             output_dir=args.output,
-            micro_only=args.micro_only,
-            target=args.target,
-            gpu=args.gpu,
+            num_prompts=args.num_prompts,
+            greedy_tokens=args.max_tokens,
         )
+        print(reg_report.format_markdown())
+        sys.exit(0 if reg_report.all_non_native_or_pass else 1)
 
 
 if __name__ == "__main__":
