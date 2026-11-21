@@ -1,0 +1,175 @@
+{
+  "schema_version": "1.0.0",
+  "run_id": "phase14c_synthetic_attention",
+  "cutile_forge_version": "3.1.0",
+  "git_commit": "3488ebb2b5160c70b9ef1b1e49c11ce001165123",
+  "dirty_worktree": true,
+  "dirty_diff_sha256": "0004e0f58cea40d22d48ae45c7217df9752108d65ad66c733d9607ca6d862e81",
+  "utc_start": "2026-11-21T17:15:06.675204+00:00",
+  "utc_end": "2026-11-21T17:15:07.014630+00:00",
+  "environment": {
+    "hostname": "prashant-lab",
+    "os": "Linux 7.0.0-43-generic",
+    "kernel": "#43~24.04.1-Ubuntu SMP PREEMPT_DYNAMIC Sat Oct 31 06:52:47 UTC 2",
+    "cpu_model": "Intel(R) Core(TM) Ultra 9 285K",
+    "ram_gb": 62.26,
+    "gpu_name": "NVIDIA GeForce RTX 5090",
+    "gpu_count": 1,
+    "compute_capability": "sm_120",
+    "vram_gb": 31.35,
+    "nvidia_driver": "595.58.03",
+    "cuda_runtime": "13.2",
+    "torch_version": "2.15.0+cu132",
+    "cutile_version": "1.8.1",
+    "python_version": "3.12.3",
+    "dependencies": {
+      "numpy": "2.5.5",
+      "transformers": "5.23.0",
+      "tokenizers": "0.23.3",
+      "safetensors": "0.8.0",
+      "huggingface-hub": "2.4.0",
+      "gguf": "0.19.0",
+      "fastapi": "0.165.0",
+      "uvicorn": "0.54.0",
+      "httpx": "0.28.1",
+      "nvidia-ml-py": "not-installed"
+    },
+    "nvml_available": false,
+    "gpu_temp_c": null,
+    "gpu_power_w": null
+  },
+  "env_vars": {
+    "CUTILE_ARCH": "sm_120",
+    "HF_HOME": "/var/tmp/arrhat_models/hf_cache"
+  },
+  "command": "benchmarks/production/bench_long_context_real.py",
+  "cwd": "/home/arrhat/cutile-forge",
+  "checkpoint": {
+    "model_id": "synthetic-32layer-gqa",
+    "local_path": "/dev/null",
+    "revision": null,
+    "files": [],
+    "total_bytes": 0,
+    "sha256_manifest": {}
+  },
+  "quant_config": {
+    "quant_format": "fp16",
+    "group_size": null,
+    "desc_act": null,
+    "kv_dtype": "fp16+fp8_e4m3fn",
+    "mixed_precision": {},
+    "disk_format": null,
+    "kernel_format": null
+  },
+  "prompt_ids_or_checksum": "b020053cc577a9cfc1bb597074b470179323b8b11259f704196301e3f2eedd48",
+  "workload": {
+    "batch_size": 1,
+    "concurrency": 1,
+    "prompt_len": 32768,
+    "output_len": 1,
+    "temperature": 0.0,
+    "seed": 42,
+    "warmup_iters": 0,
+    "measured_iters": 5,
+    "sync_method": "torch.cuda.synchronize"
+  },
+  "contention_before": {
+    "timestamp_utc": "2026-11-21T17:15:06.694775+00:00",
+    "contended": false,
+    "compute_apps": [
+      {
+        "pid": "869364",
+        "used_memory": "748 MiB"
+      }
+    ],
+    "query_error": null
+  },
+  "contention_after": {
+    "timestamp_utc": "2026-11-21T17:15:07.014635+00:00",
+    "contended": false,
+    "compute_apps": [
+      {
+        "pid": "869364",
+        "used_memory": "6912 MiB"
+      }
+    ],
+    "query_error": null
+  },
+  "execution_mode": "synthetic-weights",
+  "reproduction_status": "MEASURED",
+  "notes": "Synthetic 32-layer GQA (32:8, d=128) FlashDecoding kernel-only microbenchmark; NOT real-model E2E.",
+  "records": [
+    {
+      "workload": "Synthetic 32-layer GQA FlashDecoding",
+      "weight_source": "synthetic-weights",
+      "context_len": 4096,
+      "kv_dtype": "fp16",
+      "median_step_ms": 1.736,
+      "min_step_ms": 1.734,
+      "max_step_ms": 1.754
+    },
+    {
+      "workload": "Synthetic 32-layer GQA FlashDecoding",
+      "weight_source": "synthetic-weights",
+      "context_len": 4096,
+      "kv_dtype": "fp8_e4m3fn",
+      "median_step_ms": 2.383,
+      "min_step_ms": 2.37,
+      "max_step_ms": 2.387
+    },
+    {
+      "workload": "Synthetic 32-layer GQA FlashDecoding",
+      "weight_source": "synthetic-weights",
+      "context_len": 8192,
+      "kv_dtype": "fp16",
+      "median_step_ms": 1.329,
+      "min_step_ms": 1.328,
+      "max_step_ms": 1.339
+    },
+    {
+      "workload": "Synthetic 32-layer GQA FlashDecoding",
+      "weight_source": "synthetic-weights",
+      "context_len": 8192,
+      "kv_dtype": "fp8_e4m3fn",
+      "median_step_ms": 1.862,
+      "min_step_ms": 1.856,
+      "max_step_ms": 1.865
+    },
+    {
+      "workload": "Synthetic 32-layer GQA FlashDecoding",
+      "weight_source": "synthetic-weights",
+      "context_len": 16384,
+      "kv_dtype": "fp16",
+      "median_step_ms": 2.142,
+      "min_step_ms": 2.131,
+      "max_step_ms": 2.147
+    },
+    {
+      "workload": "Synthetic 32-layer GQA FlashDecoding",
+      "weight_source": "synthetic-weights",
+      "context_len": 16384,
+      "kv_dtype": "fp8_e4m3fn",
+      "median_step_ms": 3.79,
+      "min_step_ms": 3.783,
+      "max_step_ms": 3.794
+    },
+    {
+      "workload": "Synthetic 32-layer GQA FlashDecoding",
+      "weight_source": "synthetic-weights",
+      "context_len": 32768,
+      "kv_dtype": "fp16",
+      "median_step_ms": 3.837,
+      "min_step_ms": 3.825,
+      "max_step_ms": 3.856
+    },
+    {
+      "workload": "Synthetic 32-layer GQA FlashDecoding",
+      "weight_source": "synthetic-weights",
+      "context_len": 32768,
+      "kv_dtype": "fp8_e4m3fn",
+      "median_step_ms": 7.58,
+      "min_step_ms": 7.572,
+      "max_step_ms": 7.739
+    }
+  ]
+}

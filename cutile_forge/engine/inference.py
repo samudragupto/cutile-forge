@@ -80,6 +80,7 @@ class InferenceEngine:
         self.model = model
         self.config = model.config
         self.use_cuda_graph = use_cuda_graph
+        self.graph_fallback_count: int = 0
         self.enable_radix_cache = enable_radix_cache
         self.radix_cache = RadixPrefixCache(max_entries=64)
         self.kv_cache = PagedKVCache(
@@ -271,7 +272,20 @@ class InferenceEngine:
             and pos < self.model.cos.shape[0]
         ):
             if self._decode_graph is None:
-                self._capture_decode_graph()
+                try:
+                    self._capture_decode_graph()
+                except RuntimeError as exc:
+                    self.use_cuda_graph = False
+                    self.graph_fallback_count += 1
+                    self._decode_graph = None
+                    import logging
+
+                    logging.getLogger(__name__).warning(
+                        "CUDA Graph capture failed (%s); falling back to eager decode.", exc
+                    )
+                    return self.model.forward(
+                        token_ids, kv_cache=self.kv_cache, pos_offset=pos, backend=backend
+                    )
             assert self._static_input_ids is not None
             assert self._static_cos is not None
             assert self._static_sin is not None

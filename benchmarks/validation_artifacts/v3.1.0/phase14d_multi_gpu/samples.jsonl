@@ -1,0 +1,4 @@
+{"metric": "sim_tp2_mlp_ms", "value": 0.4522880017757416, "unit": "ms", "iteration": 0, "wall_clock_utc": "2026-11-21T17:09:02.951487+00:00", "request_id": null, "metadata": {}}
+{"metric": "sim_tp4_mlp_ms", "value": 0.6712960004806519, "unit": "ms", "iteration": 0, "wall_clock_utc": "2026-11-21T17:09:02.960119+00:00", "request_id": null, "metadata": {}}
+{"metric": "sim_tp2_gqa_ms", "value": 0.584991991519928, "unit": "ms", "iteration": 0, "wall_clock_utc": "2026-11-21T17:09:02.979106+00:00", "request_id": null, "metadata": {}}
+{"metric": "sim_tp4_gqa_ms", "value": 1.095903992652893, "unit": "ms", "iteration": 0, "wall_clock_utc": "2026-11-21T17:09:02.981435+00:00", "request_id": null, "metadata": {}}

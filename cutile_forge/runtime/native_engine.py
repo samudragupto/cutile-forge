@@ -162,6 +162,7 @@ class NativeModelRuntime:
         self.device = model.device
         self.use_cuda = self.device.type == "cuda" and torch.cuda.is_available()
         self.use_cuda_graph = use_cuda_graph and self.use_cuda
+        self.graph_fallback_count: int = 0
         self.graph_strategy: GraphStrategy = graph_strategy
         self.max_seq_len = max_seq_len
         self.block_size = block_size
@@ -780,6 +781,7 @@ class NativeModelRuntime:
         if ids.ndim == 1:
             ids = ids.unsqueeze(0)
         bsz, s_chunk = int(ids.shape[0]), int(ids.shape[1])
+        self.kv_cache.ensure_batch_capacity(bsz)
         h = cutile_embedding_lookup(ids.reshape(bsz * s_chunk), self._embed_w).view(
             bsz * s_chunk, self.config.hidden_size
         )
@@ -793,6 +795,11 @@ class NativeModelRuntime:
         _, next_tok = cutile_lm_head_fused(
             h_last, self._norm_w, self._lm_head_w, eps=self.config.rms_norm_eps, top_k=1
         )
+        if self._all_layers_on_gpu:
+            ws = self._get_or_create_workspace(bsz)
+            ws.token_id.copy_(next_tok.view(bsz, 1).to(torch.int32))
+            ws.pos_buf.fill_(start_pos + s_chunk)
+            ws.step_buf.fill_(0)
         return next_tok.view(bsz, 1)
 
     @torch.inference_mode()
@@ -812,15 +819,19 @@ class NativeModelRuntime:
             ws = self._get_or_create_workspace(bsz)
             cur_pos = self.kv_cache.seq_lens[0] if pos is None else pos
             bucket_len = self._select_bucket(cur_pos)
-            graph = self._capture_full_step_graph(ws, bucket_len)
-
-            if token_id is not None and token_id.data_ptr() != ws.token_id.data_ptr():
-                ws.token_id.copy_(token_id.view(bsz, 1))
-            if sync_pos and pos is not None:
-                ws.pos_buf.fill_(pos)
-            graph.replay()
-            self.kv_cache.seq_lens = [cur_pos + 1] * cfg.num_hidden_layers
-            return ws.token_id.view(bsz, 1)
+            try:
+                graph = self._capture_full_step_graph(ws, bucket_len)
+            except RuntimeError:
+                self.use_cuda_graph = False
+                self.graph_fallback_count += 1
+            else:
+                if token_id is not None and token_id.data_ptr() != ws.token_id.data_ptr():
+                    ws.token_id.copy_(token_id.view(bsz, 1))
+                if sync_pos and pos is not None:
+                    ws.pos_buf.fill_(pos)
+                graph.replay()
+                self.kv_cache.seq_lens = [cur_pos + 1] * cfg.num_hidden_layers
+                return ws.token_id.view(bsz, 1)
 
         assert token_id is not None
         cur_pos = self.kv_cache.seq_lens[0] if pos is None else pos
