@@ -16,10 +16,19 @@ from cutile_forge.bench.pcie_monitor import (
     estimate_pcie_utilization,
     measure_pcie_h2d_bandwidth,
 )
+from cutile_forge.bench.profiler import (
+    KernelProfileResult,
+    analytical_profile_op,
+    detect_profilers,
+    profile_kernel_ncu,
+    profile_timeline_nsys,
+    save_profile_json,
+)
 from cutile_forge.bench.thermal_logger import ThermalLogger
 
 __all__ = [
     "CPUProfileStats",
+    "KernelProfileResult",
     "NVMLLogger",
     "NVMLSample",
     "OverlapStats",
@@ -27,12 +36,17 @@ __all__ = [
     "RichBenchRecord",
     "Stats",
     "ThermalLogger",
+    "analytical_profile_op",
     "benchmark",
     "benchmark_with_telemetry",
     "check_regression_gate",
+    "detect_profilers",
     "estimate_pcie_utilization",
     "measure_compute_dma_overlap",
     "measure_pcie_h2d_bandwidth",
     "profile_ddr5_bandwidth",
+    "profile_kernel_ncu",
+    "profile_timeline_nsys",
+    "save_profile_json",
     "write_csv",
 ]

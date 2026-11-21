@@ -431,6 +431,29 @@ class FXOpRegistry:
         return sorted({name for name, _ in self._entries.values()})
 
 
+def _cu_fused_ln_gelu(
+    input: torch.Tensor,
+    normalized_shape: tuple[int, ...] | list[int],
+    weight: torch.Tensor | None = None,
+    bias: torch.Tensor | None = None,
+    eps: float = 1e-5,
+) -> torch.Tensor:
+    """Execute GELU_tanh(LayerNorm(x)) via CuTile single-pass fused kernel when eligible."""
+    if (
+        input.is_cuda
+        and input.dtype in (torch.float16, torch.bfloat16, torch.float32)
+        and weight is not None
+        and len(normalized_shape) == 1
+    ):
+        from cutile_forge.kernels.layernorm_residual import cutile_fused_layernorm_gelu
+
+        return cutile_fused_layernorm_gelu(input, weight, bias=bias, eps=eps)
+    return F.gelu(
+        F.layer_norm(input, list(normalized_shape), weight=weight, bias=bias, eps=eps),
+        approximate="tanh",
+    )
+
+
 DEFAULT_FX_OP_REGISTRY = FXOpRegistry()
 DEFAULT_FX_OP_REGISTRY.register(F.linear, "linear", _cu_linear)
 DEFAULT_FX_OP_REGISTRY.register(torch.addmm, "addmm", _cu_addmm)
@@ -449,6 +472,7 @@ DEFAULT_FX_OP_REGISTRY.register(F.embedding, "embedding", _cu_embedding)
 _LOWERED_TARGETS = {
     _cu_fused_ffn_linear,
     _cu_fused_ln_residual,
+    _cu_fused_ln_gelu,
     _cu_fused_sdpa,
     _cu_fused_linear_silu,
     _cu_bmm,
@@ -595,6 +619,36 @@ def cutile_forge_backend(
                 graph.erase_node(add_node)
                 ln_res_fusions += 1
                 lowered_ops.append("fused_ln_residual")
+
+    # Pass 2b: Match `layer_norm -> gelu(approximate="tanh")` -> `_cu_fused_ln_gelu`
+    for node in list(graph.nodes):
+        if (
+            node.op == "call_function"
+            and node.target is F.gelu
+            and node.kwargs.get("approximate", "none") == "tanh"
+            and len(node.args) >= 1
+        ):
+            ln_node = node.args[0]
+            if (
+                isinstance(ln_node, fx.Node)
+                and ln_node.op == "call_function"
+                and ln_node.target is F.layer_norm
+                and len(ln_node.users) == 1
+                and len(ln_node.args) >= 2
+            ):
+                x_arg = ln_node.args[0]
+                norm_shape = ln_node.args[1]
+                w_arg = ln_node.args[2] if len(ln_node.args) > 2 else ln_node.kwargs.get("weight")
+                b_arg = ln_node.args[3] if len(ln_node.args) > 3 else ln_node.kwargs.get("bias")
+                eps = ln_node.args[4] if len(ln_node.args) > 4 else ln_node.kwargs.get("eps", 1e-5)
+                with graph.inserting_before(node):
+                    fused = graph.call_function(
+                        _cu_fused_ln_gelu, args=(x_arg, norm_shape, w_arg, b_arg, eps)
+                    )
+                node.replace_all_uses_with(fused)
+                graph.erase_node(node)
+                graph.erase_node(ln_node)
+                lowered_ops.append("fused_ln_gelu")
 
     # Pass 3: Lower `scaled_dot_product_attention` -> `_cu_fused_sdpa`
     for node in list(graph.nodes):

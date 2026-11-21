@@ -40,6 +40,80 @@ def reduce_sum_kernel(
 
 
 @ct.kernel(occupancy=4)
+def reduce_sum_splitk_kernel(
+    x_ptr,
+    part_ptr,
+    n_cols: int,
+    split_k: ct.Constant[int],
+    tile_m: ct.Constant[int],
+    tile_n: ct.Constant[int],
+) -> None:
+    """Split-K coalesced sum reduction for low-row, wide-column tensors."""
+    row_block = ct.bid(0)
+    sk = ct.bid(1)
+    num_tiles = (n_cols + tile_n - 1) // tile_n
+    tiles_per_split = (num_tiles + split_k - 1) // split_k
+    t_start = sk * tiles_per_split
+    t_end = min(num_tiles, t_start + tiles_per_split)
+    col_base = ct.arange(tile_n, dtype=ct.int32)
+    acc = ct.zeros((tile_m, 1), dtype=ct.float32)
+
+    for t in range(t_start, t_end):
+        tile_x = ct.astype(
+            ct.load(
+                x_ptr,
+                index=(row_block, t),
+                shape=(tile_m, tile_n),
+                padding_mode=ct.PaddingMode.ZERO,
+                latency=4,
+            ),
+            ct.float32,
+        )
+        col_idx = ct.broadcast_to(ct.reshape(t * tile_n + col_base, (1, tile_n)), (tile_m, tile_n))
+        acc = acc + ct.sum(ct.where(col_idx < n_cols, tile_x, 0.0), axis=1, keepdims=True)
+
+    ct.store(part_ptr, index=(row_block, sk), tile=acc)
+
+
+@ct.kernel(occupancy=4)
+def reduce_max_splitk_kernel(
+    x_ptr,
+    part_ptr,
+    n_cols: int,
+    split_k: ct.Constant[int],
+    tile_m: ct.Constant[int],
+    tile_n: ct.Constant[int],
+) -> None:
+    """Split-K coalesced max reduction for low-row, wide-column tensors."""
+    row_block = ct.bid(0)
+    sk = ct.bid(1)
+    num_tiles = (n_cols + tile_n - 1) // tile_n
+    tiles_per_split = (num_tiles + split_k - 1) // split_k
+    t_start = sk * tiles_per_split
+    t_end = min(num_tiles, t_start + tiles_per_split)
+    col_base = ct.arange(tile_n, dtype=ct.int32)
+    acc = ct.full((tile_m, 1), -3.4e38, dtype=ct.float32)
+
+    for t in range(t_start, t_end):
+        tile_x = ct.astype(
+            ct.load(
+                x_ptr,
+                index=(row_block, t),
+                shape=(tile_m, tile_n),
+                padding_mode=ct.PaddingMode.NEG_INF,
+                latency=4,
+            ),
+            ct.float32,
+        )
+        col_idx = ct.broadcast_to(ct.reshape(t * tile_n + col_base, (1, tile_n)), (tile_m, tile_n))
+        acc = ct.maximum(
+            acc, ct.max(ct.where(col_idx < n_cols, tile_x, -3.4e38), axis=1, keepdims=True)
+        )
+
+    ct.store(part_ptr, index=(row_block, sk), tile=acc)
+
+
+@ct.kernel(occupancy=4)
 def reduce_max_kernel(
     x_ptr,
     y_ptr,
@@ -104,14 +178,35 @@ def _launch_row_reduction(
     rows = x_2d.shape[0]
     y_2d = torch.empty((rows, 1), device=x.device, dtype=x.dtype)
 
-    tile_m, tile_n = _select_reduction_tiles(rows, n_cols)
-    grid = (ct.cdiv(rows, tile_m), 1, 1)
-    ct.launch(
-        torch.cuda.current_stream(),
-        grid,
-        kernel_fn,
-        (x_2d, y_2d, n_cols, tile_m, tile_n),
-    )
+    if rows < 170 and n_cols >= 2048:
+        split_k = 8
+        tile_m = 4 if rows >= 16 else 1
+        tile_n = 512
+        part = torch.empty((rows, split_k), device=x.device, dtype=torch.float32)
+        split_fn = (
+            reduce_sum_splitk_kernel if kernel_fn is reduce_sum_kernel else reduce_max_splitk_kernel
+        )
+        ct.launch(
+            torch.cuda.current_stream(),
+            (ct.cdiv(rows, tile_m), split_k, 1),
+            split_fn,
+            (x_2d, part, n_cols, split_k, tile_m, tile_n),
+        )
+        reduced = (
+            part.sum(dim=1, keepdim=True)
+            if kernel_fn is reduce_sum_kernel
+            else part.max(dim=1, keepdim=True).values
+        )
+        y_2d = reduced.to(x.dtype)
+    else:
+        tile_m, tile_n = _select_reduction_tiles(rows, n_cols)
+        grid = (ct.cdiv(rows, tile_m), 1, 1)
+        ct.launch(
+            torch.cuda.current_stream(),
+            grid,
+            kernel_fn,
+            (x_2d, y_2d, n_cols, tile_m, tile_n),
+        )
 
     if keepdim:
         out_shape = list(x.shape)

@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.1.0 (2026-11-21) — Track A: Kernel Performance Engineering & Profiling
+
+- **Nsight Profiling Harness (`cutile_forge.bench.profiler`)**: Added `detect_profilers`, `profile_kernel_ncu`, `profile_timeline_nsys`, `analytical_profile_op`, and `save_profile_json` with graceful `ERR_NVGPUCTRPERM` fallback to CUDA-event analytical HBM/occupancy profiling.
+- **Vision Kernel Redesign (`cutile_forge.kernels.vision`, `indexing`)**: Replaced unfold-heavy baselines with coalesced 2D spatial halo `depthwise_conv2d_kernel`, zero-loop `max_pool2d_2x2_s2_kernel` / `avg_pool2d_2x2_s2_kernel` + general `ct.gather` poolers, direct `patch_embed_fused_kernel` (with optional `pos_embed` fusion), zero-copy NCHW/NHWC `conv2d_1x1_nchw_kernel`, and `conv2d_implicit_gemm_kernel`.
+- **Gather, Reductions & Fused Norm+Activation (`indexing`, `reductions`, `layernorm_residual`, `activations`, `fx_backend`)**: Added zero-copy int64/int32 `tile_d=512` `cutile_gather`, split-K low-row reductions, `cutile_fused_rmsnorm_silu`, `cutile_fused_layernorm_gelu` (+ FX Pass 2b `layer_norm -> gelu(tanh)` fusion), and `cutile_fused_add_rmsnorm_silu`.
+- **Shape-Specialized GEMM Dispatch (`gemm_dequant`)**: Added `select_gemm_kernel_path` (`skinny_splitk`, `medium_l2`, `large_compute`) and deterministic `gemm_fp16_splitk_kernel`.
+
 ## v2.0.0 (2026-11-21) — General CuTile Compiler, SDK, Training, Vision & Ecosystem
 
 - **Phases 1–7 (Developer SDK, General Ops, CuTileTune, CuTileRuntime, Training, ONNX, Serving)**: Added imperative `cutile_forge.sdk.Graph` + `compile` + `KernelRegistry`, `cutile-forge doctor`, general CuTile kernels (`bmm`, `reduce_sum`, `reduce_max`, `cumsum`, `transpose`, `gather`, `conv2d`, `gelu`, `silu`), `TuningDB` + regression detection, `PinnedHostPool` / `TensorStreamer` / `GraphRuntime`, `CuTileSiLUFn` / `CuTileRMSNormFn` / `cutile_adamw_step`, `import_onnx_model`, and `/metrics` + optional Bearer authentication on the OpenAI server (`176 → 191` tests).

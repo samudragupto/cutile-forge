@@ -1,0 +1,203 @@
+{
+  "profilers": {
+    "ncu": "/usr/local/bin/ncu",
+    "nsys": "/usr/local/bin/nsys"
+  },
+  "meta": {
+    "ncu_probe": {
+      "available": true,
+      "fallback": false,
+      "diagnostic": null,
+      "metrics": {}
+    }
+  },
+  "kernels": [
+    {
+      "name": "depthwise_conv2d",
+      "p50_ms": 0.03152,
+      "achieved_gbps": 407.52,
+      "hbm_util_pct": 22.74,
+      "achieved_tflops": 1.834,
+      "estimated_occupancy_pct": 75.0,
+      "profiler_backend": "cuda_events_analytical_fallback",
+      "ncu_metrics": {},
+      "diagnostic": null
+    },
+    {
+      "name": "max_pool2d",
+      "p50_ms": 0.01426,
+      "achieved_gbps": 563.14,
+      "hbm_util_pct": 31.43,
+      "achieved_tflops": 0.0,
+      "estimated_occupancy_pct": 75.0,
+      "profiler_backend": "cuda_events_analytical_fallback",
+      "ncu_metrics": {},
+      "diagnostic": null
+    },
+    {
+      "name": "avg_pool2d",
+      "p50_ms": 0.0145,
+      "achieved_gbps": 553.82,
+      "hbm_util_pct": 30.91,
+      "achieved_tflops": 0.0,
+      "estimated_occupancy_pct": 75.0,
+      "profiler_backend": "cuda_events_analytical_fallback",
+      "ncu_metrics": {},
+      "diagnostic": null
+    },
+    {
+      "name": "patch_embed",
+      "p50_ms": 0.03155,
+      "achieved_gbps": 305.33,
+      "hbm_util_pct": 17.04,
+      "achieved_tflops": 117.247,
+      "estimated_occupancy_pct": 50.0,
+      "profiler_backend": "cuda_events_analytical_fallback",
+      "ncu_metrics": {},
+      "diagnostic": null
+    },
+    {
+      "name": "conv2d_1x1",
+      "p50_ms": 0.01718,
+      "achieved_gbps": 1121.25,
+      "hbm_util_pct": 62.57,
+      "achieved_tflops": 47.84,
+      "estimated_occupancy_pct": 50.0,
+      "profiler_backend": "cuda_events_analytical_fallback",
+      "ncu_metrics": {},
+      "diagnostic": null
+    },
+    {
+      "name": "conv2d_3x3",
+      "p50_ms": 0.13677,
+      "achieved_gbps": 141.96,
+      "hbm_util_pct": 7.92,
+      "achieved_tflops": 54.097,
+      "estimated_occupancy_pct": 50.0,
+      "profiler_backend": "cuda_events_analytical_fallback",
+      "ncu_metrics": {},
+      "diagnostic": null
+    },
+    {
+      "name": "gather",
+      "p50_ms": 0.01357,
+      "achieved_gbps": 1236.53,
+      "hbm_util_pct": 69.0,
+      "achieved_tflops": 0.0,
+      "estimated_occupancy_pct": 75.0,
+      "profiler_backend": "cuda_events_analytical_fallback",
+      "ncu_metrics": {},
+      "diagnostic": null
+    },
+    {
+      "name": "silu",
+      "p50_ms": 0.01422,
+      "achieved_gbps": 1179.5,
+      "hbm_util_pct": 65.82,
+      "achieved_tflops": 0.0,
+      "estimated_occupancy_pct": 75.0,
+      "profiler_backend": "cuda_events_analytical_fallback",
+      "ncu_metrics": {},
+      "diagnostic": null
+    },
+    {
+      "name": "gelu",
+      "p50_ms": 0.01454,
+      "achieved_gbps": 1153.55,
+      "hbm_util_pct": 64.37,
+      "achieved_tflops": 0.0,
+      "estimated_occupancy_pct": 75.0,
+      "profiler_backend": "cuda_events_analytical_fallback",
+      "ncu_metrics": {},
+      "diagnostic": null
+    },
+    {
+      "name": "reduce_sum",
+      "p50_ms": 0.01621,
+      "achieved_gbps": 2070.24,
+      "hbm_util_pct": 100.0,
+      "achieved_tflops": 0.0,
+      "estimated_occupancy_pct": 75.0,
+      "profiler_backend": "cuda_events_analytical_fallback",
+      "ncu_metrics": {},
+      "diagnostic": null
+    },
+    {
+      "name": "reduce_max",
+      "p50_ms": 0.01941,
+      "achieved_gbps": 1728.9,
+      "hbm_util_pct": 96.48,
+      "achieved_tflops": 0.0,
+      "estimated_occupancy_pct": 75.0,
+      "profiler_backend": "cuda_events_analytical_fallback",
+      "ncu_metrics": {},
+      "diagnostic": null
+    },
+    {
+      "name": "fused_rmsnorm_silu",
+      "p50_ms": 0.0155,
+      "achieved_gbps": 1082.12,
+      "hbm_util_pct": 60.39,
+      "achieved_tflops": 0.0,
+      "estimated_occupancy_pct": 75.0,
+      "profiler_backend": "cuda_events_analytical_fallback",
+      "ncu_metrics": {},
+      "diagnostic": null
+    },
+    {
+      "name": "fused_layernorm_gelu",
+      "p50_ms": 0.01605,
+      "achieved_gbps": 1045.44,
+      "hbm_util_pct": 58.34,
+      "achieved_tflops": 0.0,
+      "estimated_occupancy_pct": 75.0,
+      "profiler_backend": "cuda_events_analytical_fallback",
+      "ncu_metrics": {},
+      "diagnostic": null
+    },
+    {
+      "name": "fused_add_rmsnorm_silu",
+      "p50_ms": 0.01926,
+      "achieved_gbps": 1306.37,
+      "hbm_util_pct": 72.9,
+      "achieved_tflops": 0.0,
+      "estimated_occupancy_pct": 75.0,
+      "profiler_backend": "cuda_events_analytical_fallback",
+      "ncu_metrics": {},
+      "diagnostic": null
+    },
+    {
+      "name": "gemm_skinny_m4",
+      "p50_ms": 0.02194,
+      "achieved_gbps": 1532.64,
+      "hbm_util_pct": 85.53,
+      "achieved_tflops": 6.119,
+      "estimated_occupancy_pct": 50.0,
+      "profiler_backend": "cuda_events_analytical_fallback",
+      "ncu_metrics": {},
+      "diagnostic": null
+    },
+    {
+      "name": "gemm_medium_m64",
+      "p50_ms": 0.06738,
+      "achieved_gbps": 513.58,
+      "hbm_util_pct": 28.66,
+      "achieved_tflops": 31.873,
+      "estimated_occupancy_pct": 50.0,
+      "profiler_backend": "cuda_events_analytical_fallback",
+      "ncu_metrics": {},
+      "diagnostic": null
+    },
+    {
+      "name": "gemm_large_m1024",
+      "p50_ms": 0.22824,
+      "achieved_gbps": 220.52,
+      "hbm_util_pct": 12.31,
+      "achieved_tflops": 150.542,
+      "estimated_occupancy_pct": 50.0,
+      "profiler_backend": "cuda_events_analytical_fallback",
+      "ncu_metrics": {},
+      "diagnostic": null
+    }
+  ]
+}

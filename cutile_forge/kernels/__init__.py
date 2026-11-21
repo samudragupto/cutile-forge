@@ -24,12 +24,19 @@ from cutile_forge.kernels.gemm_dequant import (
     fused_gemm_nvfp4_dequant,
     gemm_fp8_kernel,
     pack_int4_weights,
+    select_gemm_kernel_path,
     unpack_int4_weights_torch,
 )
 from cutile_forge.kernels.gemm_dequant_silu import fused_gemm_dequant_silu, fused_gemm_fp16_silu
 from cutile_forge.kernels.indexing import cutile_conv2d, cutile_gather
 from cutile_forge.kernels.layernorm import cutile_layernorm
-from cutile_forge.kernels.layernorm_residual import fused_layernorm_residual, fused_rmsnorm_residual
+from cutile_forge.kernels.layernorm_residual import (
+    cutile_fused_add_rmsnorm_silu,
+    cutile_fused_layernorm_gelu,
+    cutile_fused_rmsnorm_silu,
+    fused_layernorm_residual,
+    fused_rmsnorm_residual,
+)
 from cutile_forge.kernels.moe_fused import fused_moe_int4_gemm, fused_topk_gating
 from cutile_forge.kernels.reductions import cutile_reduce_max, cutile_reduce_sum
 from cutile_forge.kernels.rmsnorm import cutile_rmsnorm
@@ -79,6 +86,9 @@ __all__ = [
     "cutile_conv2d_backward",
     "cutile_cumsum",
     "cutile_depthwise_conv2d",
+    "cutile_fused_add_rmsnorm_silu",
+    "cutile_fused_layernorm_gelu",
+    "cutile_fused_rmsnorm_silu",
     "cutile_gather",
     "cutile_gelu",
     "cutile_gelu_autograd",
@@ -121,5 +131,6 @@ __all__ = [
     "pack_int4_weights",
     "precompute_rope_freqs",
     "sample_tokens",
+    "select_gemm_kernel_path",
     "unpack_int4_weights_torch",
 ]

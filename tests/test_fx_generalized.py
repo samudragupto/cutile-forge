@@ -55,7 +55,7 @@ def test_fx_generalized_ops_parity_and_stats() -> None:
         h3 = F.layer_norm(h1, (64,), ln_w, ln_b, 1e-5)
         h4 = F.gelu(h3, approximate="tanh")
         h5 = F.silu(h4)
-        s = torch.sum(h5, dim=-1) + torch.sum(h2, dim=-1) * 0.1
+        s = torch.sum(h5, dim=-1) + torch.sum(h2, dim=-1) * 0.1 + torch.sum(h3, dim=-1) * 0.05
         mx = torch.amax(h5, dim=-1)
         cs = torch.cumsum(h5, dim=-1)[:, -1]
         return torch.cos(s + mx + cs)  # cos stays an intentional fallback op

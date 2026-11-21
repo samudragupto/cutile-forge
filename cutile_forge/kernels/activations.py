@@ -207,13 +207,21 @@ def _next_pow2(n: int) -> int:
     return p
 
 
+def _pick_tile_1d(numel: int) -> int:
+    if numel >= 65536:
+        return 8192
+    if numel >= 16384:
+        return 4096
+    return 1024
+
+
 def cutile_silu(x: torch.Tensor) -> torch.Tensor:
     """Compute SiLU activation via CuTile (FP16, BF16, FP32)."""
     if not x.is_cuda or x.dtype not in (torch.float16, torch.bfloat16, torch.float32):
         return F.silu(x)
-    x_1d = x.contiguous().view(-1)
+    x_1d = x.view(-1) if x.is_contiguous() else x.contiguous().view(-1)
     y_1d = torch.empty_like(x_1d)
-    tile_n = 4096 if x_1d.numel() >= 16384 else 1024
+    tile_n = _pick_tile_1d(x_1d.numel())
     grid = (ct.cdiv(x_1d.numel(), tile_n), 1, 1)
     ct.launch(torch.cuda.current_stream(), grid, silu_forward_kernel, (x_1d, y_1d, tile_n))
     return y_1d.view(x.shape)
@@ -224,10 +232,10 @@ def cutile_silu_backward(grad_out: torch.Tensor, x: torch.Tensor) -> torch.Tenso
     if not x.is_cuda or x.dtype not in (torch.float16, torch.bfloat16, torch.float32):
         sig = torch.sigmoid(x.float())
         return (grad_out.float() * sig * (1.0 + x.float() * (1.0 - sig))).to(x.dtype)
-    dy_1d = grad_out.contiguous().view(-1)
-    x_1d = x.contiguous().view(-1)
+    dy_1d = grad_out.view(-1) if grad_out.is_contiguous() else grad_out.contiguous().view(-1)
+    x_1d = x.view(-1) if x.is_contiguous() else x.contiguous().view(-1)
     dx_1d = torch.empty_like(x_1d)
-    tile_n = 4096 if x_1d.numel() >= 16384 else 1024
+    tile_n = _pick_tile_1d(x_1d.numel())
     grid = (ct.cdiv(x_1d.numel(), tile_n), 1, 1)
     ct.launch(torch.cuda.current_stream(), grid, silu_backward_kernel, (dy_1d, x_1d, dx_1d, tile_n))
     return dx_1d.view(x.shape)
@@ -237,9 +245,9 @@ def cutile_gelu(x: torch.Tensor) -> torch.Tensor:
     """Compute tanh-approximate GELU activation via CuTile (FP16, BF16, FP32)."""
     if not x.is_cuda or x.dtype not in (torch.float16, torch.bfloat16, torch.float32):
         return F.gelu(x, approximate="tanh")
-    x_1d = x.contiguous().view(-1)
+    x_1d = x.view(-1) if x.is_contiguous() else x.contiguous().view(-1)
     y_1d = torch.empty_like(x_1d)
-    tile_n = 4096 if x_1d.numel() >= 16384 else 1024
+    tile_n = _pick_tile_1d(x_1d.numel())
     grid = (ct.cdiv(x_1d.numel(), tile_n), 1, 1)
     ct.launch(
         torch.cuda.current_stream(),

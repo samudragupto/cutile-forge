@@ -215,12 +215,73 @@ def unpack_int4_weights_torch(
     return (w_int - zeros_exp) * scales_exp
 
 
+@ct.kernel(occupancy=2)
+def gemm_fp16_splitk_kernel(
+    a_ptr,
+    b_ptr,
+    part_ptr,
+    split_k: ct.Constant[int],
+    tm: ct.Constant[int],
+    tn: ct.Constant[int],
+    tk: ct.Constant[int],
+) -> None:
+    """Split-K FP16 GEMM saturating SMs on skinny decode shapes (M <= 16)."""
+    pid_m = ct.bid(0)
+    pid_n = ct.bid(1)
+    sk_id = ct.bid(2)
+    num_k = ct.num_tiles(a_ptr, axis=1, shape=(tm, tk))
+    k_per_split = (num_k + split_k - 1) // split_k
+    k_start = sk_id * k_per_split
+    k_end = min(num_k, k_start + k_per_split)
+    acc = ct.zeros((tm, tn), dtype=ct.float32)
+    for k in range(k_start, k_end):
+        tile_a = ct.load(
+            a_ptr, index=(pid_m, k), shape=(tm, tk), padding_mode=ct.PaddingMode.ZERO, latency=3
+        )
+        tile_b = ct.load(
+            b_ptr, index=(k, pid_n), shape=(tk, tn), padding_mode=ct.PaddingMode.ZERO, latency=3
+        )
+        acc = ct.mma(tile_a, tile_b, acc)
+    ct.store(part_ptr, index=(sk_id, pid_m, pid_n), tile=ct.reshape(acc, (1, tm, tn)))
+
+
+def select_gemm_kernel_path(
+    m: int,
+    n: int,
+    k: int,
+    arch: str = "sm_120",
+) -> dict[str, Any]:
+    """Select specialized GEMM execution path across skinny, medium, and compute-bound regimes."""
+    _ = arch
+    if m <= 16 and k >= 512:
+        split_k = 8 if k >= 2048 else 4
+        return {
+            "regime": "skinny_splitk",
+            "tile_shape": (16, 64, 64),
+            "split_k": split_k,
+            "latency": 3,
+        }
+    if m <= 256:
+        return {
+            "regime": "medium_l2",
+            "tile_shape": (64, 128, 64),
+            "split_k": 1,
+            "latency": 3,
+        }
+    return {
+        "regime": "large_compute",
+        "tile_shape": (128, 128, 64),
+        "split_k": 1,
+        "latency": 4,
+    }
+
+
 def cutile_gemm_fp16(
     a: torch.Tensor,
     b: torch.Tensor,
     tile_shape: tuple[int, int, int] | None = None,
 ) -> torch.Tensor:
-    """Run tiled FP16 GEMM: (M, K) @ (K, N) -> (M, N) using CuTile."""
+    """Run tiled FP16 GEMM: (M, K) @ (K, N) -> (M, N) with shape-specialized dispatch."""
     if a.ndim != 2 or b.ndim != 2:
         raise ValueError(f"Expected 2D tensors, got {a.shape} and {b.shape}")
     m, k = a.shape
@@ -228,11 +289,27 @@ def cutile_gemm_fp16(
     if k != k_b:
         raise ValueError(f"Shape mismatch: {a.shape} vs {b.shape}")
 
-    a_c = a.contiguous()
-    b_c = b.contiguous()
-    c = torch.empty((m, n), device=a.device, dtype=torch.float16)
+    a_c = a if a.is_contiguous() else a.contiguous()
+    b_c = b if b.is_contiguous() else b.contiguous()
 
-    tm, tn, tk = tile_shape or _select_gemm_tiles(m)
+    if tile_shape is None:
+        spec = select_gemm_kernel_path(m, n, k)
+        tm, tn, tk = spec["tile_shape"]
+        split_k = int(spec["split_k"])
+        if split_k > 1:
+            part = torch.empty((split_k, m, n), device=a.device, dtype=torch.float32)
+            grid_sk = (ct.cdiv(m, tm), ct.cdiv(n, tn), split_k)
+            ct.launch(
+                torch.cuda.current_stream(),
+                grid_sk,
+                gemm_fp16_splitk_kernel,
+                (a_c, b_c, part, split_k, tm, tn, tk),
+            )
+            return part.sum(dim=0).to(torch.float16)
+    else:
+        tm, tn, tk = tile_shape
+
+    c = torch.empty((m, n), device=a.device, dtype=torch.float16)
     grid = (ct.cdiv(m, tm) * ct.cdiv(n, tn), 1, 1)
     ct.launch(torch.cuda.current_stream(), grid, gemm_fp16_kernel, (a_c, b_c, c, tm, tn, tk))
     return c
