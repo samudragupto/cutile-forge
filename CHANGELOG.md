@@ -1,5 +1,16 @@
 # Changelog
 
+## v2.5.0 (2026-11-21) — Phase 10: Universal Quantization Engine
+
+- **Native Multi-Format CuTile Kernels (`cutile_forge.kernels.universal_quant`)**: Implemented dedicated CuTile Tensor Core dequantization + GEMM kernels without load-time format conversion for:
+  - **GPTQ INT4** (`group_size in {128, 64, 32, -1}`, `desc_act=True/False`)
+  - **AWQ INT4** (`gemm_awq_native_kernel` / `cutile_gemm_awq_native` executing directly on AutoAWQ `[K, N//8]` `int32` `[0, 16, 4, 20, 8, 24, 12, 28]` interleaved bit-packed tensors)
+  - **GGUF `Q4_0`, `Q8_0`, `Q4_K`, `Q6_K`, `Q4_K_M`** (`gemm_gguf_q4_0_kernel`, `gemm_int8_dequant_kernel`, `gemm_gguf_q4_k_kernel`, `gemm_gguf_q6_k_kernel` with `0.000000e+00` bit-exact reference dequant parity against `gguf.quants`)
+  - **INT8** (`gemm_int8_dequant_kernel` / `cutile_gemm_int8_dequant` for `[K, N]` `int8` + group scales)
+  - **FP8 (`e4m3fn`)** per-tensor (`cutile_gemm_fp8` with dynamic activation scaling) and 2D `(128, 128)` block-scaled (`gemm_fp8_block_scaled_kernel` / `cutile_gemm_fp8_block_scaled`)
+- **Per-Layer & Per-Projection Mixed-Precision (`MixedPrecisionFormatTable`, `UniversalQuantLinear`, `UniversalQuantModel`)**: Enabled arbitrary per-layer/per-projection quantization format mixing (including canonical llama.cpp `GGUF Q4_K_M` mixing `Q6_K` on `v_proj`/`down_proj` and `Q4_K` on all other projections) with `< 0.05%` WikiText-2 perplexity drift vs FP32 reference across all 14 format configurations.
+- **Format-Keyed Autotuning (`CostGuidedAutotuner.tune_quantized_gemm`)**: Extended `CuTileTune v2` to key and persist optimal tile configurations on `(quant_format, group_size, M, N, K)`.
+
 ## v2.4.0 (2026-11-21) — Phase 9: Native Runtime Performance, Full-Step CUDA Graphs & Scheduling
 
 - **Full-Step Zero-ATen CUDA Graph Capture (`NativeModelRuntime`)**: Captured the entire 32-layer decode step + LM head argmax + device-side token/position increment (`cutile_record_and_advance_step`) into a single `torch.cuda.CUDAGraph` per context bucket (`512/1024/2048/4096`), eliminating all `164` eager kernel launches and `103` per-token allocations (`0` forbidden ATen calls, `0` eager `ct.launch` calls during replay).

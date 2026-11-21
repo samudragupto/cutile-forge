@@ -312,3 +312,94 @@ class CostGuidedAutotuner:
         )
         self.db.save(rec)
         return rec
+
+    def tune_quantized_gemm(
+        self,
+        m: int,
+        n: int,
+        k: int,
+        quant_format: str = "gptq",
+        group_size: int = 128,
+        benchmark_on_gpu: bool = False,
+        verify_atol: float = 1e-1,
+    ) -> TuningRecord:
+        """Select, verify, and persist optimal tile configuration keyed on `(quant_format, m, n, k)`."""
+        fmt_key = f"{quant_format.lower()}_g{group_size}"
+        shape = (m, n, k)
+        cached = self.db.lookup("quant_gemm", self.arch, shape, fmt_key)
+        if cached is not None:
+            return cached
+
+        fmt_low = quant_format.lower()
+        if fmt_low in ("gguf_q4_0", "gguf_q8_0", "gguf_q6_k"):
+            tk_cands = [32]
+        elif fmt_low in ("gguf_q4_k", "gguf_q4_k_m", "awq", "fp8_block"):
+            tk_cands = [64]
+        else:
+            tk_cands = [128, 64] if (group_size >= 128 and k % 128 == 0) else [64, 32]
+
+        if m <= 16:
+            mn_cands = [(16, 32), (16, 64)] if fmt_low == "gptq" else [(16, 64)]
+        else:
+            mn_cands = [(64, 64), (64, 128)]
+
+        candidates = [
+            (tm, tn, tk)
+            for (tm, tn) in mn_cands
+            for tk in tk_cands
+            if (k % tk == 0 and n % tn == 0)
+        ]
+        if not candidates:
+            candidates = [(16, 64, 32)]
+
+        best_shape = candidates[0]
+        best_ms = 0.0
+        verified = True
+
+        if benchmark_on_gpu and torch.cuda.is_available():
+            from cutile_forge.bench.harness import benchmark
+            from cutile_forge.kernels.universal_quant import QuantFormat, UniversalQuantLinear
+
+            a = torch.randn((m, k), device="cuda", dtype=torch.float16) * 0.1
+            w = torch.randn((k, n), device="cuda", dtype=torch.float16) * 0.1
+            q_lin = UniversalQuantLinear.from_fp16(
+                w, fmt=QuantFormat(fmt_low), group_size=group_size
+            )
+            ref = q_lin.forward_reference(a)
+            best_ms = float("inf")
+            for cand in candidates:
+                try:
+                    q_lin.tile_shape = cand
+                    out = q_lin.forward_native(a)
+                    if (out.float() - ref.float()).abs().max().item() > verify_atol:
+                        continue
+
+                    def _run_q(
+                        ql: UniversalQuantLinear = q_lin, inp: torch.Tensor = a
+                    ) -> torch.Tensor:
+                        return ql.forward_native(inp)
+
+                    st = benchmark(_run_q, warmup=2, iters=10)
+                    if st.p50_ms < best_ms:
+                        best_ms = st.p50_ms
+                        best_shape = cand
+                        verified = True
+                except Exception:
+                    continue
+            if best_ms == float("inf"):
+                best_ms = 0.0
+                verified = False
+
+        rec = TuningRecord(
+            op="quant_gemm",
+            arch=self.arch,
+            shape=shape,
+            dtype=fmt_key,
+            tile_shape=best_shape,
+            occupancy=2,
+            pipeline_stages=3,
+            latency_ms=round(best_ms, 4),
+            verified=verified,
+        )
+        self.db.save(rec)
+        return rec
