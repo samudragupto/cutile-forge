@@ -1,6 +1,12 @@
 """CuTile Python DSL kernels for LLM inference."""
 
 from cutile_forge.cuda_tile_init import ct  # noqa: F401
+from cutile_forge.kernels.activations import (
+    cutile_gelu,
+    cutile_rmsnorm_backward,
+    cutile_silu,
+    cutile_silu_backward,
+)
 from cutile_forge.kernels.attention_gqa import flash_decoding_split_kv, fused_attention_gqa
 from cutile_forge.kernels.bmm import cutile_bmm
 from cutile_forge.kernels.ffn_fused import (
@@ -27,18 +33,34 @@ from cutile_forge.kernels.rope import apply_rope, precompute_rope_freqs
 from cutile_forge.kernels.sampling import sample_tokens
 from cutile_forge.kernels.scan import cutile_cumsum
 from cutile_forge.kernels.softmax import online_softmax
+from cutile_forge.kernels.training import (
+    CuTileRMSNormFn,
+    CuTileSiLUFn,
+    cutile_adamw_step,
+    cutile_rmsnorm_autograd,
+    cutile_silu_autograd,
+)
 from cutile_forge.kernels.transpose import cutile_transpose
 
 __all__ = [
+    "CuTileRMSNormFn",
+    "CuTileSiLUFn",
     "apply_rope",
+    "cutile_adamw_step",
     "cutile_bmm",
     "cutile_cumsum",
+    "cutile_gelu",
     "cutile_gemm_fp8",
     "cutile_gemm_fp16",
     "cutile_layernorm",
     "cutile_reduce_max",
     "cutile_reduce_sum",
     "cutile_rmsnorm",
+    "cutile_rmsnorm_autograd",
+    "cutile_rmsnorm_backward",
+    "cutile_silu",
+    "cutile_silu_autograd",
+    "cutile_silu_backward",
     "cutile_transpose",
     "flash_decoding_split_kv",
     "fused_attention_gqa",
