@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Image tag (e.g. v2.8.0-cu132)"
+        description: "Image tag (e.g. v3.0.0-cu132)"
         required: false
-        default: "v2.8.0-cu132"
+        default: "v3.0.0-cu132"
   release:
     types: [published]
 
@@ -35,7 +35,7 @@ jobs:
           if [ "${{ github.event_name }}" = "release" ]; then
             echo "tag=${{ github.event.release.tag_name }}-cu132" >> "$GITHUB_OUTPUT"
           else
-            echo "tag=${{ inputs.tag || 'v2.0.0-cu132' }}" >> "$GITHUB_OUTPUT"
+            echo "tag=${{ inputs.tag || 'v3.0.0-cu132' }}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Build and push image

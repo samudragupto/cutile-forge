@@ -1,13 +1,30 @@
-# CuTileForge — RTX 5090 Benchmark Results (v2.8.0)
+# CuTileForge — RTX 5090 Benchmark Results (v3.0.0)
 
-**Authors:** Arrhat Nag (`@samudragupto`), Rupesh Nasre  
+**Author:** Arrhat Nag (`@samudragupto`)  
 **Hardware:** Desktop Workstation · NVIDIA GeForce RTX 5090 (GB202, sm_120, 170 SMs, 32 GB GDDR7, ~1,792 GB/s) · Intel Core Ultra 9 285K (24C/24T) · 62 GB DDR5 · PCIe 5.0 x16  
-**Models:** `Mistral-7B-v0.1-GPTQ` (4.16 GB) · `Mixtral-8x7B-Instruct-v0.1-GPTQ` (23.8 GB) · `Llama-2-70B-Chat-GPTQ` (35.3 GB)  
+**Models:** `Mistral-7B-v0.1-GPTQ` (4.16 GB) · `Mixtral-8x7B-Instruct-v0.1-GPTQ` (23.8 GB) · `Llama-2-70B-Chat-GPTQ` (35.3 GB) · `Qwen/Qwen2.5-0.5B` · `google/siglip-base-patch16-224` · `openai/whisper-tiny`  
 **CUDA:** 13.2 (driver 595.58.03) · PyTorch 2.15+cu132 · `cuda-tile` 1.8.1
 
 ---
 
+## `v3.0.0` Headline Platform Summary & Phase CSV Index
+
+| Subsystem / Phase | Benchmark Artifact | Headline Measured Result (RTX 5090, `sm_120`) | Weight / Mode Label |
+|---|---|---|---|
+| **Native CUDA-Graph Runtime (`v2.4.0` → `v3.0.0`)** | [`phase9_native_runtime.csv`](../benchmarks/results_5090/phase9_native_runtime.csv) | **`171.60 tok/s`** (`5.83 ms/tok`), `6.66 ms` prefill, **`0` ATen calls**, **`1` graph launch/tok**, `5/5` 256-tok parity; Speculative: **`369.30–752.29 tok/s`** | `real-checkpoint` |
+| **Production Single-Stream & Concurrency (`v2.8.0` → `v3.0.0`)** | [`phase13_production.csv`](../benchmarks/results_5090/phase13_production.csv) | **`172.58 tok/s`** single-stream (`6.11 ms` TTFT, `5.79 / 6.08 / 6.21 ms` p50/p90/p99 ITL); Concurrent: **`617.81` (C=4) / `2,337.90` (C=16) / `2,377.11 tok/s` (C=64)** | `real-checkpoint` |
+| **Long-Context 32L FlashDecoding (`v2.8.0` → `v3.0.0`)** | [`phase13_production.csv`](../benchmarks/results_5090/phase13_production.csv) | `8K`: **`1.33 ms/step`**; `16K`: **`2.13 ms/step`**; `32K`: **`3.86 ms/step`** (FP16 KV) / `7.60 ms/step` (FP8 KV) | `synthetic-weights` |
+| **Universal Quantization (`v2.5.0`)** | [`phase10_universal_quant.csv`](../benchmarks/results_5090/phase10_universal_quant.csv) | `10+` native formats (`GPTQ`, `AWQ`, `GGUF Q4_0/Q8_0/Q4_K/Q6_K/Q4_K_M`, `INT8`, `FP8`, `FP8_BLOCK`); **`0.000e+00`** dequant err, **`0.0017%–0.0469%`** WikiText-2 PPL diff, **`96.24 TFLOPS`** INT8 @ `M=128` | `real-checkpoint` |
+| **Architecture Completeness (`v2.6.0`)** | [`phase11_architecture_parity.csv`](../benchmarks/results_5090/phase11_architecture_parity.csv) | **`13`** registered families: `6` **`real-checkpoint parity`** (`cos >= 0.999963`) + `7` **`synthetic-only`** (incl. shared-expert MoE + EP=4, Whisper audio, DiT) | `real-checkpoint` / `synthetic-only` |
+| **70B Hybrid HBM + PCIe Streaming (`v1.0.0`)** | [`real_large_models.csv`](../benchmarks/results_5090/real_large_models.csv) | Real `Llama-2-70B-Chat-GPTQ` (`55` HBM + `25` PCIe layers): **`4.07 tok/s`**, `27.44 GB` peak VRAM, **`80.8%`** PCIe 5.0 limit; Real `Mixtral-8x7B`: **`41.83 tok/s`**, `PPL=7.48` | `real-checkpoint` |
+| **Distributed Runtime (`v2.7.0`)** | [`phase12_distributed_simulated.csv`](../benchmarks/results_5090/phase12_distributed_simulated.csv) | TP=2/4 (`< 2e-3`), PP=2/4 (`0.000e+00`), EP=2/4 (`0.000e+00`), Distributed KV (`0.000e+00`) across logical partitions + `LoopbackCommTransport` | **`simulated`** (1 GPU) |
+
+---
+
 ## Publication Figures (300 DPI — `scripts/generate_publication_figures.py`)
+
+![Figure 9: CuTileForge v3.0.0 Consolidated Platform Evaluation](images_5090/fig9_v300_platform.png)
+*Figure 9: CuTileForge `v3.0.0` consolidated evaluation on RTX 5090 (`sm_120`): (a) native runtime evolution (`66.85 -> 172.58 tok/s`); (b) concurrent batching throughput (`172.3 -> 2,377.1 tok/s` @ `C=64`); (c) universal quantization `M=128` prefill TFLOPS and WikiText-2 PPL parity; (d) 32-layer FlashDecoding long-context scaling (`8K–32K`, `synthetic-weights`).*
 
 ![Figure 1: Executive Overview](images_5090/fig1_executive_overview.png)
 ![Figure 2: Empirical Roofline](images_5090/roofline_ada_vs_blackwell.png)
@@ -406,7 +423,9 @@ Measured on real `Mistral-7B-v0.1-GPTQ` with `torch.utils._python_dispatch.Torch
 
 ---
 
-## Phases 9 → 13 (`v2.4.0` → `v2.8.0`) on RTX 5090 (`sm_120`)
+## Phases 9 → 13 (`v2.4.0` → `v3.0.0`) on RTX 5090 (`sm_120`)
+
+![Figure 9: CuTileForge v3.0.0 Consolidated Platform Evaluation](images_5090/fig9_v300_platform.png)
 
 ### Phase 9 (`v2.4.0`) — Full-Step Native CUDA Graph Runtime (`benchmarks/results_5090/phase9_native_runtime.csv`)
 

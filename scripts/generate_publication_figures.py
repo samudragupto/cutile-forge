@@ -1,4 +1,4 @@
-"""Generate 300-DPI publication-grade multi-panel figures for CuTileForge v2.0.0."""
+"""Generate 300-DPI publication-grade multi-panel figures for CuTileForge v3.0.0."""
 
 from __future__ import annotations
 
@@ -1177,6 +1177,224 @@ def generate_fig6_tracks_abc_results(out_dir: Path) -> Path:
     return out_path
 
 
+def generate_fig9_v300_platform(out_dir: Path) -> Path:
+    """Figure 9: CuTileForge v3.0.0 Consolidated Platform Evaluation (300-DPI, Okabe-Ito)."""
+    tb_rows = _load_csv_rows(Path("benchmarks/results_5090/track_b_native_runtime.csv"))
+    p9_rows = _load_csv_rows(Path("benchmarks/results_5090/phase9_native_runtime.csv"))
+    p10_rows = _load_csv_rows(Path("benchmarks/results_5090/phase10_universal_quant.csv"))
+    p13_rows = _load_csv_rows(Path("benchmarks/results_5090/phase13_production.csv"))
+
+    fig, axes = plt.subplots(2, 2, figsize=(16.5, 11.2), constrained_layout=True)
+
+    # ------------------------------------------------------------------
+    # Panel (a): Native Runtime Evolution (v2.2.0 -> v3.0.0)
+    # ------------------------------------------------------------------
+    ax = axes[0, 0]
+    v22_tps = float(
+        next(r["decode_tok_s"] for r in tb_rows if "v2.2.0_NativeModelRuntime" in r["runtime"])
+    )
+    p9_graph_row = next(
+        r for r in p9_rows if r["item"] == "native_full_graph_bucketed_chained_sync32_256tok"
+    )
+    v23_tps = float(p9_graph_row["before_v230"])
+    v24_tps = float(p9_graph_row["after_median"])
+    v30_tps = float(
+        next(
+            r["median_value"]
+            for r in p13_rows
+            if r["benchmark_category"] == "single_stream_latency_and_throughput"
+        )
+    )
+
+    stages_a = [
+        "v2.2.0\nNative Eager\n(0 ATen)",
+        "v2.3.0\nStep 9.0\nEager Baseline",
+        "v2.4.0\nFull-Step\nCUDA Graph",
+        "v3.0.0\nProduction\nGraph (TTFT 6.1ms)",
+    ]
+    vals_a = [v22_tps, v23_tps, v24_tps, v30_tps]
+    cols_a = [OI_GRAY, OI_SKY, OI_BLUE, OI_GREEN]
+    x_a = np.arange(len(stages_a))
+    bars_a = ax.bar(x_a, vals_a, width=0.55, color=cols_a)
+    for bar, v in zip(bars_a, vals_a, strict=True):
+        mult = v / v22_tps
+        ax.text(
+            bar.get_x() + bar.get_width() / 2.0,
+            v + 4.0,
+            f"{v:.2f} tok/s\n({mult:.2f}×)",
+            ha="center",
+            va="bottom",
+            fontsize=8.8,
+            fontweight="bold",
+            color="#0f172a",
+        )
+    ax.set_xticks(x_a)
+    ax.set_xticklabels(stages_a, fontsize=8.8)
+    ax.set_ylabel("Decode Throughput (tok/s)")
+    ax.set_ylim(0, 218)
+    ax.set_title("(a) Native Runtime Evolution: Mistral-7B-v0.1-GPTQ (sm_120)")
+
+    # ------------------------------------------------------------------
+    # Panel (b): Concurrent Production Throughput (Mistral-7B-GPTQ)
+    # ------------------------------------------------------------------
+    ax = axes[0, 1]
+    conc_rows = [r for r in p13_rows if r["benchmark_category"] == "concurrent_throughput"]
+    conc_rows.sort(key=lambda r: int(r["concurrency"]))
+    concs = [int(r["concurrency"]) for r in conc_rows]
+    conc_tps = [float(r["median_value"]) for r in conc_rows]
+    x_b = np.arange(len(concs))
+    ax.plot(
+        x_b,
+        conc_tps,
+        marker="o",
+        markersize=8,
+        linewidth=2.4,
+        color=OI_BLUE,
+        label="CuTileForge Native Batching (32 tok/req)",
+    )
+    ax.set_yscale("log")
+    offsets_b = [(8, 16), (0, 16), (-18, 18), (0, -24)]
+    for xi, c_val, tps, (dx, dy) in zip(x_b, concs, conc_tps, offsets_b, strict=True):
+        ax.annotate(
+            f"C={c_val}: {tps:,.1f} tok/s",
+            (xi, tps),
+            xytext=(dx, dy),
+            textcoords="offset points",
+            ha="center",
+            va="center",
+            fontsize=8.6,
+            fontweight="bold",
+            color="#0f172a",
+            bbox={"boxstyle": "round,pad=0.22", "fc": "white", "ec": OI_SKY, "alpha": 0.94},
+        )
+    ax.set_xticks(x_b)
+    ax.set_xticklabels([f"Concurrency {c}" for c in concs], fontsize=8.8)
+    ax.set_ylabel("Aggregate Throughput (tok/s, log scale)")
+    ax.set_xlim(-0.4, 3.4)
+    ax.set_ylim(95, 6500)
+    ax.set_title("(b) Concurrent Production Throughput on RTX 5090 (real-checkpoint)")
+    ax.legend(loc="upper left", fontsize=8.6)
+
+    # ------------------------------------------------------------------
+    # Panel (c): Universal Quantization Prefill Throughput (M=128)
+    # ------------------------------------------------------------------
+    ax = axes[1, 0]
+    p10_map = {r["format_label"]: r for r in p10_rows}
+    wanted_q = [
+        ("INT8_gs128", "INT8 (gs=128)"),
+        ("FP8_e4m3_block128", "FP8 Block (128×128)"),
+        ("AWQ_gs128", "AWQ INT4 (Native)"),
+        ("GGUF_Q4_0", "GGUF Q4_0 (18B)"),
+        ("GGUF_Q6_K", "GGUF Q6_K (210B)"),
+        ("GPTQ_gs128_nodesc", "GPTQ INT4 (gs=128)"),
+    ]
+    q_labels = [lbl for _, lbl in wanted_q]
+    q_tf = [float(p10_map[k]["m128_tflops"]) for k, _ in wanted_q]
+    q_ppl = [float(p10_map[k]["wikitext2_ppl_rel_diff_pct"]) for k, _ in wanted_q]
+    q_cols = [OI_GREEN, OI_BLUE, OI_SKY, OI_YELLOW, OI_PURPLE, OI_GRAY]
+
+    y_c = np.arange(len(wanted_q))
+    bars_c = ax.barh(y_c, q_tf, height=0.58, color=q_cols)
+    for bar, tf, ppl in zip(bars_c, q_tf, q_ppl, strict=True):
+        ax.text(
+            tf + 1.8,
+            bar.get_y() + bar.get_height() / 2.0,
+            f"{tf:.2f} TF  (ΔPPL {ppl:.3f}%)",
+            va="center",
+            ha="left",
+            fontsize=8.6,
+            fontweight="bold",
+            color="#0f172a",
+        )
+    ax.set_yticks(y_c)
+    ax.set_yticklabels(q_labels, fontsize=8.8)
+    ax.invert_yaxis()
+    ax.set_xlabel("Prefill Throughput @ M=128, 4096×4096 (TFLOPS)")
+    ax.set_xlim(0, 145)
+    ax.set_title("(c) Universal Quantization Prefill Throughput & WikiText-2 Parity")
+
+    # ------------------------------------------------------------------
+    # Panel (d): Long-Context 32-Layer FlashDecoding Scaling (8K–32K)
+    # ------------------------------------------------------------------
+    ax = axes[1, 1]
+    lc_rows = [r for r in p13_rows if r["benchmark_category"] == "long_context_32layer_attention"]
+    ctxs = [8192, 16384, 32768]
+    fp16_ms = [
+        float(
+            next(
+                r["median_value"]
+                for r in lc_rows
+                if int(r["context_len"]) == c and r["kv_dtype"] == "fp16"
+            )
+        )
+        for c in ctxs
+    ]
+    fp8_ms = [
+        float(
+            next(
+                r["median_value"]
+                for r in lc_rows
+                if int(r["context_len"]) == c and r["kv_dtype"] == "fp8_e4m3fn"
+            )
+        )
+        for c in ctxs
+    ]
+    x_d = np.arange(len(ctxs))
+    ax.plot(
+        x_d,
+        fp16_ms,
+        marker="o",
+        markersize=8,
+        linewidth=2.4,
+        color=OI_BLUE,
+        label="FP16 KV Cache (Head-Major FlashDecoding)",
+    )
+    ax.plot(
+        x_d,
+        fp8_ms,
+        marker="s",
+        markersize=8,
+        linewidth=2.4,
+        linestyle="--",
+        color=OI_ORANGE,
+        label="FP8 e4m3fn KV Cache (50% KV VRAM)",
+    )
+    for xi, v16, v8 in zip(x_d, fp16_ms, fp8_ms, strict=True):
+        fp8_offset = (-18, 12) if xi == 1 else (0, 12)
+        ax.annotate(
+            f"{v8:.2f} ms",
+            (xi, v8),
+            xytext=fp8_offset,
+            textcoords="offset points",
+            ha="center",
+            fontsize=8.8,
+            fontweight="bold",
+            color=OI_ORANGE,
+        )
+        ax.annotate(
+            f"{v16:.2f} ms",
+            (xi, v16),
+            xytext=(0, -17),
+            textcoords="offset points",
+            ha="center",
+            fontsize=8.8,
+            fontweight="bold",
+            color=OI_BLUE,
+        )
+    ax.set_xticks(x_d)
+    ax.set_xticklabels(["8K (8,192)", "16K (16,384)", "32K (32,768)"], fontsize=8.8)
+    ax.set_ylabel("32-Layer Decode Step Latency (ms/step)")
+    ax.set_xlim(-0.3, 2.3)
+    ax.set_ylim(0, 9.2)
+    ax.set_title("(d) Long-Context 32-Layer Attention Scaling (synthetic-weights)")
+    ax.legend(loc="upper left", fontsize=8.5)
+
+    out_path = out_dir / "fig9_v300_platform.png"
+    plt.savefig(out_path, bbox_inches="tight")
+    plt.close()
+    return out_path
+
+
 def main() -> None:
     _apply_pub_style()
     out_dir = Path("docs/images_5090")
@@ -1188,6 +1406,7 @@ def main() -> None:
         generate_fig4_systems_telemetry,
         generate_real_models_v100,
         generate_fig6_tracks_abc_results,
+        generate_fig9_v300_platform,
     ):
         p = fn(out_dir)
         print(f"Generated {p} ({p.stat().st_size // 1024} KB)")
