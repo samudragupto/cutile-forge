@@ -158,3 +158,87 @@ def unpack_gguf_q4_k_to_cutile(
 
     w_kn = w_flat.reshape(n, k).t().contiguous()
     return quantize_4bit_group(w_kn, group_size=128)
+
+
+def unpack_gguf_q4_0_to_cutile(
+    blocks_u8: torch.Tensor,
+    k: int,
+    n: int,
+    group_size: int | None = None,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Unpack GGUF Q4_0 32-weight blocks (18 bytes/block) to CuTile `[K//2, N]` + `[K//gs, N]`.
+
+    GGUF `Q4_0` block layout (18 bytes):
+    - `[0:2]`: float16 scale `d`
+    - `[2:18]`: 16 uint8 bytes holding 32 unsigned 4-bit nibbles (low nibbles = indices `0..15`,
+      high nibbles = indices `16..31`), dequantized as `(q - 8) * d`.
+    """
+    if (k * n) % 32 != 0:
+        raise ValueError(f"Q4_0 requires (K*N) % 32 == 0, got K={k}, N={n}")
+    num_blocks = (k * n) // 32
+    raw = blocks_u8.contiguous().view(num_blocks, 18)
+
+    d = raw[:, 0:2].contiguous().view(torch.float16).float().squeeze(-1).unsqueeze(1)
+    qs = raw[:, 2:18]
+    lo = (qs & 0x0F).float() - 8.0
+    hi = ((qs >> 4) & 0x0F).float() - 8.0
+    w_flat = torch.cat([lo, hi], dim=1) * d  # (num_blocks, 32)
+    w_kn = w_flat.reshape(n, k).t().contiguous()
+
+    if group_size is None:
+        if k % 128 == 0:
+            group_size = 128
+        elif k % 32 == 0:
+            group_size = 32
+        else:
+            group_size = k
+    return quantize_4bit_group(w_kn, group_size=group_size)
+
+
+def unpack_gguf_q8_0_to_fp16(
+    blocks_u8: torch.Tensor,
+    k: int,
+    n: int,
+) -> torch.Tensor:
+    """Unpack GGUF Q8_0 32-weight blocks (34 bytes/block) to float16 `(K, N)`.
+
+    GGUF `Q8_0` block layout (34 bytes):
+    - `[0:2]`: float16 scale `d`
+    - `[2:34]`: 32 signed `int8` values, dequantized as `q * d`.
+    """
+    if (k * n) % 32 != 0:
+        raise ValueError(f"Q8_0 requires (K*N) % 32 == 0, got K={k}, N={n}")
+    num_blocks = (k * n) // 32
+    raw = blocks_u8.contiguous().view(num_blocks, 34)
+
+    d = raw[:, 0:2].contiguous().view(torch.float16).float().squeeze(-1).unsqueeze(1)
+    qs = raw[:, 2:34].contiguous().view(torch.int8).float()
+    return (d * qs).reshape(n, k).t().contiguous().to(torch.float16)
+
+
+def unpack_fp8_e4m3_to_fp16(
+    weight_fp8: torch.Tensor,
+    weight_scale_inv: torch.Tensor,
+    block_size: tuple[int, int] | None = None,
+) -> torch.Tensor:
+    """Dequantize FP8 (`float8_e4m3fn`) tensor/channel/block-scaled weights to float16.
+
+    Supports scalar scales, per-row/per-col scales, and 2D block scales `(ceil(M/br), ceil(N/bc))`.
+    """
+    w_f32 = weight_fp8.to(torch.float32)
+    s_f32 = weight_scale_inv.to(torch.float32)
+
+    if s_f32.ndim == 0 or s_f32.numel() == 1:
+        return (w_f32 * s_f32.reshape(())).to(torch.float16).contiguous()
+
+    if w_f32.ndim == 2 and s_f32.ndim == 2 and s_f32.shape != w_f32.shape and 1 not in s_f32.shape:
+        rows, cols = w_f32.shape
+        if block_size is not None:
+            br, bc = block_size
+        else:
+            br = (rows + s_f32.shape[0] - 1) // s_f32.shape[0]
+            bc = (cols + s_f32.shape[1] - 1) // s_f32.shape[1]
+        s_exp = s_f32.repeat_interleave(br, dim=0).repeat_interleave(bc, dim=1)[:rows, :cols]
+        return (w_f32 * s_exp).to(torch.float16).contiguous()
+
+    return (w_f32 * s_f32).to(torch.float16).contiguous()

@@ -1,4 +1,4 @@
-# CuTileForge — RTX 5090 Benchmark Results (v1.0.0)
+# CuTileForge — RTX 5090 Benchmark Results (v2.3.0)
 
 **Authors:** Arrhat Nag (`@samudragupto`), Rupesh Nasre  
 **Hardware:** Desktop Workstation · NVIDIA GeForce RTX 5090 (GB202, sm_120, 170 SMs, 32 GB GDDR7, ~1,792 GB/s) · Intel Core Ultra 9 285K (24C/24T) · 62 GB DDR5 · PCIe 5.0 x16  
@@ -14,6 +14,7 @@
 ![Figure 3: Micro-Benchmark Suite](images_5090/fig3_microbenchmark_suite.png)
 ![Figure 4: Systems Telemetry](images_5090/fig4_systems_telemetry.png)
 ![Real 4-Bit GPTQ Checkpoint Evaluation](images_5090/real_models_v100.png)
+![Tracks A, B, C Summary](images_5090/fig6_tracks_abc_results.png)
 
 ---
 
@@ -356,6 +357,52 @@ Evaluated real trained 4-bit GPTQ checkpoints (`TheBloke/Mixtral-8x7B-Instruct-v
   > `A GPU (Graphics Processing Unit) consists of many small processing cores called CUDA cores, which can execute instructions in parallel. Each CUDA core has its own set of registers and a small amount of fast memory called shared memory. Shared memory is a user-managed cache that is physically close`
 - **Llama-2-70B-Chat-GPTQ** (`The capital of France is`, 80-layer Hybrid 55 HBM + 25 PCIe 5.0):
   > `Paris`
+
+---
+
+## Tracks A, B, and C (`v2.1.0` → `v2.3.0`) on RTX 5090 (`sm_120`)
+
+![Tracks A, B, and C Summary](images_5090/fig6_tracks_abc_results.png)
+
+### Track A (`v2.1.0`) — Kernel Performance Engineering (`benchmarks/results_5090/track_a_before_after.csv`)
+
+Nsight profiler status (`cutile_forge.bench.profiler`): `/usr/local/bin/ncu` and `/usr/local/bin/nsys` detected; hardware counter collection in this non-root container returns `ERR_NVGPUCTRPERM`, so `profile_kernel_ncu` falls back cleanly to CUDA-event analytical HBM bandwidth, TFLOPS, and occupancy estimation (`benchmarks/results_5090/track_a_profile.json`).
+
+| Operation | Shape | `v2.0.0` Speedup | `v2.1.0` CuTile (ms) | PyTorch / cuDNN (ms) | `v2.1.0` Speedup | Achieved BW (GB/s) | TFLOPS |
+|---|---|---:|---:|---:|---:|---:|---:|
+| `depthwise_conv2d` | `16x64x56x56,k=3` | 0.03× | 0.0315 | 0.0125 | **0.40×** | 407.52 | 1.834 |
+| `max_pool2d` | `16x64x56x56,k=2` | 0.05× | 0.0143 | 0.0100 | **0.70×** | 563.14 | — |
+| `avg_pool2d` | `16x64x56x56,k=2` | 0.05× | 0.0145 | 0.0111 | **0.76×** | 553.82 | — |
+| `patch_embed` | `16x3x224x224,p=16,d=768` | 0.25× | **0.0316** | 0.1264 | **4.01×** | 305.33 | **117.247** |
+| `conv2d_1x1` | `16x64x56x56->128` | 0.31× | **0.0172** | 0.0254 | **1.48×** | 1,121.25 | 47.840 |
+| `conv2d_3x3` | `16x64x56x56->128` | 0.41× | 0.1368 | 0.0692 | **0.51×** | 141.96 | 54.097 |
+| `gather` | `1024x4096` | 0.50× | 0.0136 | 0.0096 | **0.71×** | 1,236.53 | — |
+| `silu` | `1024x4096` | 0.58× | 0.0142 | 0.0074 | 0.52× | 1,179.50 | — |
+| `gelu` | `1024x4096` | 0.57× | 0.0145 | 0.0073 | 0.50× | 1,153.55 | — |
+| `reduce_sum` | `4096x4096` | — | 0.0162 | 0.0100 | 0.62× | **2,070.24** | — |
+| `reduce_max` | `4096x4096` | — | 0.0194 | 0.0152 | 0.78× | **1,728.90** | — |
+| `fused_rmsnorm_silu` | `1024x4096` | — | **0.0155** | 0.0478 | **3.08×** | 1,082.12 | — |
+| `fused_layernorm_gelu` | `1024x4096` | — | 0.0160 | 0.0152 | 0.95× | 1,045.44 | — |
+| `fused_add_rmsnorm_silu` | `1024x4096` | — | **0.0193** | 0.0518 | **2.69×** | 1,306.37 | — |
+| `gemm_skinny_m4` | `4x4096x4096` | — | 0.0219 | 0.0170 | 0.77× | 1,532.64 | 6.119 |
+| `gemm_medium_m64` | `64x4096x4096` | — | 0.0674 | 0.0191 | 0.28× | 513.58 | 31.873 |
+| `gemm_large_m1024` | `1024x4096x4096` | — | 0.2282 | 0.2208 | **0.97×** | 220.52 | **150.542** |
+
+### Track B (`v2.2.0`) — Native Zero-ATen Runtime (`benchmarks/results_5090/track_b_native_runtime.csv`)
+
+Measured on real `Mistral-7B-v0.1-GPTQ` with `torch.utils._python_dispatch.TorchDispatchMode` auditing the single-token decode hot path (`32` greedy tokens):
+
+| Runtime | Forbidden ATen Compute Calls / Decode | Decode (`tok/s`) | Latency (`ms/tok`) | Prefill (`ms`) | Peak VRAM (`GB`) | 32-Token Parity |
+|---|---:|---:|---:|---:|---:|---|
+| `v2.0.0_InferenceEngine` (CUDA Graph) | 66 | **87.23** | 11.46 | 11.52 | 3.99 | `True` |
+| `v2.2.0_NativeModelRuntime` (Eager CuTile) | **0** | 66.85 | 14.96 | **11.10** | 4.09 | **`True`** |
+
+> **Honest Note:** `NativeModelRuntime` eliminates all `66` forbidden PyTorch compute dispatches (`aten.cat.default`, `aten.matmul.default`, `aten.embedding.default`) and matches 32/32 greedy tokens identically, with `3.6%` faster prefill (`11.10 ms`). Because `NativeModelRuntime` runs eager CuTile kernel launches per decode token while `InferenceEngine` replays a single captured `torch.cuda.CUDAGraph`, eager native decode trails at `66.85 tok/s` vs `87.23 tok/s`.
+
+### Track C (`v2.3.0`) — Unified `UnifiedModelGraph` & Multi-Format Compatibility
+
+- **Registered Architectures (`MODEL_REGISTRY`)**: `mistral`, `llama`, `llama3` (500K RoPE scaling + 128K vocab), `qwen2` (QKV bias), `mixtral`, `deepseek_moe` / `qwen2_moe` (shared + routed fine-grained experts), `vit` / `clip_vision` / `siglip_vision`, `llava` multimodal (`ViT -> 2-layer GELU projector -> unified LLM prefill stream`).
+- **Auto-Detected Checkpoint Formats**: `FP16`/`BF16` safetensors, `GPTQ` (`desc_act`, `group_size=32/64/128/-1`), `AWQ` 4-bit interleaved, `GGUF` (`Q4_K_M`, `Q4_0`, `Q8_0` via pure-Python GGUF v2/v3 parser), and `FP8` (`e4m3fn` scalar/channel/block-scaled), integrated with `HybridLayerBudgeter` whenever checkpoint footprint exceeds `0.85 * vram_gb`.
 
 ---
 

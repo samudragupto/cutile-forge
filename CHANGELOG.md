@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.3.0 (2026-11-21) — Track C: Unified ModelGraph, Multimodal/MoE & Multi-Format Compatibility
+
+- **Declarative Unified Model IR (`cutile_forge.models.model_graph`, `registry`)**: Added `UnifiedModelGraph` with composable stages (`TextEmbeddingStage`, `VisionPatchEmbedStage`, `MultimodalFusionStage`, `DenseTransformerBlock`, `SparseMoEBlock`, `ViTEncoderBlock`, `LMHeadStage`, `VisionProjectionStage`, `ClassifierHeadStage`), TFG lowering (`to_fusion_graph()`, `compile_tfg()`), scaled RoPE (`compute_scaled_rope_freqs` supporting Linear, NTK/YaRN, and Llama-3 scaling), and portable `UnifiedModelExecutor`.
+- **Architecture Family Registry (`MODEL_REGISTRY`)**: Registered `mistral` (sliding window), `llama`, `llama3` (500K RoPE scaling, 128K vocab), `qwen2` (QKV biases), `mixtral`, `deepseek_moe` / `qwen2_moe` (shared + routed fine-grained experts), `vit` / `clip_vision` / `siglip_vision`, and `llava` multimodal (`ViT -> 2-layer GELU projector -> unified LLM prefill stream`).
+- **Multi-Format Checkpoint Auto-Detection & Unpackers (`cutile_forge.models.checkpoint_loader`, `cutile_forge.utils.quantize`)**: Added `detect_checkpoint_format`, pure-Python GGUF v2/v3 header parser (`parse_gguf_header`), `unpack_gguf_q4_0_to_cutile`, `unpack_gguf_q8_0_to_fp16`, block-scaled `unpack_fp8_e4m3_to_fp16`, and `plan_checkpoint_placement` integrating `HybridLayerBudgeter` whenever checkpoint footprint exceeds `0.85 * vram_gb`.
+
 ## v2.2.0 (2026-11-21) — Track B: Native Model Runtime (Zero-ATen Compute Hot Path)
 
 - **Native Tensor & Stream Manager (`cutile_forge.runtime`)**: Added `CuTileTensor` (zero-copy `MemoryLifetimeAllocator` + DLPack exchange) and `NativeStreamManager` (`compute_stream`, `dma_stream`, `kv_swap_stream` + pooled CUDA events).
