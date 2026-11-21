@@ -146,84 +146,8 @@ def _cu_fused_linear_silu(
 
 def _cu_bmm(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
     """Execute torch.bmm via CuTile cutile_bmm when eligible."""
-    if (
-        a.is_cuda
-        and a.dtype in (torch.float16, torch.bfloat16, torch.float32)
-        and a.dtype == b.dtype
-    ):
-        from cutile_forge.kernels.bmm import cutile_bmm
-
-        return cutile_bmm(a, b)
-    return torch.bmm(a, b)
-
-
-def _cu_softmax(
-    x: torch.Tensor,
-    dim: int | None = None,
-    _stacklevel: int = 3,
-    dtype: torch.dtype | None = None,
-) -> torch.Tensor:
-    """Execute F.softmax over the last axis via CuTile online_softmax when eligible."""
-    if (
-        x.is_cuda
-        and x.dtype == torch.float16
-        and dtype is None
-        and (dim == -1 or dim == x.ndim - 1)
-    ):
-        from cutile_forge.kernels.softmax import online_softmax
-
-        return online_softmax(x)
-    return F.softmax(x, dim=dim, _stacklevel=_stacklevel, dtype=dtype)
-
-
-_LOWERED_TARGETS = {
-    _cu_fused_ffn_linear,
-    _cu_fused_ln_residual,
-    _cu_fused_sdpa,
-    _cu_fused_linear_silu,
-    _cu_bmm,
-    _cu_softmax,
-}
-
-
-def _fx_cache_key(gm: fx.GraphModule, example_inputs: list[torch.Tensor]) -> str:
-    tensor_sig = [
-        (tuple(t.shape), str(t.dtype), str(t.device))
-        for t in example_inputs
-        if isinstance(t, torch.Tensor)
-    ]
-    param_sig = [
-        (name, t.data_ptr(), tuple(t.shape), str(t.dtype))
-        for name, t in list(gm.named_parameters()) + list(gm.named_buffers())
-    ]
-    raw = f"{gm.code}|{tensor_sig}|{param_sig}"
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
-
-
-def _cu_fused_linear_silu(
-    x: torch.Tensor,
-    w: torch.Tensor,
-    bias: torch.Tensor | None = None,
-) -> torch.Tensor:
-    """Execute F.silu(F.linear(x, w, bias)) via CuTile fused_gemm_fp16_silu when eligible."""
-    if (
-        x.is_cuda
-        and x.dtype == torch.float16
-        and bias is None
-        and x.ndim in (2, 3)
-        and w.shape[0] % 64 == 0
-    ):
-        from cutile_forge.kernels.gemm_dequant_silu import fused_gemm_fp16_silu
-
-        orig_shape = x.shape
-        out_2d = fused_gemm_fp16_silu(x.reshape(-1, orig_shape[-1]), w.t().contiguous())
-        return out_2d.view(*orig_shape[:-1], w.shape[0])
-    return F.silu(F.linear(x, w, bias))
-
-
-def _cu_bmm(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
-    """Execute torch.bmm via CuTile cutile_bmm when eligible."""
-    if a.is_cuda and a.dtype in (torch.float16, torch.bfloat16, torch.float32) and a.dtype == b.dtype:
+    valid_dt = a.dtype in (torch.float16, torch.bfloat16, torch.float32)
+    if a.is_cuda and valid_dt and a.dtype == b.dtype:
         from cutile_forge.kernels.bmm import cutile_bmm
 
         return cutile_bmm(a, b)
