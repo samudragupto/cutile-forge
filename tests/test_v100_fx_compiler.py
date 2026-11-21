@@ -1,4 +1,4 @@
-"""Unit and GPU tests for CuTileForge v1.0.0 `torch.compile(backend="cutile_forge")`."""
+"""Unit and GPU tests for CuTileForge `torch.compile(backend="cutile_forge")`."""
 
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ class _MiniTransformerBlock(nn.Module):
 def test_cutile_forge_backend_registered() -> None:
     import torch._dynamo as dynamo
 
-    assert cutile_forge.__version__ == "1.0.0"
+    assert cutile_forge.__version__ == "2.0.0"
     assert "cutile_forge" in dynamo.list_backends()
 
 

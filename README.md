@@ -1,14 +1,14 @@
-# CuTileForge (`v1.0.0`)
+# CuTileForge (`v2.0.0`)
 
-### *Tile-Fusion Graph Compiler, Hybrid PCIe-Streaming Runtime & `torch.compile` Backend on NVIDIA CuTile (`sm_89` Ada & `sm_120` Blackwell)*
+### *General-Purpose Tile-Fusion Graph Compiler, Async Runtime, Training/Vision Ecosystem & 7B–70B LLM Engine on NVIDIA CuTile (`sm_89` Ada & `sm_120` Blackwell)*
 
 [![CI](https://github.com/samudragupto/cutile-forge/actions/workflows/ci.yml/badge.svg)](https://github.com/samudragupto/cutile-forge/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/samudragupto/cutile-forge?color=1b365d)](https://github.com/samudragupto/cutile-forge/releases/tag/v1.0.0)
+[![Release](https://img.shields.io/github/v/release/samudragupto/cutile-forge?color=1b365d)](https://github.com/samudragupto/cutile-forge/releases/tag/v2.0.0)
 [![License: MIT](https://img.shields.io/badge/License-MIT-6c757d.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](pyproject.toml)
 [![CUDA Targets](https://img.shields.io/badge/CUDA-sm__89%20%7C%20sm__120-76B900)](https://developer.nvidia.com/cuda-toolkit)
 [![GHCR](https://img.shields.io/badge/ghcr-cutile--forge-blue)](https://github.com/samudragupto/cutile-forge/pkgs/container/cutile-forge)
-[![Tests](https://img.shields.io/badge/tests-102%2F102%20passed%20%7C%200%20skipped-16a34a)](tests/)
+[![Tests](https://img.shields.io/badge/tests-214%2F214%20passed%20%7C%200%20skipped-16a34a)](tests/)
 
 **Authors:** [Arrhat Nag](https://github.com/samudragupto) (`@samudragupto`), Rupesh Nasre
 
@@ -36,7 +36,8 @@ Deploying 7B–70B large language models across heterogeneous consumer GPUs—fr
 2. **Real 7B, 47B MoE, and 70B Execution on a Single 32 GB GPU:** Evaluates real trained TheBloke GPTQ checkpoints (`Mistral-7B` at **96.57 tok/s** in `4.32 GB`; `Mixtral-8x7B-Instruct` 100% resident at **41.83 tok/s**, `PPL=7.48`, `25.26 GB`; `Llama-2-70B-Chat` 80-layer hybrid `55 HBM + 25 PCIe 5.0` at **4.07 tok/s** in `27.44 GB` peak VRAM, zero OOM).
 3. **1,822× Long-Context Paging Speedup (`107,854 ms → 59.20 ms` at 16K):** Pre-allocated async pinned CPU page pools (`swap_stream`) combined with 16-split **FlashDecoding** eliminate synchronous `cudaHostAlloc` stalls and saturate all 170 Blackwell SMs.
 4. **3.20× Concurrent Tail-Latency Reduction (`363.1 ms → 113.6 ms` p99):** Async `DynamicBatcher` (`max_batch_size=16`, `8 ms` window) with `BatchedKVCache` and `RadixPrefixCache` serves OpenAI-compatible `/v1/chat/completions` + SSE streaming.
-5. **Zero-Code-Change `torch.compile(backend="cutile_forge")`:** Registered Dynamo/FX backend lowers `linear+silu+linear`, `add+layer_norm`, and `scaled_dot_product_attention` into fused CuTile kernels (`atol < 1e-2`), verified across **102 / 102 passing tests (0 skipped)**.
+5. **Zero-Code-Change `torch.compile(backend="cutile_forge")`:** Registered Dynamo/FX backend lowers both transformer patterns (`linear+silu+linear`, `add+layer_norm`, `scaled_dot_product_attention`) and standalone general ops (`linear`, `addmm`, `matmul`, `bmm`, `layer_norm`, `gelu`, `silu`, `softmax`, `sum`, `amax`, `cumsum`, `conv2d`, `embedding`) into CuTile kernels via `FXOpRegistry` and `ShapeGuard`.
+6. **General-Purpose CuTile Ecosystem (`v2.0.0`, 214/214 Passing Tests):** Adds imperative `cutile_forge.sdk.Graph`, `import_onnx_model(...)`, generalized TFG compiler passes (`LayoutStridePass`, `ConstantFoldPass`, `ProfitabilityPass`, `MemoryLifetimePass`), `CuTileTune v2` + `CuTileVision v2` (`cutile-forge inspect`), async `CuTileRuntime` (`PinnedHostPool`, `TensorStreamer`, `MemoryLifetimeAllocator`), training backward kernels + autograd wrappers + `cutile_multi_tensor_adamw` (**1.51×** vs. PyTorch AdamW, 10-step MLP parity within `2.83e-07`), and `1.88×` BMM / `2.05×` parallel prefix scan on RTX 5090.
 
 ---
 
@@ -46,19 +47,39 @@ Deploying 7B–70B large language models across heterogeneous consumer GPUs—fr
 
 ```mermaid
 flowchart TD
-    W["4-bit GPTQ / AWQ / GGUF Checkpoints (Multi-Shard mmap)"] --> L["WeightLoader (desc_act g_idx & group_size=-1)"]
-    L --> DDR5["HybridLayerBudgeter: Resident HBM + Pinned Host DDR5"]
-    DDR5 -->|"Stage -1: Async H2D Copy Stream"| WS["WeightStreamer (Double-Buffered PCIe 4.0/5.0 DMA)"]
+    subgraph Frontends["Model & Graph Frontends"]
+        direction TB
+        FE1["SDK Graph<br/>cutile_forge.sdk.Graph"]
+        FE2["ONNX Importer<br/>import_onnx_model"]
+        FE3["torch.compile FX<br/>FXOpRegistry + ShapeGuard"]
+        FE4["LLM Engine<br/>4-bit GPTQ / AWQ / GGUF"]
+    end
 
-    G["PyTorch FX / TFG IR (8 Unfused Nodes)"] --> R{"Apply 6 Fusion Rules"}
-    R --> F["3 Fused CuTile Nodes (FUSED_QKV_ATTN, FUSED_O_LAYERNORM, FUSED_FFN_NORM)"]
-    F --> P["Occupancy Cost Model + Tile Pipeliner (3/4-Stage)"]
-    P --> C["CuTile Python DSL (cuda.tile -> SASS sm_89 / sm_120)"]
+    FE1 --> PM
+    FE2 --> PM
+    FE3 --> PM
+    FE4 --> PM
 
-    WS --> EXEC["GPU Execution (CUDA Graph / Persistent Grouped MoE / Split-KV)"]
-    C --> EXEC
-    KV["PagedKVCache (FP16/FP8 HBM <-> Async Pinned Pool) + RadixPrefixCache"] <--> EXEC
-    EXEC --> OUT["OpenAI Server (DynamicBatcher + SSE) & Speculative (gamma=4)"]
+    subgraph Compiler["TFG Compiler & Autotuning"]
+        direction TB
+        PM["TFG PassManager<br/>OpRegistry + 6 Fusion Passes"]
+        OPT["LayoutStride / ConstantFold<br/>Profitability / MemoryLifetime"]
+        VIS["CuTileTune v2 + CuTileVision v2<br/>TuningDB + cutile-forge inspect"]
+        PM --> OPT --> VIS
+    end
+
+    VIS --> KRN
+
+    subgraph RuntimeExec["CuTileKernels & CuTileRuntime"]
+        direction TB
+        KRN["CuTileKernels (cuda.tile 1.8.1)<br/>LLM Fusion / General Ops / Vision / Training+AdamW"]
+        RT["CuTileRuntime<br/>PinnedHostPool + TensorStreamer + MemoryLifetimeAllocator"]
+        EXEC["GPU Execution (sm_89 3-stage / sm_120 4-stage)<br/>CUDA Graphs / Persistent MoE / FlashDecoding Split-KV"]
+        KRN --> EXEC
+        RT <--> EXEC
+    end
+
+    EXEC --> SRV["OpenAI FastAPI Server<br/>DynamicBatcher + RadixPrefixCache + Bearer Auth + /metrics"]
 ```
 
 ### 1.2 Algebraic & Tile-Level Fusion Passes (`8 → 3` Kernels)
@@ -262,7 +283,46 @@ Evaluated real trained 4-bit GPTQ checkpoints (`TheBloke/Mistral-7B-v0.1-GPTQ`, 
   <img src="docs/images_5090/fig4_systems_telemetry.png" alt="Figure 4: 30-Min Sustained Telemetry and Stage -1 PCIe Overlap" width="100%"/>
 </p>
 
-#### Master Release Evolution (`v0.1.0` → `v1.0.0`)
+### 2.6 General GPU Operators, Training & Vision (`v2.0.0`)
+
+Beyond transformer inference, CuTileForge `v2.0.0` implements general tensor operators, vision primitives, backward kernels, and multi-tensor optimization measured directly on the RTX 5090 (`sm_120`, `cuda-tile 1.8.1`, `warmup=5`, `iters=50`, CUDA events) in [`general_ops.csv`](benchmarks/results_5090/general_ops.csv), [`phase8_training_vision.csv`](benchmarks/results_5090/phase8_training_vision.csv), and [`phase8_mlp_convergence.csv`](benchmarks/results_5090/phase8_mlp_convergence.csv):
+
+<p align="center">
+  <img src="docs/figures/fig12_general_ops_phase8.png" alt="Figure 12: Phase 8 General GPU Operators vs PyTorch Eager on RTX 5090" width="100%"/>
+</p>
+
+#### General Tensor Operators (`benchmarks/results_5090/general_ops.csv`, `float16`)
+
+| Operator | Shape | CuTile p50 (ms) | PyTorch p50 (ms) | Speedup vs. PyTorch | Notes |
+|---|---|---:|---:|---:|---|
+| **`bmm`** | `16×128×2048×2048` | **0.1195** | 0.2249 | **1.88×** | L2-swizzled (`group_m=8`) 2D/3D tile kernel |
+| **`bmm`** | `4×1024×1024×1024` | **0.0622** | 0.0625 | **1.01×** | Full parity with cuBLAS strided batched GEMM |
+| **`bmm`** | `8×256×1024×1024` / `32×512×512×512` | 0.0335 / 0.0560 | 0.0324 / 0.0508 | 0.97× / 0.91× | Launch-bounded shapes within 9% |
+| **`cumsum`** | `4096×4096` | **0.0488** | 0.1000 | **2.05×** | 2D multi-row inclusive scan |
+| **`cumsum`** | `256×2048` / `16384×1024` | **0.0150 / 0.0529** | 0.0172 / 0.0631 | **1.15× / 1.19×** | Beats PyTorch across all tested regimes |
+| **`reduce_max`** | `16384×1024` | **0.0172** | 0.0171 | **0.99×** | `3.31×` faster than Phase 2 baseline (`0.0570 ms`) |
+| **`reduce_max`** | `256×2048` / `4096×4096` | 0.0145 / 0.0193 | 0.0111 / 0.0152 | 0.77× / 0.79× | Occupancy=4 row reduction |
+| **`reduce_sum`** | `256×2048` / `4096×4096` / `16384×1024` | 0.0145 / 0.0172 / 0.0172 | 0.0083 / 0.0100 / 0.0100 | 0.57× / 0.58× / 0.58× | `3.91×` faster than Phase 2 (`0.0672 → 0.0172 ms`) |
+| **`transpose`** | `256×2048` / `4096×4096` / `16384×1024` | 0.0136 / 0.0152 / 0.0151 | 0.0094 / 0.0131 / 0.0131 | 0.70× / 0.86× / 0.87× | `64×64` occupancy=4 tile transpose |
+| **`gather`** / `silu` / `gelu` | `1024×4096` | 0.0189 / 0.0136 / 0.0136 | 0.0094 / 0.0078 / 0.0078 | 0.50× / 0.58× / 0.57× | Wide-tile `tile_d=128` / `tile_n=4096` |
+| **`conv2d_3x3`** / `conv2d_1x1` | `16×64×56×56→128` | 0.1686 / 0.0857 | 0.0691 / 0.0262 | 0.41× / 0.31× | Zero-transpose `F.unfold + cutile_bmm` / 1×1 GEMM |
+
+<p align="center">
+  <img src="docs/figures/fig13_training_vision_parity.png" alt="Figure 13: Phase 8 Training Convergence Parity and Vision/Optimizer Latency" width="100%"/>
+</p>
+
+#### Vision Operators, Multi-Tensor AdamW & End-to-End 10-Step MLP Training (`phase8_training_vision.csv`)
+
+| Operator / Workload | Shape (`dtype`) | CuTile p50 (ms) | PyTorch / cuDNN p50 (ms) | Speedup | Parity / Accuracy |
+|---|---|---:|---:|---:|---|
+| **`adamw_multi_tensor`** | `6_tensors_mlp` (`float32`) | **0.0567** | 0.0856 | **1.51×** | Single-launch CuTile decoupled AdamW |
+| **`mlp_10step_train`** (`Linear→LN→GELU→Linear`) | `b=64, 32→256→16` (`float32`) | 8.4444 | 7.1308 | 0.84× | Step 1 `1.886321` → Step 10 `0.225091` vs. PyTorch `0.225090` (`max \|Δ\| = 1.08e-04`, step-10 `2.83e-07`) |
+| **`conv2d_3x3`** / **`conv2d_1x1`** | `16×64×56×56→128` (`float16`) | 0.1678 / 0.0853 | 0.0692 / 0.0253 | 0.41× / 0.30× | Numerical match `atol < 1e-2` |
+| **`patch_embed`** (`CuTilePatchEmbed`) | `16×3×224×224, p=16, d=768` (`float16`) | 0.5043 | 0.1266 | 0.25× | Exact ViT patch parity |
+| **`max_pool2d`** / **`avg_pool2d`** | `16×64×56×56, k=2` (`float16`) | 0.2158 / 0.2222 | 0.0111 / 0.0110 | 0.05× / 0.05× | Correctness verified; cuDNN direct pooling avoids unfold |
+| **`depthwise_conv2d`** | `16×64×56×56, k=3` (`float16`) | 0.4394 | 0.0121 | 0.03× | Functional BMM baseline; cuDNN direct channelwise kernel leads |
+
+#### Master Release Evolution (`v0.1.0` → `v2.0.0`)
 
 | Release | Architectural Milestone | Key Verified Metric (`sm_120` / `sm_89`) | Tests |
 |---|---|---|---:|
@@ -274,10 +334,14 @@ Evaluated real trained 4-bit GPTQ checkpoints (`TheBloke/Mistral-7B-v0.1-GPTQ`, 
 | **`v0.6.0`** | `DynamicBatcher` + `RadixPrefixCache` | 4-way concurrent p99 **`363.1 → 113.6 ms`** (**3.20×** reduction) | `90/90` |
 | **`v0.7.0`** | Persistent 3D-Grid Grouped MoE + FlashDecoding Split-KV | Grouped MoE **`42.13 TF`** @ `M=256` (**68.4×**); `16K` ctx **`59.20 ms`** (**1,822×** vs v0.2.0) | `92/92` |
 | **`v0.8.0`** | `LLAMA3_70B_4BIT` + `HybridLayerBudgeter` | 80-layer 70B synthetic pass: `27.43 GB` VRAM, `99.5%` overlap, `4.66 tok/s` | `95/95` |
-| **`v1.0.0`** | `torch.compile(backend="cutile_forge")` + Real 47B/70B | Real **Mixtral-8x7B** (`41.83 tok/s`, PPL `7.48`) & **Llama-2-70B** (`4.07 tok/s`, `27.44 GB`, zero OOM) | **`102/102`** |
+| **`v1.0.0`** | `torch.compile(backend="cutile_forge")` + Real 47B/70B | Real **Mixtral-8x7B** (`41.83 tok/s`, PPL `7.48`) & **Llama-2-70B** (`4.07 tok/s`, `27.44 GB`, zero OOM) | `102/102` |
+| **`v1.x` (Phases 1–7)** | SDK `Graph`, TFG `PassManager`, General Kernels, `CuTileTune`/`Vision`, `CuTileRuntime`, Autograd/AdamW, ONNX, Auth/`/metrics` | Unified compiler SDK, `PinnedHostPool` + `TensorStreamer`, `import_onnx_model`, Bearer auth | `176 → 191` |
+| **`v2.0.0` (Phase 8 M1–M7)** | Post-M1 general ops, `CuTileTune v2`, Generalized TFG + `inspect`, Generalized FX backend, Training/Vision, `MemoryLifetimeAllocator`, `CuTileBench v2`, Distributed prototype | **`1.88×`** BMM, **`2.05×`** cumsum, **`1.51×`** AdamW, 10-step MLP parity (`2.83e-07`), `198 → 214` tests | **`214/214`** |
 
 #### Known Issues & Honest Notes
 
+- **Single-Node / Prototype Status of `cutile_forge.distributed`:** `cutile_forge/distributed/topology.py` and `cutile_forge/distributed/p2p.py` (`detect_topology`, `p2p_copy`, `ring_allreduce_sum`) are **single-node/prototype tested** only (verified on the 1× RTX 5090 workstation and CPU CI across synthetic rank lists); multi-GPU NVLink / PCIe P2P collective scaling has not been benchmarked on multi-GPU hardware.
+- **Operators Where PyTorch / cuBLAS / cuDNN Remains Faster:** On standalone uncompressed ops (`general_ops.csv`, `phase8_training_vision.csv`), eager PyTorch/cuDNN leads for memory-bandwidth-bound reductions (`reduce_sum` `0.57–0.58×`), elementwise activations (`silu` `0.58×`, `gelu` `0.57×`), embedding gather (`0.50×`), and `F.unfold + BMM`-based vision ops (`conv2d` `0.30–0.41×`, `patch_embed` `0.25×`, pooling `0.05×`, `depthwise_conv2d` `0.03×`) because cuDNN uses native implicit-GEMM / direct 2D spatial kernels whereas `cuda.tile` 1.8.1 expresses convolutions via im2col+BMM.
 - **MoE `M=1` Decode Headroom:** Real Mixtral-8x7B decode (`41.83 tok/s`) uses per-expert gather; the persistent 3D-grid grouped kernel (`42.13 TFLOPS` at `M=256`) is tuned for `M >= 64`, making fused `M=1` top-2 dispatch the primary next optimization target.
 - **Speculative Denominators:** `117.31 tok/s` represents **1.71×** vs. `v0.2.0` speculative (`68.74 tok/s`) and **1.21×** vs. `v0.3.0` CUDA-graph non-speculative decode (`96.57 tok/s`).
 - **Container NVML Telemetry:** On the Linux workstation, NVML sensors returned `0.0 °C / 0.0 W` inside the container; 30-minute sustained throughput stability (`361` samples, `179,264` tokens) showed `0.25%` drift (`100.06 → 99.81 tok/s`).
@@ -291,8 +355,8 @@ Evaluated real trained 4-bit GPTQ checkpoints (`TheBloke/Mistral-7B-v0.1-GPTQ`, 
 
 ```sh
 # Option A: Pull prebuilt CUDA 13.2 container from GitHub Container Registry
-docker pull ghcr.io/samudragupto/cutile-forge:v1.0.0-cu132
-docker run --rm --gpus all ghcr.io/samudragupto/cutile-forge:v1.0.0-cu132 \
+docker pull ghcr.io/samudragupto/cutile-forge:v2.0.0-cu132
+docker run --rm --gpus all ghcr.io/samudragupto/cutile-forge:v2.0.0-cu132 \
     cutile-forge --help
 
 # Option B: Editable source install (dash/bash compatible)
@@ -306,17 +370,75 @@ pip install -e ".[cuda,dev,serve]" --no-build-isolation
 
 ### 3.2 Python SDK & `torch.compile(backend="cutile_forge")` Usage
 
-#### 1. Zero-Code-Change `torch.compile` Backend
+#### 1. Zero-Code-Change `torch.compile` Backend (Transformer + General Ops)
 
 ```python
 import torch
+import torch.nn.functional as F
 import cutile_forge  # registers backend="cutile_forge" with torch._dynamo
 
-compiled_block = torch.compile(my_transformer_block, backend="cutile_forge")
-out = compiled_block(hidden_states, residual)
+def model(x, w, idx, emb_w, conv_w, img):
+    h = F.gelu(F.layer_norm(F.linear(x, w), (w.shape[0],)), approximate="tanh")
+    s = torch.sum(h, dim=-1) + torch.cumsum(h, dim=-1)[:, -1]
+    e = F.embedding(idx, emb_w)
+    c = F.conv2d(img, conv_w, padding=1)
+    return s, torch.bmm(e, e.transpose(-1, -2)), torch.amax(c.flatten(2), dim=-1)
+
+compiled_model = torch.compile(model, backend="cutile_forge")
 ```
 
-#### 2. High-Level `InferenceEngine` & `HybridLayerBudgeter` (7B / 47B / 70B)
+#### 2. Imperative Developer SDK (`Graph` + `compile`) & CLI Inspection
+
+```python
+from cutile_forge.sdk import DType, Graph, compile
+
+g = Graph(name="mlp_block")
+x = g.input("x", shape=(32, 128), dtype=DType.FP16)
+w = g.input("w", shape=(128, 256), dtype=DType.FP16)
+y = g.silu(g.matmul(x, w))
+g.output(y)
+
+artifact = compile(g, target="sm_120")
+print(artifact.summary())
+```
+
+```sh
+cutile-forge doctor                            # Verify CUDA 13.x, cuda-tile, pinned DDR5, SMs
+cutile-forge inspect --seq-len 128 --target sm_120  # Print CuTileVision fusion & HBM lifetime report
+```
+
+#### 3. Autograd Training (`CuTileLinearFn`, `CuTileLayerNormFn`) & Multi-Tensor AdamW
+
+```python
+import torch
+from cutile_forge.kernels import (
+    cutile_gelu_autograd,
+    cutile_grad_clip_norm,
+    cutile_layernorm_autograd,
+    cutile_linear_autograd,
+    cutile_multi_tensor_adamw,
+)
+
+# Drop-in autograd forward + CuTile backward kernels + single-launch decoupled AdamW
+h = cutile_linear_autograd(x, w1, b1)
+h = cutile_gelu_autograd(cutile_layernorm_autograd(h, ln_w, ln_b))
+pred = cutile_linear_autograd(h, w2, b2)
+torch.nn.functional.mse_loss(pred, target).backward()
+cutile_grad_clip_norm(params, max_norm=1.0)
+cutile_multi_tensor_adamw(params, [p.grad for p in params], m_bufs, v_bufs, step=1, lr=5e-2)
+```
+
+#### 4. ONNX Graph Import (`import_onnx_model`)
+
+```python
+from cutile_forge.onnx_import import import_onnx_model
+from cutile_forge.sdk import compile
+
+sdk_graph = import_onnx_model("model.onnx")
+artifact = compile(sdk_graph, target="sm_120")
+```
+
+#### 5. High-Level `InferenceEngine` & `HybridLayerBudgeter` (7B / 47B / 70B)
 
 ```python
 from cutile_forge.engine import InferenceEngine, HybridLayerBudgeter
@@ -362,22 +484,30 @@ curl -N http://127.0.0.1:8000/v1/chat/completions \
 ```text
 cutile-forge/
 ├── cutile_forge/
-│   ├── forge/          # TFG IR, 6 fusion rules, occupancy cost model, Stage -1 DMA, FX backend
-│   ├── kernels/        # Native cuda.tile kernels (GEMM, INT4/NVFP4, GQA FlashAttn-2, Split-KV, MoE)
+│   ├── sdk/            # Imperative Graph builder, Device/DType, KernelRegistry, compile()
+│   ├── forge/          # TFG IR, OpRegistry, PassManager, fusion rules, Stage -1 DMA, FX backend
+│   ├── autotune/       # CuTileTune v2 (TuningDB, shape_fingerprint, BMM/reduction/act tuners)
+│   ├── vision/         # CuTileVision v2 fusion & HBM lifetime/timeline inspector
+│   ├── kernels/        # Native cuda.tile kernels (LLM, general ops, vision conv/pool, training)
+│   ├── runtime/        # PinnedHostPool, TensorStreamer, MemoryLifetimeAllocator, GraphRuntime
+│   ├── distributed/    # Single-node/prototype multi-GPU topology & ring all-reduce
 │   ├── engine/         # InferenceEngine, PagedKVCache, RadixPrefixCache, HybridLayerBudgeter
-│   ├── server/         # OpenAI FastAPI server, DynamicBatcher, SSE streaming
+│   ├── server/         # OpenAI FastAPI server, DynamicBatcher, Bearer Auth, /metrics, SSE
+│   ├── bench/          # CuTileBench v2 telemetry, regression gates, NVML/PCIe/Roofline profilers
+│   ├── onnx_import.py  # ONNX -> SDK Graph importer
+│   ├── doctor.py       # Hardware & cuda.tile readiness diagnostics (`cutile-forge doctor`)
 │   └── baselines/      # CUDA C++ (cp.async + WMMA) & cuBLAS pybind11 reference baselines
-├── tests/              # Unit & integration tests (CI + GPU)
+├── tests/              # 214+ unit, correctness & integration tests (CI + GPU)
 ├── benchmarks/         # Micro-benchmarks, E2E real-model eval, Roofline, CSVs
-├── scripts/            # Publication figure generator (300-DPI)
-└── docs/               # RESULTS_RTX5090.md, RESULTS.md, ARCHITECTURE.md, preprint, blog
+├── scripts/            # Publication figure generator (300-DPI, docs/images_5090 & docs/figures)
+└── docs/               # RESULTS_RTX5090.md, RESULTS.md, ARCHITECTURE.md, figures, preprint
 ```
 
 ```sh
 . .venv/bin/activate
 export CUTILE_ARCH=sm_120
 
-# 1. Run full quality & correctness gate (102 passed, 0 skipped)
+# 1. Run full quality & correctness gate (214 passed, 0 skipped)
 ruff check cutile_forge/ benchmarks/ tests/ examples/ scripts/
 black --check cutile_forge/ benchmarks/ tests/ examples/ scripts/
 mypy cutile_forge/ --ignore-missing-imports
@@ -385,24 +515,25 @@ python3 -m pytest tests/ benchmarks/correctness/ -v --tb=short
 
 # 2. Reproduce benchmarks & regenerate all 300-DPI publication figures
 python3 benchmarks/run_all.py --model ~/models/mistral_7b_4bit/ --target sm_120 --gpu rtx5090 --output benchmarks/results_5090/
-python3 benchmarks/e2e/bench_real_large_models.py --output benchmarks/results_5090/real_large_models.csv
+python3 benchmarks/micro/bench_general_ops.py --output benchmarks/results_5090/general_ops.csv
+python3 benchmarks/micro/bench_phase8_training_vision.py
 python3 scripts/generate_publication_figures.py
 ```
 
 #### Further Documentation
 - [docs/RESULTS_RTX5090.md](docs/RESULTS_RTX5090.md) — Complete RTX 5090 (`sm_120`) tables, figures, real 47B/70B logs, and serving telemetry
 - [docs/RESULTS.md](docs/RESULTS.md) — Lenovo LOQ 15APH8 RTX 4060 Laptop (`sm_89`, 8 GB VRAM) benchmark suite
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) & [docs/TFG_COMPILER.md](docs/TFG_COMPILER.md) — TFG IR, 6 fusion passes, and Stage -1 DMA internals
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) & [docs/TFG_COMPILER.md](docs/TFG_COMPILER.md) — TFG IR, generalized passes, runtime, and Stage -1 DMA internals
 - [docs/paper/cutileforge_preprint.md](docs/paper/cutileforge_preprint.md) & [docs/blog/introducing-cutileforge.md](docs/blog/introducing-cutileforge.md) — Technical preprint & engineering writeup
 
 ### 3.5 Citation & License
 
 ```bibtex
 @software{cutileforge2026,
-  title   = {CuTileForge: A Tile-Fusion Graph Compiler and Hybrid PCIe-Streaming Inference Engine on NVIDIA CuTile},
+  title   = {CuTileForge: A General-Purpose Tile-Fusion Graph Compiler, Async Runtime, and Hybrid PCIe-Streaming Engine on NVIDIA CuTile},
   author  = {Nag, Arrhat and Nasre, Rupesh},
   year    = {2026},
-  version = {1.0.0},
+  version = {2.0.0},
   url     = {https://github.com/samudragupto/cutile-forge},
   license = {MIT}
 }

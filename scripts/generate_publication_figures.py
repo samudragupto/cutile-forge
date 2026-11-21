@@ -1,4 +1,4 @@
-"""Generate 300-DPI publication-grade multi-panel figures for CuTileForge v1.0.0."""
+"""Generate 300-DPI publication-grade multi-panel figures for CuTileForge v2.0.0."""
 
 from __future__ import annotations
 
@@ -17,6 +17,15 @@ TEAL = "#008080"
 SLATE = "#6c757d"
 GOLD = "#e6ab02"
 CRIMSON = "#b91c1c"
+
+# Okabe-Ito colorblind-safe palette (Phase 8 / v2.0.0 figures)
+OI_BLUE = "#0072B2"
+OI_ORANGE = "#D55E00"
+OI_GREEN = "#009E73"
+OI_SKY = "#56B4E9"
+OI_YELLOW = "#E69F00"
+OI_PURPLE = "#CC79A7"
+OI_GRAY = "#64748B"
 
 
 def _apply_pub_style() -> None:
@@ -682,6 +691,220 @@ def generate_real_models_v100(out_dir: Path) -> Path:
     return out_path
 
 
+def _load_csv_rows(path: Path) -> list[dict[str, str]]:
+    with path.open("r", encoding="utf-8", newline="") as f:
+        return list(csv.DictReader(f))
+
+
+def generate_fig12_general_ops_phase8(out_dir: Path) -> Path:
+    """Figure 12: Phase 8 General GPU Operators vs. PyTorch Eager on RTX 5090 (Okabe-Ito)."""
+    rows = _load_csv_rows(Path("benchmarks/results_5090/general_ops.csv"))
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16.5, 7.2), constrained_layout=True)
+
+    # Panel (a): Compute & Scan Ops (BMM + Cumsum across shapes)
+    comp_rows = [r for r in rows if r["op"] in ("bmm", "cumsum")]
+    labels_a = [f"{r['op']}\n({r['shape']})" for r in comp_rows]
+    speedups_a = [float(r["speedup"]) for r in comp_rows]
+    lats_a = [float(r["cutile_p50_ms"]) for r in comp_rows]
+    colors_a = [OI_BLUE if r["op"] == "bmm" else OI_GREEN for r in comp_rows]
+
+    y_a = np.arange(len(comp_rows))
+    bars_a = ax1.barh(y_a, speedups_a, height=0.58, color=colors_a)
+    ax1.axvline(1.0, color=OI_ORANGE, linestyle="--", lw=1.6, label="PyTorch Eager Parity (1.00×)")
+    for bar, sp, ms in zip(bars_a, speedups_a, lats_a, strict=True):
+        ax1.text(
+            sp + 0.04,
+            bar.get_y() + bar.get_height() / 2.0,
+            f"{sp:.2f}× ({ms:.4f} ms)",
+            va="center",
+            ha="left",
+            fontsize=8.5,
+            fontweight="bold",
+            color="#0f172a",
+            bbox={"fc": "white", "ec": "none", "alpha": 0.85, "pad": 1.2},
+        )
+    ax1.set_yticks(y_a)
+    ax1.set_yticklabels(labels_a, fontsize=8.5)
+    ax1.invert_yaxis()
+    ax1.set_xlabel("Speedup vs. PyTorch Eager (×, higher is better)")
+    ax1.set_xlim(0, max(speedups_a) * 1.38)
+    ax1.set_title("(a) Batched MatMul (L2-Swizzled) & Parallel Prefix Scan (sm_120)")
+    ax1.legend(loc="lower right", fontsize=8.5)
+
+    # Panel (b): Memory-Bound, Elementwise, Indexing & Conv2D Ops
+    wanted_b = [
+        ("reduce_max", "16384x1024"),
+        ("transpose", "16384x1024"),
+        ("reduce_max", "4096x4096"),
+        ("transpose", "4096x4096"),
+        ("reduce_sum", "16384x1024"),
+        ("silu", "1024x4096"),
+        ("gelu", "1024x4096"),
+        ("gather", "1024x4096"),
+        ("conv2d_3x3", "16x64x56x56->128"),
+        ("conv2d_1x1", "16x64x56x56->128"),
+    ]
+    lookup = {(r["op"], r["shape"]): r for r in rows}
+    sel_b = [lookup[k] for k in wanted_b if k in lookup]
+    labels_b = [f"{r['op']} ({r['shape']})" for r in sel_b]
+    speedups_b = [float(r["speedup"]) for r in sel_b]
+    lats_b = [float(r["cutile_p50_ms"]) for r in sel_b]
+    colors_b = [
+        OI_GREEN if sp >= 0.95 else (OI_SKY if sp >= 0.70 else OI_YELLOW) for sp in speedups_b
+    ]
+
+    y_b = np.arange(len(sel_b))
+    bars_b = ax2.barh(y_b, speedups_b, height=0.58, color=colors_b)
+    ax2.axvline(
+        1.0, color=OI_ORANGE, linestyle="--", lw=1.6, label="PyTorch / cuDNN Parity (1.00×)"
+    )
+    for bar, sp, ms in zip(bars_b, speedups_b, lats_b, strict=True):
+        ax2.text(
+            sp + 0.03,
+            bar.get_y() + bar.get_height() / 2.0,
+            f"{sp:.2f}× ({ms:.4f} ms)",
+            va="center",
+            ha="left",
+            fontsize=8.5,
+            fontweight="bold",
+            color="#0f172a",
+            bbox={"fc": "white", "ec": "none", "alpha": 0.85, "pad": 1.2},
+        )
+    ax2.set_yticks(y_b)
+    ax2.set_yticklabels(labels_b, fontsize=8.5)
+    ax2.invert_yaxis()
+    ax2.set_xlabel("Speedup vs. PyTorch / cuDNN Eager (×)")
+    ax2.set_xlim(0, 1.48)
+    ax2.set_title("(b) Reductions, Transpose, Elementwise & Conv2D vs. PyTorch/cuDNN")
+    ax2.legend(loc="lower right", fontsize=8.5)
+
+    out_path = out_dir / "fig12_general_ops_phase8.png"
+    plt.savefig(out_path, bbox_inches="tight")
+    plt.close()
+    return out_path
+
+
+def generate_fig13_training_vision_parity(out_dir: Path) -> Path:
+    """Figure 13: Phase 8 Training Convergence Parity & Vision/Optimizer Latency (Okabe-Ito)."""
+    conv_rows = _load_csv_rows(Path("benchmarks/results_5090/phase8_mlp_convergence.csv"))
+    perf_rows = _load_csv_rows(Path("benchmarks/results_5090/phase8_training_vision.csv"))
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16.5, 6.8), constrained_layout=True)
+
+    # Panel (a): 10-step 2-layer MLP Training Convergence
+    steps = [int(r["step"]) for r in conv_rows]
+    cu_loss = [float(r["cutile_mse_loss"]) for r in conv_rows]
+    pt_loss = [float(r["torch_mse_loss"]) for r in conv_rows]
+    diffs = [float(r["abs_diff"]) for r in conv_rows]
+    max_diff = max(diffs)
+    step10_diff = diffs[-1]
+
+    ax1.plot(
+        steps,
+        cu_loss,
+        "-o",
+        color=OI_BLUE,
+        lw=2.3,
+        markersize=7,
+        label="CuTile Autograd + multi-tensor AdamW",
+    )
+    ax1.plot(
+        steps,
+        pt_loss,
+        "--x",
+        color=OI_ORANGE,
+        lw=2.0,
+        markersize=8,
+        label="PyTorch Autograd + torch.optim.AdamW",
+    )
+    for st, val in [(steps[0], cu_loss[0]), (steps[1], cu_loss[1]), (steps[-1], cu_loss[-1])]:
+        dy = 0.35 if st != steps[-1] else 0.30
+        ax1.text(
+            st,
+            val + dy,
+            f"{val:.3f}",
+            ha="center",
+            fontsize=8.5,
+            fontweight="bold",
+            color=OI_BLUE,
+        )
+    ax1.annotate(
+        f"Exact Step Parity\nmax |Δloss| = {max_diff:.2e}\nStep 10 diff = {step10_diff:.2e}",
+        xy=(6, cu_loss[5]),
+        xytext=(5.2, max(cu_loss) * 0.62),
+        arrowprops={"arrowstyle": "->", "color": OI_GREEN, "lw": 1.5},
+        fontsize=8.8,
+        fontweight="bold",
+        color="#0f172a",
+        bbox={"boxstyle": "round,pad=0.35", "fc": "#f8fafc", "ec": OI_GREEN, "lw": 1.2},
+    )
+    ax1.set_xticks(steps)
+    ax1.set_xlabel("Optimizer Step (batch=64, 32->256->16 MLP, lr=0.05)")
+    ax1.set_ylabel("Training MSE Loss")
+    ax1.set_ylim(0, max(cu_loss) * 1.18)
+    ax1.set_title("(a) 10-Step MLP Training Loss Parity (CuTile vs. PyTorch)")
+    ax1.legend(loc="upper right", fontsize=8.5)
+
+    # Panel (b): Vision & Optimizer Latency (log y-axis for readability)
+    show_ops = [r for r in perf_rows if r["op"] != "mlp_10step_train"]
+    op_labels = [r["op"].replace("_", "\n") for r in show_ops]
+    ct_ms = [float(r["cutile_p50_ms"]) for r in show_ops]
+    pt_ms = [float(r["torch_p50_ms"]) for r in show_ops]
+    speedups = [float(r["speedup"]) for r in show_ops]
+
+    x = np.arange(len(show_ops))
+    w = 0.36
+    b_ct = ax2.bar(x - w / 2, ct_ms, w, color=OI_BLUE, label="CuTile p50 (ms)")
+    b_pt = ax2.bar(x + w / 2, pt_ms, w, color=OI_ORANGE, label="PyTorch / cuDNN p50 (ms)")
+    ax2.set_yscale("log")
+    for bar, v in zip(b_ct, ct_ms, strict=True):
+        ax2.text(
+            bar.get_x() + bar.get_width() / 2.0,
+            v * 1.18,
+            f"{v:.3f}",
+            ha="center",
+            va="bottom",
+            fontsize=7.8,
+            fontweight="bold",
+            color=OI_BLUE,
+        )
+    for bar, v in zip(b_pt, pt_ms, strict=True):
+        ax2.text(
+            bar.get_x() + bar.get_width() / 2.0,
+            v * 1.18,
+            f"{v:.3f}",
+            ha="center",
+            va="bottom",
+            fontsize=7.8,
+            fontweight="bold",
+            color=OI_ORANGE,
+        )
+    for xi, c_v, p_v, sp in zip(x, ct_ms, pt_ms, speedups, strict=True):
+        top_v = max(c_v, p_v)
+        col = OI_GREEN if sp >= 1.0 else OI_GRAY
+        ax2.text(
+            xi,
+            top_v * 2.15,
+            f"{sp:.2f}×",
+            ha="center",
+            va="bottom",
+            fontsize=8.2,
+            fontweight="bold",
+            color=col,
+        )
+
+    ax2.set_xticks(x)
+    ax2.set_xticklabels(op_labels, fontsize=8.5)
+    ax2.set_ylabel("Median Kernel Latency (ms, log scale)")
+    ax2.set_ylim(0.005, max(ct_ms) * 6.5)
+    ax2.set_title("(b) Vision Ops & Multi-Tensor AdamW Latency (RTX 5090)")
+    ax2.legend(loc="upper left", fontsize=8.5)
+
+    out_path = out_dir / "fig13_training_vision_parity.png"
+    plt.savefig(out_path, bbox_inches="tight")
+    plt.close()
+    return out_path
+
+
 def main() -> None:
     _apply_pub_style()
     out_dir = Path("docs/images_5090")
@@ -694,6 +917,15 @@ def main() -> None:
         generate_real_models_v100,
     ):
         p = fn(out_dir)
+        print(f"Generated {p} ({p.stat().st_size // 1024} KB)")
+
+    fig_dir = Path("docs/figures")
+    fig_dir.mkdir(parents=True, exist_ok=True)
+    for fn in (
+        generate_fig12_general_ops_phase8,
+        generate_fig13_training_vision_parity,
+    ):
+        p = fn(fig_dir)
         print(f"Generated {p} ({p.stat().st_size // 1024} KB)")
 
 

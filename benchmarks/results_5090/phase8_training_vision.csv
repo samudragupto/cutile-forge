@@ -1,0 +1,9 @@
+op,shape,dtype,cutile_p50_ms,torch_p50_ms,speedup
+conv2d_3x3,16x64x56x56->128,float16,0.1678,0.0692,0.41
+conv2d_1x1,16x64x56x56->128,float16,0.0853,0.0253,0.3
+depthwise_conv2d,"16x64x56x56,k=3",float16,0.4394,0.0121,0.03
+max_pool2d,"16x64x56x56,k=2",float16,0.2158,0.0111,0.05
+avg_pool2d,"16x64x56x56,k=2",float16,0.2222,0.011,0.05
+patch_embed,"16x3x224x224,p=16,d=768",float16,0.5043,0.1266,0.25
+adamw_multi_tensor,6_tensors_mlp,float32,0.0567,0.0856,1.51
+mlp_10step_train,"b64,32->256->16",float32,8.4444,7.1308,0.84
