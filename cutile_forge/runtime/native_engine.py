@@ -578,8 +578,16 @@ class NativeModelRuntime:
 
             assert self._cpu_layers is not None
             prev_kv = self._cpu_kv[idx]
-            k_prev = prev_kv[0] if prev_kv is not None else None
-            v_prev = prev_kv[1] if prev_kv is not None else None
+            k_prev = (
+                prev_kv[0][:, :, :pos_offset, :]
+                if (prev_kv is not None and pos_offset > 0)
+                else None
+            )
+            v_prev = (
+                prev_kv[1][:, :, :pos_offset, :]
+                if (prev_kv is not None and pos_offset > 0)
+                else None
+            )
             xn = _pytorch_rmsnorm(x_2d, lw.input_layernorm, eps=cfg.rms_norm_eps)
             q = (
                 _quant_linear_pytorch(xn, lw.q_proj)
@@ -626,9 +634,16 @@ class NativeModelRuntime:
             self._cpu_kv[idx] = (kf, vf)
             kr = kf.repeat_interleave(cfg.gqa_ratio, dim=1)
             vr = vf.repeat_interleave(cfg.gqa_ratio, dim=1)
-            att = torch.nn.functional.scaled_dot_product_attention(
-                q, kr, vr, is_causal=(seq_len > 1)
-            )
+            s_kv = int(kf.shape[2])
+            if seq_len > 1 and s_kv > seq_len:
+                c_mask = torch.ones((seq_len, s_kv), device=q.device, dtype=torch.bool).tril(
+                    diagonal=s_kv - seq_len
+                )
+                att = torch.nn.functional.scaled_dot_product_attention(q, kr, vr, attn_mask=c_mask)
+            else:
+                att = torch.nn.functional.scaled_dot_product_attention(
+                    q, kr, vr, is_causal=(seq_len > 1)
+                )
             att_2d = att.transpose(1, 2).contiguous().view(batch_size * seq_len, cfg.hidden_size)
             op = _quant_linear_pytorch(att_2d, lw.o_proj)
             rm = (x_2d.float() + op.float()).to(torch.float16)
@@ -1183,130 +1198,33 @@ class NativeModelRuntime:
         if self.use_cuda:
             torch.cuda.synchronize()
 
-        prefill_t = torch.tensor(incoming_prefill_ids, dtype=torch.int32, device=self.device)
-        p_total = int(prefill_t.numel())
+        prefill_t = torch.tensor([incoming_prefill_ids], dtype=torch.int32, device=self.device)
+        p_total = int(prefill_t.shape[1])
         p_cursor = 0
+        prefill_cpu_kv: list[tuple[torch.Tensor, torch.Tensor] | None] = [
+            None
+        ] * self.config.num_hidden_layers
 
         def _run_prefill_slice(s_start: int, s_end: int) -> None:
-            sl = prefill_t[s_start:s_end]
-            s_len = int(sl.numel())
-            h = cutile_embedding_lookup(sl, self._embed_w).view(s_len, self.config.hidden_size)
-            for idx in range(self.config.num_hidden_layers):
-                lw = self._layer_on_device(idx)
-                pl = self._packed_layers[idx] if self._packed_layers else None
-                x_n = cutile_rmsnorm(h, lw.input_layernorm, eps=self.config.rms_norm_eps)
-                if (
-                    pl is not None
-                    and pl.qkv_packed
-                    and pl.qkv_qweight is not None
-                    and pl.qkv_scales is not None
-                    and pl.qkv_zeros is not None
-                ):
-                    qkv_in = (
-                        cutile_col_permute(x_n, pl.qkv_perm_i32)
-                        if pl.qkv_perm_i32 is not None
-                        else x_n
-                    )
-                    qkv_out = fused_gemm_dequant(
-                        qkv_in,
-                        pl.qkv_qweight,
-                        pl.qkv_scales,
-                        pl.qkv_zeros,
-                        group_size=pl.group_size,
-                    )
-                    qd = self.config.num_attention_heads * self.config.head_dim
-                    kvd = self.config.num_key_value_heads * self.config.head_dim
-                    q = (
-                        qkv_out[:, :qd]
-                        .contiguous()
-                        .view(1, s_len, self.config.num_attention_heads, self.config.head_dim)
-                        .transpose(1, 2)
-                    )
-                    k = (
-                        qkv_out[:, qd : qd + kvd]
-                        .contiguous()
-                        .view(1, s_len, self.config.num_key_value_heads, self.config.head_dim)
-                        .transpose(1, 2)
-                    )
-                    v = (
-                        qkv_out[:, qd + kvd :]
-                        .contiguous()
-                        .view(1, s_len, self.config.num_key_value_heads, self.config.head_dim)
-                        .transpose(1, 2)
-                    )
-                else:
-                    q = (
-                        _quant_linear_native(x_n, lw.q_proj)
-                        .view(1, s_len, self.config.num_attention_heads, self.config.head_dim)
-                        .transpose(1, 2)
-                    )
-                    k = (
-                        _quant_linear_native(x_n, lw.k_proj)
-                        .view(1, s_len, self.config.num_key_value_heads, self.config.head_dim)
-                        .transpose(1, 2)
-                    )
-                    v = (
-                        _quant_linear_native(x_n, lw.v_proj)
-                        .view(1, s_len, self.config.num_key_value_heads, self.config.head_dim)
-                        .transpose(1, 2)
-                    )
-                q = apply_rope(q, self._cos, self._sin, position_offset=s_start)
-                k = apply_rope(k, self._cos, self._sin, position_offset=s_start)
-                kf, vf = prefill_kv.append_and_get(idx, k, v, start_pos=s_start)
-                att = (
-                    fused_attention_gqa(q, kf, vf, causal=True)
-                    .transpose(1, 2)
-                    .contiguous()
-                    .view(s_len, self.config.hidden_size)
+            nonlocal prefill_cpu_kv
+            sl = prefill_t[:, s_start:s_end]
+            s_len = int(sl.shape[1])
+            orig_kv = self.kv_cache
+            orig_cpu_kv = self._cpu_kv
+            self.kv_cache = prefill_kv
+            self._cpu_kv = prefill_cpu_kv
+            try:
+                h = cutile_embedding_lookup(sl.reshape(s_len), self._embed_w).view(
+                    s_len, self.config.hidden_size
                 )
-                op = _quant_linear_native(att, lw.o_proj, pl.o_perm_i32 if pl else None)
-                pn, rm = fused_rmsnorm_residual(
-                    op, h, lw.post_attention_layernorm, eps=self.config.rms_norm_eps
-                )
-                if pl is not None and pl.swiglu_fused:
-                    gin = (
-                        cutile_col_permute(pn, pl.gate_perm_i32)
-                        if pl.gate_perm_i32 is not None
-                        else pn
+                for idx in range(self.config.num_hidden_layers):
+                    h = self._forward_layer_native(
+                        idx, h, pos_offset=s_start, seq_len=s_len, batch_size=1
                     )
-                    am = fused_swiglu_dequant(
-                        gin,
-                        pl.gate_proj.qweight,
-                        pl.gate_proj.scales,
-                        pl.gate_proj.zeros,
-                        pl.up_proj.qweight,
-                        pl.up_proj.scales,
-                        pl.up_proj.zeros,
-                        group_size=pl.group_size,
-                    )
-                else:
-                    gin = (
-                        cutile_col_permute(pn, lw.gate_proj.perm)
-                        if lw.gate_proj.perm is not None
-                        else pn
-                    )
-                    ga = fused_gemm_dequant_silu(
-                        gin,
-                        lw.gate_proj.qweight,
-                        lw.gate_proj.scales,
-                        lw.gate_proj.zeros,
-                        group_size=lw.gate_proj.group_size,
-                    )
-                    uv = _quant_linear_native(pn, lw.up_proj)
-                    am = cutile_ew_mul(ga, uv)
-                din = (
-                    cutile_col_permute(am, pl.down_perm_i32)
-                    if (pl and pl.down_perm_i32 is not None)
-                    else am
-                )
-                h = fused_gemm_dequant_add(
-                    din,
-                    lw.down_proj.qweight,
-                    lw.down_proj.scales,
-                    lw.down_proj.zeros,
-                    rm,
-                    group_size=lw.down_proj.group_size,
-                )
+            finally:
+                prefill_cpu_kv = self._cpu_kv
+                self.kv_cache = orig_kv
+                self._cpu_kv = orig_cpu_kv
 
         itl_ms: list[float] = []
         for step in range(decode_steps):
