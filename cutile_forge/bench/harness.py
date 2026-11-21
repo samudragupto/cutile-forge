@@ -129,3 +129,62 @@ def write_csv(path: str | Path, rows: Iterable[dict[str, Any]]) -> Path:
         writer.writeheader()
         writer.writerows(row_list)
     return out_path
+
+
+@dataclass
+class RichBenchRecord:
+    """Benchmark statistics paired with hardware efficiency and peak VRAM telemetry."""
+
+    name: str
+    stats: Stats
+    tflops: float
+    bandwidth_gb_s: float
+    peak_vram_mb: float
+    device_name: str
+
+    def to_dict(self) -> dict[str, Any]:
+        row = self.stats.to_dict()
+        row["tflops"] = self.tflops
+        row["bandwidth_gb_s"] = self.bandwidth_gb_s
+        row["peak_vram_mb"] = self.peak_vram_mb
+        row["device_name"] = self.device_name
+        return row
+
+
+def benchmark_with_telemetry(
+    fn: Callable[[], Any],
+    *,
+    flops: float = 0.0,
+    num_bytes: float = 0.0,
+    warmup: int = 5,
+    iters: int = 50,
+    name: str = "kernel",
+    use_cuda_events: bool | None = None,
+) -> RichBenchRecord:
+    """Run `benchmark` while capturing TFLOPS, bandwidth (GB/s), and peak CUDA VRAM."""
+    cuda_mode = torch.cuda.is_available() if use_cuda_events is None else use_cuda_events
+    if cuda_mode:
+        torch.cuda.reset_peak_memory_stats()
+    stats = benchmark(fn, warmup=warmup, iters=iters, name=name, use_cuda_events=cuda_mode)
+    peak_vram_mb = float(torch.cuda.max_memory_allocated() / (1024**2)) if cuda_mode else 0.0
+    device_name = torch.cuda.get_device_name(0) if cuda_mode else "cpu"
+    return RichBenchRecord(
+        name=name,
+        stats=stats,
+        tflops=stats.tflops(flops),
+        bandwidth_gb_s=stats.bandwidth_gb_s(num_bytes),
+        peak_vram_mb=peak_vram_mb,
+        device_name=device_name,
+    )
+
+
+def check_regression_gate(
+    baseline_ms: float,
+    current_ms: float,
+    max_regression_pct: float = 5.0,
+) -> tuple[bool, float]:
+    """Return `(passed, regression_pct)` checking latency slowdown vs `baseline_ms`."""
+    if baseline_ms <= 0.0:
+        return True, 0.0
+    reg_pct = ((current_ms - baseline_ms) / baseline_ms) * 100.0
+    return reg_pct <= max_regression_pct, reg_pct

@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased — Phase 8 Ecosystem Generalization
+
+- **General Kernel Optimization (RTX 5090 `sm_120`)**: Optimized 2D multi-row tiling for `reduce_sum` (`0.0672 ms -> 0.0172 ms` at `16384x1024`), `reduce_max` (`0.0570 ms -> 0.0162 ms`), L2-swizzled `bmm_kernel` (`1.87x` vs PyTorch on `16x128x2048x2048`), `cumsum` (`2.06x` on `4096x4096`), `transpose`, `activations`, and `1x1`/`3x3` `cutile_conv2d`.
+- **CuTileTune v2 (`cutile_forge.autotune`, `TileAutotuner.from_db`)**: Added input-shape fingerprinting (`shape_fingerprint`), JSON benchmark history tracking, and specialized autotuners (`tune_bmm`, `tune_reduction`, `tune_transpose`, `tune_activation`).
+- **Generalized TFG Compiler & CuTileVision v2 (`cutile_forge.forge`, `cutile_forge.vision`)**: Added `OpSpec` / `OpRegistry`, `LayoutStridePass`, `ConstantFoldPass`, `ProfitabilityPass`, `MemoryLifetimePass`, HBM lifetime/timeline telemetry, and `cutile-forge inspect` CLI.
+- **Expanded PyTorch FX/Dynamo Backend (`torch.compile(backend="cutile_forge")`)**: Added `FXOpRegistry`, `ShapeGuard`, `lowered_ops` stats, and standalone CuTile lowerings for `linear`, `addmm`, `matmul`, `layer_norm`, `gelu`, `silu`, `sum`, `amax`, `cumsum`, `conv2d`, and `embedding`.
+- **Training Ecosystem (`cutile_forge.kernels`)**: Added CuTile backward kernels for GELU, Softmax, LayerNorm, Linear, and BMM alongside autograd wrappers (`CuTileLinearFn`, `CuTileGELUFn`, `CuTileLayerNormFn`), `cutile_grad_clip_norm`, `cutile_multi_tensor_adamw`, and end-to-end MLP convergence parity tests.
+- **Runtime Pool Reuse & Vision Primitives (`cutile_forge.runtime`, `cutile_forge.kernels.vision`)**: Added `MemoryLifetimeAllocator`, adaptive `TensorStreamer` slot sizing, `p2p_capable`, `cutile_depthwise_conv2d`, `cutile_conv2d_backward`, `cutile_max_pool2d`, `cutile_avg_pool2d`, and `CuTilePatchEmbed`.
+- **CuTileBench v2 & Distributed Prototype (`cutile_forge.bench`, `cutile_forge.distributed`)**: Added `RichBenchRecord`, `benchmark_with_telemetry`, `check_regression_gate`, `detect_topology`, `p2p_copy`, and `ring_allreduce_sum`.
+
 ## v1.0.0 (2026-11-19)
 
 - **PyTorch Dynamo / FX Backend (`cutile_forge.forge.fx_backend`)**: Registered `torch.compile(backend="cutile_forge")` on package import, pattern-matching `linear+silu+linear`, `add+layer_norm`, and `scaled_dot_product_attention` through TFG fusion rules to fused CuTile kernels.
