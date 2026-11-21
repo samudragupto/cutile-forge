@@ -114,6 +114,29 @@ class TileAutotuner:
         self.smem_limit_bytes = resolved_smem if smem_limit_bytes is None else smem_limit_bytes
         self._cache: dict[tuple[int, int, int, bool], TileConfig] = {}
 
+    @classmethod
+    def from_db(cls, db: object, target: str = "sm_89") -> TileAutotuner:
+        """Construct a `TileAutotuner` pre-seeded from a `TuningDatabase`."""
+        tuner = cls(target=target)
+        all_recs_fn = getattr(db, "all_records", None)
+        if callable(all_recs_fn):
+            for rec in all_recs_fn():
+                if (
+                    getattr(rec, "op", None) == "gemm"
+                    and getattr(rec, "arch", None) == tuner.target
+                ):
+                    sh = tuple(getattr(rec, "shape", ()))
+                    tsh = tuple(getattr(rec, "tile_shape", ()))
+                    if len(sh) == 3 and len(tsh) == 3:
+                        tuner._cache[(int(sh[0]), int(sh[1]), int(sh[2]), False)] = TileConfig(
+                            tm=int(tsh[0]),
+                            tn=int(tsh[1]),
+                            tk=int(tsh[2]),
+                            occupancy=int(getattr(rec, "occupancy", 2)),
+                            pipeline_stages=int(getattr(rec, "pipeline_stages", 3)),
+                        )
+        return tuner
+
     def valid_configs(self, quantized: bool = False) -> list[TileConfig]:
         """Return candidate configs that fit within target shared-memory budget."""
         return [

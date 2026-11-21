@@ -1,11 +1,19 @@
-"""Persistent JSON tuning database and regression detector for CuTileTune."""
+"""Persistent JSON tuning database, shape fingerprinting & regression detector for CuTileTune v2."""
 
 from __future__ import annotations
 
+import hashlib
 import json
+import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
+
+
+def shape_fingerprint(op: str, arch: str, shape: tuple[int, ...], dtype: str) -> str:
+    """Return a deterministic short fingerprint for a `(op, arch, shape, dtype)` workload."""
+    raw = f"{op}:{arch}:{'x'.join(str(d) for d in shape)}:{dtype}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
 
 
 @dataclass(frozen=True)
@@ -21,6 +29,13 @@ class TuningRecord:
     pipeline_stages: int
     latency_ms: float
     verified: bool = True
+    fingerprint: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.fingerprint:
+            object.__setattr__(
+                self, "fingerprint", shape_fingerprint(self.op, self.arch, self.shape, self.dtype)
+            )
 
 
 def _record_key(op: str, arch: str, shape: tuple[int, ...], dtype: str) -> str:
@@ -29,7 +44,7 @@ def _record_key(op: str, arch: str, shape: tuple[int, ...], dtype: str) -> str:
 
 
 class TuningDatabase:
-    """JSON-backed persistent database for tuned CuTile kernel configurations."""
+    """JSON-backed persistent database for tuned CuTile kernel configurations & history."""
 
     def __init__(self, path: Path | str | None = None) -> None:
         self.path = (
@@ -38,6 +53,7 @@ class TuningDatabase:
             else Path.home() / ".cache" / "cutile_forge" / "autotune.json"
         )
         self._records: dict[str, TuningRecord] = {}
+        self.benchmark_history: list[dict[str, Any]] = []
         self._load()
 
     def _load(self) -> None:
@@ -47,7 +63,16 @@ class TuningDatabase:
             raw: dict[str, Any] = json.loads(self.path.read_text(encoding="utf-8"))
         except Exception:
             return
-        for key, item in raw.items():
+
+        if "records" in raw and isinstance(raw["records"], dict):
+            rec_map: dict[str, Any] = raw["records"]
+            hist = raw.get("history", [])
+            if isinstance(hist, list):
+                self.benchmark_history = list(hist)
+        else:
+            rec_map = raw
+
+        for key, item in rec_map.items():
             self._records[key] = TuningRecord(
                 op=str(item["op"]),
                 arch=str(item["arch"]),
@@ -62,11 +87,15 @@ class TuningDatabase:
                 pipeline_stages=int(item["pipeline_stages"]),
                 latency_ms=float(item["latency_ms"]),
                 verified=bool(item.get("verified", True)),
+                fingerprint=str(item.get("fingerprint", "")),
             )
 
     def _flush(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {k: asdict(v) for k, v in self._records.items()}
+        payload = {
+            "records": {k: asdict(v) for k, v in self._records.items()},
+            "history": self.benchmark_history,
+        }
         self.path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
     def lookup(
@@ -80,9 +109,19 @@ class TuningDatabase:
         return self._records.get(_record_key(op, arch, shape, dtype))
 
     def save(self, record: TuningRecord) -> None:
-        """Persist `record` to memory and disk."""
+        """Persist `record` to memory and disk, appending an entry to `benchmark_history`."""
         key = _record_key(record.op, record.arch, record.shape, record.dtype)
         self._records[key] = record
+        self.benchmark_history.append(
+            {
+                "timestamp": round(time.time(), 3),
+                "fingerprint": record.fingerprint,
+                "key": key,
+                "tile_shape": list(record.tile_shape),
+                "latency_ms": record.latency_ms,
+                "verified": record.verified,
+            }
+        )
         self._flush()
 
     def detect_regression(
@@ -106,5 +145,6 @@ class TuningDatabase:
 
     def clear(self) -> None:
         self._records.clear()
+        self.benchmark_history.clear()
         if self.path.exists():
             self.path.unlink()
