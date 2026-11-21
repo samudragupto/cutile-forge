@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.7.0 (2026-11-21) — Phase 12: Distributed GPU Runtime (TP, PP, EP, Distributed KV-Cache & Scheduler)
+
+- **Multi-Node Communication Layer (`cutile_forge.distributed.runtime`)**: Added `CommTransport` protocol and `LoopbackCommTransport` supporting `all_reduce_sum`, `all_gather`, `reduce_scatter_sum`, `all_to_all`, and `send_recv` with byte-transfer telemetry across logical ranks and nodes.
+- **Tensor, Pipeline & Expert Parallelism (`ColumnParallelLinear`, `RowParallelLinear`, `TensorParallelSwiGLUMLP`, `TensorParallelGQAAttention`, `PipelineParallelEngine`, `ExpertParallelMoE`)**: Implemented Megatron-style column/row TP, GPipe/1F1B micro-batch PP, and all-to-all token dispatch/combine EP, verified against single-device execution (`max_abs_diff == 0.0` for PP=4 and EP=4; `< 5e-3` for TP=2/4).
+- **Distributed KV-Cache & Topology Scheduler (`DistributedPagedKVCache`, `DistributedScheduler`)**: Added 2D `(PP × TP)` KV-head/layer cache partitioning and greedy min-load `(DP × PP × TP)` request scheduling, with all 1-GPU benchmark metrics explicitly labeled `simulated` in `benchmarks/results_5090/phase12_distributed_simulated.csv`.
+
 ## v2.6.0 (2026-11-21) — Phase 11: Architecture Completeness (Llama, Qwen2.5, Mistral, MoE, Vision, Audio, LLaVA, Diffusion)
 
 - **Expanded Architecture Registry & Unified IR (`cutile_forge.models`)**: Added `AudioConvEmbedStage` (Whisper 2-layer Conv1d stem + sinusoidal positional embeddings), `DiffusionPatchEmbedStage` (latent patchify + sinusoidal timestep MLP), `DiTBlock` (AdaLN-Zero `shift/scale/gate` modulation), `EncoderOutputStage`, `DiffusionOutputStage` (AdaLN + patch unpatchify), and `ep_partitions` single-GPU expert-parallel partitioning in `SparseMoEBlock`.
