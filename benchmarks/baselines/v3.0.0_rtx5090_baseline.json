@@ -1,0 +1,42 @@
+{
+  "baseline_version": "3.0.0",
+  "hardware_profile": "rtx5090_sm120",
+  "source_commit": "3488ebb2b5160c70b9ef1b1e49c11ce001165123",
+  "tolerances": {
+    "kernel_latency_max_regression_pct": 10.0,
+    "decode_throughput_max_drop_pct": 5.0,
+    "ttft_itl_max_regression_pct": 10.0,
+    "memory_max_growth_pct": 10.0,
+    "ppl_rel_diff_max_pct": 0.5,
+    "max_server_5xx_error_rate_pct": 0.0
+  },
+  "metrics": {
+    "native_single_stream_tok_s": 172.581,
+    "native_ttft_p50_ms": 6.114,
+    "native_itl_p50_ms": 5.787,
+    "native_itl_p90_ms": 6.084,
+    "native_itl_p99_ms": 6.207,
+    "native_peak_vram_mb": 8565.7,
+    "native_host_rss_mb": 5394.5,
+    "concurrency_1_tok_s": 172.332,
+    "concurrency_4_tok_s": 617.814,
+    "concurrency_16_tok_s": 2337.904,
+    "concurrency_64_tok_s": 2377.111,
+    "synth_attn_8k_fp16_ms": 1.327,
+    "synth_attn_16k_fp16_ms": 2.133,
+    "synth_attn_32k_fp16_ms": 3.861,
+    "synth_attn_8k_fp8_ms": 1.858,
+    "synth_attn_16k_fp8_ms": 3.767,
+    "synth_attn_32k_fp8_ms": 7.595
+  },
+  "kernel_baselines_ms": {
+    "patch_embed": 0.0316,
+    "conv2d_1x1": 0.0172,
+    "fused_rmsnorm_silu": 0.0155,
+    "fused_add_rmsnorm_silu": 0.0193,
+    "conv2d_3x3": 0.1368,
+    "depthwise_conv2d": 0.0315,
+    "gemm_medium_m64": 0.0674,
+    "gemm_large_m1024": 0.2282
+  }
+}

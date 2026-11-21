@@ -1,0 +1,24 @@
+name: Validation Schema & Reports
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  cpu-validation-suite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e ".[dev,serve]"
+      - name: CPU-safe schema, reliability, report-generation & regression tests
+        env:
+          CUDA_VISIBLE_DEVICES: ""
+        run: |
+          pytest tests/test_phase14_validation_schema.py \
+                 tests/test_phase14_reliability.py \
+                 -v --tb=short --timeout=120

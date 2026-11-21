@@ -1,0 +1,61 @@
+name: Production GPU Validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      hardware_profile:
+        description: "Target hardware profile (rtx5090 | laptop4060)"
+        required: true
+        default: "rtx5090"
+      model_root:
+        description: "Path to local GPTQ checkpoint directory"
+        required: true
+        default: "/home/arrhat/models/mistral_7b_4bit"
+      duration_seconds:
+        description: "Serving soak duration in seconds"
+        required: true
+        default: "900"
+      benchmark_set:
+        description: "quick | full"
+        required: true
+        default: "full"
+  schedule:
+    - cron: "0 6 * * 0"
+
+jobs:
+  gpu-production-validation:
+    runs-on: [self-hosted, gpu]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify real CUDA GPU is present (never pass vacuously)
+        run: |
+          nvidia-smi -L
+          python3 -c "import torch; assert torch.cuda.is_available(), 'CUDA GPU unavailable'"
+      - name: Install CuTileForge with CUDA + Serving extras
+        run: pip install -e ".[cuda,dev,serve]"
+      - name: Execute Production Validation Suite
+        env:
+          HF_HOME: "/var/tmp/arrhat_models/hf_cache"
+          PYTHONPATH: "."
+        run: |
+          python3 benchmarks/production/run_release_validation.py \
+            --profile "${{ github.event.inputs.hardware_profile || 'rtx5090' }}" \
+            --model-dir "${{ github.event.inputs.model_root || '/home/arrhat/models/mistral_7b_4bit' }}" \
+            --soak-seconds "${{ github.event.inputs.duration_seconds || '900' }}" \
+            --bench-set "${{ github.event.inputs.benchmark_set || 'full' }}"
+      - name: Compare against immutable baseline
+        run: |
+          python3 benchmarks/production/compare_with_baseline.py \
+            --summary benchmarks/validation_artifacts/v3.1.0/validation_summary.json \
+            --baseline benchmarks/baselines/v3.0.0_rtx5090_baseline.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: production-validation-artifacts
+          path: |
+            benchmarks/validation_artifacts/v3.1.0/
+            docs/*REPORT*.md
+            docs/HARDWARE_SUPPORT_MATRIX.md
+            docs/MODEL_COMPATIBILITY.md
+            docs/EXTERNAL_ENGINE_COMPARISON.md
+            docs/REPRODUCIBILITY.md
+            docs/figures/validation_v310/
