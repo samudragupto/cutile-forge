@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.6.0 (2026-11-21) — Phase 11: Architecture Completeness (Llama, Qwen2.5, Mistral, MoE, Vision, Audio, LLaVA, Diffusion)
+
+- **Expanded Architecture Registry & Unified IR (`cutile_forge.models`)**: Added `AudioConvEmbedStage` (Whisper 2-layer Conv1d stem + sinusoidal positional embeddings), `DiffusionPatchEmbedStage` (latent patchify + sinusoidal timestep MLP), `DiTBlock` (AdaLN-Zero `shift/scale/gate` modulation), `EncoderOutputStage`, `DiffusionOutputStage` (AdaLN + patch unpatchify), and `ep_partitions` single-GPU expert-parallel partitioning in `SparseMoEBlock`.
+- **HuggingFace Checkpoint Weight Extractors (`checkpoint_loader.py`)**: Added `extract_hf_decoder_weights` (supporting Llama, Mistral, Qwen2/2.5 with QKV biases, and Mixtral 3D `MixtralExperts`), `extract_hf_siglip_vision_weights`, and `extract_hf_whisper_encoder_weights`, plus half-split vs interleaved RoPE selection (`rotary_style="half"`).
+- **Real-Checkpoint & Synthetic Parity Verification (`benchmarks/results_5090/phase11_architecture_parity.csv`)**: Verified real-checkpoint parity (`cos >= 0.99996`) on `Mistral-7B-v0.1-GPTQ`, `Llama-2-70B-GPTQ`, `Mixtral-8x7B-GPTQ`, `Qwen/Qwen2.5-0.5B` (24L), `google/siglip-base-patch16-224` (12L), and `openai/whisper-tiny` (4L encoder), plus synthetic parity and bit-exact `EP=1 == EP=4` invariance across `Llama-3.1`, `DeepSeek-MoE`, `Qwen2-MoE`, `ViT-B/16`, `CLIP-ViT-L/14`, `LLaVA-1.5`, and `DiT-S/2`.
+
 ## v2.5.0 (2026-11-21) — Phase 10: Universal Quantization Engine
 
 - **Native Multi-Format CuTile Kernels (`cutile_forge.kernels.universal_quant`)**: Implemented dedicated CuTile Tensor Core dequantization + GEMM kernels without load-time format conversion for:

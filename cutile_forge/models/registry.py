@@ -6,9 +6,14 @@ from dataclasses import dataclass
 from typing import Any
 
 from cutile_forge.models.model_graph import (
+    AudioConvEmbedStage,
     BlockStage,
     ClassifierHeadStage,
     DenseTransformerBlock,
+    DiffusionOutputStage,
+    DiffusionPatchEmbedStage,
+    DiTBlock,
+    EncoderOutputStage,
     LMHeadStage,
     Modality,
     MultimodalFusionStage,
@@ -262,6 +267,40 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
             "vision_num_heads": 16,
         },
     ),
+    "whisper_encoder": ModelSpec(
+        key="whisper_encoder",
+        display_name="Whisper Audio Encoder (2x Conv1d Stem + Bidirectional Transformer)",
+        family="whisper_encoder",
+        modality="audio",
+        hf_model_types=("whisper",),
+        default_config={
+            "num_mel_bins": 80,
+            "max_source_positions": 1500,
+            "hidden_size": 384,
+            "intermediate_size": 1536,
+            "num_hidden_layers": 4,
+            "num_attention_heads": 6,
+            "layer_norm_eps": 1e-5,
+        },
+    ),
+    "dit": ModelSpec(
+        key="dit",
+        display_name="Diffusion Transformer (DiT with AdaLN-Zero Conditioning)",
+        family="dit",
+        modality="diffusion",
+        hf_model_types=("dit", "transformer2d"),
+        default_config={
+            "image_size": 32,
+            "patch_size": 2,
+            "in_channels": 4,
+            "out_channels": 4,
+            "hidden_size": 384,
+            "intermediate_size": 1536,
+            "num_hidden_layers": 12,
+            "num_attention_heads": 6,
+            "layer_norm_eps": 1e-6,
+        },
+    ),
 }
 
 
@@ -313,12 +352,15 @@ def from_hf_config(config: dict[str, Any], name: str | None = None) -> UnifiedMo
         n_layers = int(merged["num_hidden_layers"])
         eps = float(merged.get("layer_norm_eps", 1e-6))
         use_cls = bool(merged.get("use_cls_token", key != "siglip_vision"))
+        pre_ln = bool(merged.get("pre_layer_norm", key == "clip_vision"))
         input_stage = VisionPatchEmbedStage(
             hidden_size=d,
             image_size=int(merged.get("image_size", 224)),
             patch_size=int(merged.get("patch_size", 16)),
             in_channels=int(merged.get("in_channels", 3)),
             use_cls_token=use_cls,
+            pre_layer_norm=pre_ln,
+            layer_norm_eps=eps,
         )
         blocks: list[BlockStage] = [
             ViTEncoderBlock(
@@ -343,6 +385,81 @@ def from_hf_config(config: dict[str, Any], name: str | None = None) -> UnifiedMo
             input_stage=input_stage,
             blocks=blocks,
             output_stage=out_stage,
+            metadata={"hf_config": config},
+        )
+
+    if spec.modality == "audio":
+        d = int(merged.get("d_model", merged["hidden_size"]))
+        n_heads = int(merged.get("encoder_attention_heads", merged["num_attention_heads"]))
+        head_dim = int(merged.get("head_dim", d // n_heads))
+        mlp_dim = int(merged.get("encoder_ffn_dim", merged.get("intermediate_size", 4 * d)))
+        n_layers = int(merged.get("encoder_layers", merged["num_hidden_layers"]))
+        eps = float(merged.get("layer_norm_eps", 1e-5))
+        aud_in = AudioConvEmbedStage(
+            hidden_size=d,
+            num_mel_bins=int(merged.get("num_mel_bins", 80)),
+            max_source_positions=int(merged.get("max_source_positions", 1500)),
+        )
+        aud_blocks: list[BlockStage] = [
+            ViTEncoderBlock(
+                hidden_size=d,
+                mlp_dim=mlp_dim,
+                num_attention_heads=n_heads,
+                head_dim=head_dim,
+                layer_norm_eps=eps,
+            )
+            for _ in range(n_layers)
+        ]
+        return UnifiedModelGraph(
+            name=str(merged.get("_name_or_path", key)),
+            family=spec.family,
+            modality="audio",
+            input_stage=aud_in,
+            blocks=aud_blocks,
+            output_stage=EncoderOutputStage(hidden_size=d, layer_norm_eps=eps),
+            metadata={"hf_config": config},
+        )
+
+    if spec.modality == "diffusion":
+        d = int(merged["hidden_size"])
+        n_heads = int(merged["num_attention_heads"])
+        head_dim = int(merged.get("head_dim", d // n_heads))
+        mlp_dim = int(merged.get("intermediate_size", 4 * d))
+        n_layers = int(merged["num_hidden_layers"])
+        eps = float(merged.get("layer_norm_eps", 1e-6))
+        img_sz = int(merged.get("image_size", 32))
+        patch_sz = int(merged.get("patch_size", 2))
+        in_ch = int(merged.get("in_channels", 4))
+        out_ch = int(merged.get("out_channels", in_ch))
+        dif_in = DiffusionPatchEmbedStage(
+            hidden_size=d,
+            image_size=img_sz,
+            patch_size=patch_sz,
+            in_channels=in_ch,
+        )
+        dif_blocks: list[BlockStage] = [
+            DiTBlock(
+                hidden_size=d,
+                mlp_dim=mlp_dim,
+                num_attention_heads=n_heads,
+                head_dim=head_dim,
+                layer_norm_eps=eps,
+            )
+            for _ in range(n_layers)
+        ]
+        return UnifiedModelGraph(
+            name=str(merged.get("_name_or_path", key)),
+            family=spec.family,
+            modality="diffusion",
+            input_stage=dif_in,
+            blocks=dif_blocks,
+            output_stage=DiffusionOutputStage(
+                hidden_size=d,
+                image_size=img_sz,
+                patch_size=patch_sz,
+                out_channels=out_ch,
+                layer_norm_eps=eps,
+            ),
             metadata={"hf_config": config},
         )
 
@@ -411,7 +528,7 @@ def from_hf_config(config: dict[str, Any], name: str | None = None) -> UnifiedMo
     d = int(merged["hidden_size"])
     n_heads = int(merged["num_attention_heads"])
     n_kv = int(merged.get("num_key_value_heads", n_heads))
-    head_dim = int(merged.get("head_dim", d // n_heads))
+    head_dim = int(config.get("head_dim") or (d // n_heads))
     vocab_size = int(merged["vocab_size"])
     eps = float(merged.get("rms_norm_eps", 1e-5))
     n_layers = int(merged["num_hidden_layers"])
@@ -433,6 +550,7 @@ def from_hf_config(config: dict[str, Any], name: str | None = None) -> UnifiedMo
                     shared_expert_intermediate_size=int(
                         merged.get("shared_expert_intermediate_size", 0)
                     ),
+                    ep_partitions=int(merged.get("ep_partitions", 1)),
                     rms_norm_eps=eps,
                     rope_theta=float(merged.get("rope_theta", 10000.0)),
                     rope_scaling=merged.get("rope_scaling"),

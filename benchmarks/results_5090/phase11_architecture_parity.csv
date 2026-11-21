@@ -1,0 +1,14 @@
+architecture,family,modality,compatibility_status,weight_source,checkpoint_id,layers_evaluated,max_abs_diff_vs_ref,cosine_similarity,median_latency_ms,min_latency_ms,max_latency_ms,gpu_contended,gpu_compute_apps,notes
+Mistral-7B-v0.1,mistral,text,real-checkpoint parity,real-checkpoint,/home/arrhat/models/mistral_7b_4bit,4,9.519935e-03,0.999999,2.181,2.170,2.310,False,none,"Sliding-window GQA 32:8, 4-bit GPTQ"
+Llama-2-70B,llama,text,real-checkpoint parity,real-checkpoint,/var/tmp/arrhat_models/llama_70b_4bit,2,7.269502e-03,1.000000,3.659,3.652,3.709,False,none,"GQA 64:8, d=8192, ffn=28672, 4-bit GPTQ"
+Mixtral-8x7B-MoE,mixtral,text,real-checkpoint parity,real-checkpoint,/var/tmp/arrhat_models/mixtral_8x7b_4bit,2,1.562500e-02,1.000000,3.489,3.469,3.529,False,none,"8 experts, top-2 sparse routing, 4-bit GPTQ (PPL 7.48 full 32L)"
+Qwen2.5-0.5B,qwen2,text,real-checkpoint parity,real-checkpoint,Qwen/Qwen2.5-0.5B,24,1.689005e-01,0.999992,12.407,12.356,12.689,False,none,Full 24-layer Qwen2.5 with QKV bias & theta=1e6 vs HF transformers
+SigLIP-ViT-B/16,siglip_vision,vision,real-checkpoint parity,real-checkpoint,google/siglip-base-patch16-224,12,2.288847e-01,0.999986,2.083,2.077,2.087,False,none,Full 12-layer 224x224 SigLIP ViT vs HF SiglipVisionModel
+Whisper-Tiny-Encoder,whisper_encoder,audio,real-checkpoint parity,real-checkpoint,openai/whisper-tiny,4,7.445059e-01,0.999963,1.574,1.567,1.584,False,none,Full 4-layer Whisper-tiny audio encoder (80x3000 mel -> 1500x384) vs HF WhisperModel
+Llama-3.1-ScaledRoPE,llama3,text,synthetic-only,synthetic-weights,synthetic:llama3,4,6.713867e-03,0.999999,3.471,3.460,3.855,False,none,Llama-3 piecewise RoPE scaling (theta=500K)
+DeepSeek-MoE-Shared+EP4,deepseek_moe,text,synthetic-only,synthetic-weights,synthetic:deepseek_moe,4,6.347656e-03,0.999999,12.280,12.243,12.327,False,none,16 routed experts (top-4) + shared expert + 4-way single-GPU EP
+Qwen2-MoE-Shared+Bias,qwen2_moe,text,synthetic-only,synthetic-weights,synthetic:qwen2_moe,4,7.812500e-03,0.999999,7.807,7.582,8.293,False,none,QKV bias + shared expert + fine-grained routed experts
+ViT-B/16,vit,vision,synthetic-only,synthetic-weights,synthetic:vit,4,4.394531e-03,0.999999,0.728,0.726,0.732,False,none,Vision Transformer with CLS token & 14x14 patch grid
+CLIP-ViT-L/14,clip_vision,vision,synthetic-only,synthetic-weights,synthetic:clip_vision,4,3.906250e-03,1.000000,0.874,0.871,0.905,False,none,CLIP vision encoder with pre-LayerNorm & CLS pooling
+LLaVA-1.5-Multimodal,llava,multimodal,synthetic-only,synthetic-weights,synthetic:llava,4,8.789062e-03,0.999999,2.188,2.180,2.234,False,none,ViT encoder -> 2-layer GELU MLP projector -> unified LLM prefill
+DiT-S/2-Diffusion,dit,diffusion,synthetic-only,synthetic-weights,synthetic:dit,6,9.765625e-04,0.999999,1.508,1.504,1.530,False,none,Diffusion Transformer with AdaLN-Zero timestep conditioning & unpatchify

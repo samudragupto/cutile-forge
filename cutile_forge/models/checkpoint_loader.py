@@ -617,3 +617,251 @@ def load_unified_checkpoint(
                 unpacked[key] = t.to(target_dev)
 
     return UnifiedCheckpoint(inspection=insp, graph=graph, placement=placement, tensors=unpacked)
+
+
+def extract_hf_decoder_weights(
+    hf_model: Any,
+    num_layers: int | None = None,
+    device: torch.device | str = "cuda",
+    dtype: torch.dtype = torch.float16,
+) -> tuple[UnifiedModelGraph, dict[str, Any]]:
+    """Convert an instantiated HuggingFace `AutoModelForCausalLM` (Llama/Mistral/Qwen2/Mixtral) into `(graph, weights)`."""
+    dev = torch.device(device if (str(device) != "cuda" or torch.cuda.is_available()) else "cpu")
+    dt = dtype if dev.type == "cuda" else torch.float32
+    cfg_dict = hf_model.config.to_dict()
+    if num_layers is not None:
+        cfg_dict["num_hidden_layers"] = num_layers
+    graph = from_hf_config(cfg_dict)
+    graph.metadata["rotary_style"] = "half"
+
+    base = getattr(hf_model, "model", hf_model)
+    weights: dict[str, Any] = {
+        "embed_tokens": base.embed_tokens.weight.detach().to(device=dev, dtype=dt).contiguous(),
+        "norm_w": base.norm.weight.detach().to(device=dev, dtype=dt).contiguous(),
+        "lm_head": hf_model.lm_head.weight.detach().t().to(device=dev, dtype=dt).contiguous(),
+        "blocks": [],
+    }
+    n_l = num_layers if num_layers is not None else len(base.layers)
+    for idx in range(n_l):
+        lyr = base.layers[idx]
+        attn = lyr.self_attn
+        bw: dict[str, Any] = {
+            "in_norm_w": lyr.input_layernorm.weight.detach().to(device=dev, dtype=dt).contiguous(),
+            "post_norm_w": lyr.post_attention_layernorm.weight.detach()
+            .to(device=dev, dtype=dt)
+            .contiguous(),
+            "wq": attn.q_proj.weight.detach().t().to(device=dev, dtype=dt).contiguous(),
+            "wk": attn.k_proj.weight.detach().t().to(device=dev, dtype=dt).contiguous(),
+            "wv": attn.v_proj.weight.detach().t().to(device=dev, dtype=dt).contiguous(),
+            "wo": attn.o_proj.weight.detach().t().to(device=dev, dtype=dt).contiguous(),
+        }
+        if getattr(attn.q_proj, "bias", None) is not None:
+            bw["bq"] = attn.q_proj.bias.detach().to(device=dev, dtype=dt).contiguous()
+            bw["bk"] = attn.k_proj.bias.detach().to(device=dev, dtype=dt).contiguous()
+            bw["bv"] = attn.v_proj.bias.detach().to(device=dev, dtype=dt).contiguous()
+
+        moe_mod = getattr(lyr, "block_sparse_moe", None)
+        if moe_mod is None and hasattr(getattr(lyr, "mlp", None), "experts"):
+            moe_mod = lyr.mlp
+        if moe_mod is not None:
+            bw["router"] = moe_mod.gate.weight.detach().t().to(device=dev, dtype=dt).contiguous()
+            exps = moe_mod.experts
+            if hasattr(exps, "gate_up_proj") and hasattr(exps, "down_proj"):
+                gu_all = exps.gate_up_proj.detach()
+                dn_all = exps.down_proj.detach()
+                n_exp = gu_all.shape[0]
+                inter_sz = gu_all.shape[1] // 2
+                bw["experts"] = [
+                    {
+                        "w_gate": gu_all[e, :inter_sz, :].t().to(device=dev, dtype=dt).contiguous(),
+                        "w_up": gu_all[e, inter_sz:, :].t().to(device=dev, dtype=dt).contiguous(),
+                        "w_down": dn_all[e].t().to(device=dev, dtype=dt).contiguous(),
+                    }
+                    for e in range(n_exp)
+                ]
+            else:
+                bw["experts"] = [
+                    {
+                        "w_gate": (exp.w1 if hasattr(exp, "w1") else exp.gate_proj)
+                        .weight.detach()
+                        .t()
+                        .to(device=dev, dtype=dt)
+                        .contiguous(),
+                        "w_up": (exp.w3 if hasattr(exp, "w3") else exp.up_proj)
+                        .weight.detach()
+                        .t()
+                        .to(device=dev, dtype=dt)
+                        .contiguous(),
+                        "w_down": (exp.w2 if hasattr(exp, "w2") else exp.down_proj)
+                        .weight.detach()
+                        .t()
+                        .to(device=dev, dtype=dt)
+                        .contiguous(),
+                    }
+                    for exp in exps
+                ]
+        else:
+            mlp = lyr.mlp
+            bw["w_gate"] = mlp.gate_proj.weight.detach().t().to(device=dev, dtype=dt).contiguous()
+            bw["w_up"] = mlp.up_proj.weight.detach().t().to(device=dev, dtype=dt).contiguous()
+            bw["w_down"] = mlp.down_proj.weight.detach().t().to(device=dev, dtype=dt).contiguous()
+        weights["blocks"].append(bw)
+    return graph, weights
+
+
+def extract_hf_siglip_vision_weights(
+    hf_vision: Any,
+    device: torch.device | str = "cuda",
+    dtype: torch.dtype = torch.float16,
+) -> tuple[UnifiedModelGraph, dict[str, Any]]:
+    """Convert a HuggingFace `SiglipVisionModel` into `(UnifiedModelGraph, weights)`."""
+    dev = torch.device(device if (str(device) != "cuda" or torch.cuda.is_available()) else "cpu")
+    dt = dtype if dev.type == "cuda" else torch.float32
+    vm = getattr(hf_vision, "vision_model", hf_vision)
+    cfg = vm.config
+    d = int(cfg.hidden_size)
+    cfg_dict = {
+        "model_type": "siglip_vision_model",
+        "image_size": int(cfg.image_size),
+        "patch_size": int(cfg.patch_size),
+        "in_channels": int(getattr(cfg, "num_channels", 3)),
+        "hidden_size": d,
+        "intermediate_size": int(cfg.intermediate_size),
+        "num_hidden_layers": int(cfg.num_hidden_layers),
+        "num_attention_heads": int(cfg.num_attention_heads),
+        "num_labels": d,
+        "layer_norm_eps": float(cfg.layer_norm_eps),
+        "use_cls_token": False,
+    }
+    graph = from_hf_config(cfg_dict, name="siglip_vision")
+    from cutile_forge.models.model_graph import EncoderOutputStage
+
+    graph.output_stage = EncoderOutputStage(hidden_size=d, layer_norm_eps=float(cfg.layer_norm_eps))
+
+    emb = vm.embeddings
+    pos_w = emb.position_embedding.weight.detach().to(device=dev, dtype=dt).unsqueeze(0)
+    weights: dict[str, Any] = {
+        "vision_embed": {
+            "patch_w": emb.patch_embedding.weight.detach().to(device=dev, dtype=dt).contiguous(),
+            "patch_b": emb.patch_embedding.bias.detach().to(device=dev, dtype=dt).contiguous(),
+            "pos_embed": pos_w.contiguous(),
+        },
+        "blocks": [],
+        "norm_w": vm.post_layernorm.weight.detach().to(device=dev, dtype=dt).contiguous(),
+        "norm_b": vm.post_layernorm.bias.detach().to(device=dev, dtype=dt).contiguous(),
+    }
+    for lyr in vm.encoder.layers:
+        attn = lyr.self_attn
+        wqkv = torch.cat(
+            [
+                attn.q_proj.weight.detach().t(),
+                attn.k_proj.weight.detach().t(),
+                attn.v_proj.weight.detach().t(),
+            ],
+            dim=1,
+        )
+        bqkv = torch.cat(
+            [
+                attn.q_proj.bias.detach(),
+                attn.k_proj.bias.detach(),
+                attn.v_proj.bias.detach(),
+            ],
+            dim=0,
+        )
+        weights["blocks"].append(
+            {
+                "ln1_w": lyr.layer_norm1.weight.detach().to(device=dev, dtype=dt).contiguous(),
+                "ln1_b": lyr.layer_norm1.bias.detach().to(device=dev, dtype=dt).contiguous(),
+                "ln2_w": lyr.layer_norm2.weight.detach().to(device=dev, dtype=dt).contiguous(),
+                "ln2_b": lyr.layer_norm2.bias.detach().to(device=dev, dtype=dt).contiguous(),
+                "wqkv": wqkv.to(device=dev, dtype=dt).contiguous(),
+                "bqkv": bqkv.to(device=dev, dtype=dt).contiguous(),
+                "wo": attn.out_proj.weight.detach().t().to(device=dev, dtype=dt).contiguous(),
+                "bo": attn.out_proj.bias.detach().to(device=dev, dtype=dt).contiguous(),
+                "fc1_w": lyr.mlp.fc1.weight.detach().t().to(device=dev, dtype=dt).contiguous(),
+                "fc1_b": lyr.mlp.fc1.bias.detach().to(device=dev, dtype=dt).contiguous(),
+                "fc2_w": lyr.mlp.fc2.weight.detach().t().to(device=dev, dtype=dt).contiguous(),
+                "fc2_b": lyr.mlp.fc2.bias.detach().to(device=dev, dtype=dt).contiguous(),
+            }
+        )
+    return graph, weights
+
+
+def extract_hf_whisper_encoder_weights(
+    hf_whisper: Any,
+    device: torch.device | str = "cuda",
+    dtype: torch.dtype = torch.float16,
+) -> tuple[UnifiedModelGraph, dict[str, Any]]:
+    """Convert a HuggingFace `WhisperModel` encoder into `(UnifiedModelGraph, weights)`."""
+    dev = torch.device(device if (str(device) != "cuda" or torch.cuda.is_available()) else "cpu")
+    dt = dtype if dev.type == "cuda" else torch.float32
+    enc = getattr(hf_whisper, "encoder", hf_whisper)
+    cfg = hf_whisper.config
+    d = int(cfg.d_model)
+    cfg_dict = {
+        "model_type": "whisper",
+        "num_mel_bins": int(cfg.num_mel_bins),
+        "max_source_positions": int(cfg.max_source_positions),
+        "hidden_size": d,
+        "intermediate_size": int(cfg.encoder_ffn_dim),
+        "num_hidden_layers": int(cfg.encoder_layers),
+        "num_attention_heads": int(cfg.encoder_attention_heads),
+        "layer_norm_eps": 1e-5,
+    }
+    graph = from_hf_config(cfg_dict, name="whisper_encoder")
+    weights: dict[str, Any] = {
+        "audio_embed": {
+            "conv1_w": enc.conv1.weight.detach().to(device=dev, dtype=dt).contiguous(),
+            "conv1_b": enc.conv1.bias.detach().to(device=dev, dtype=dt).contiguous(),
+            "conv2_w": enc.conv2.weight.detach().to(device=dev, dtype=dt).contiguous(),
+            "conv2_b": enc.conv2.bias.detach().to(device=dev, dtype=dt).contiguous(),
+            "pos_embed": enc.embed_positions.weight.detach().to(device=dev, dtype=dt).contiguous(),
+        },
+        "blocks": [],
+        "norm_w": enc.layer_norm.weight.detach().to(device=dev, dtype=dt).contiguous(),
+        "norm_b": enc.layer_norm.bias.detach().to(device=dev, dtype=dt).contiguous(),
+    }
+    for lyr in enc.layers:
+        attn = lyr.self_attn
+        k_bias = (
+            attn.k_proj.bias.detach()
+            if getattr(attn.k_proj, "bias", None) is not None
+            else torch.zeros(d, dtype=attn.q_proj.bias.dtype, device=attn.q_proj.bias.device)
+        )
+        wqkv = torch.cat(
+            [
+                attn.q_proj.weight.detach().t(),
+                attn.k_proj.weight.detach().t(),
+                attn.v_proj.weight.detach().t(),
+            ],
+            dim=1,
+        )
+        bqkv = torch.cat(
+            [
+                attn.q_proj.bias.detach(),
+                k_bias,
+                attn.v_proj.bias.detach(),
+            ],
+            dim=0,
+        )
+        weights["blocks"].append(
+            {
+                "ln1_w": lyr.self_attn_layer_norm.weight.detach()
+                .to(device=dev, dtype=dt)
+                .contiguous(),
+                "ln1_b": lyr.self_attn_layer_norm.bias.detach()
+                .to(device=dev, dtype=dt)
+                .contiguous(),
+                "ln2_w": lyr.final_layer_norm.weight.detach().to(device=dev, dtype=dt).contiguous(),
+                "ln2_b": lyr.final_layer_norm.bias.detach().to(device=dev, dtype=dt).contiguous(),
+                "wqkv": wqkv.to(device=dev, dtype=dt).contiguous(),
+                "bqkv": bqkv.to(device=dev, dtype=dt).contiguous(),
+                "wo": attn.out_proj.weight.detach().t().to(device=dev, dtype=dt).contiguous(),
+                "bo": attn.out_proj.bias.detach().to(device=dev, dtype=dt).contiguous(),
+                "fc1_w": lyr.fc1.weight.detach().t().to(device=dev, dtype=dt).contiguous(),
+                "fc1_b": lyr.fc1.bias.detach().to(device=dev, dtype=dt).contiguous(),
+                "fc2_w": lyr.fc2.weight.detach().t().to(device=dev, dtype=dt).contiguous(),
+                "fc2_b": lyr.fc2.bias.detach().to(device=dev, dtype=dt).contiguous(),
+            }
+        )
+    return graph, weights
