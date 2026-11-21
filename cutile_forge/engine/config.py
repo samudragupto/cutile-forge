@@ -28,6 +28,7 @@ class ModelConfig:
     eos_token_id: int = 2
     experts: int = 1
     top_k_experts: int = 2
+    sliding_window: int | None = None
     d_model: int | None = None
     n_layers: int | None = None
     n_heads: int | None = None
@@ -99,6 +100,7 @@ class ModelConfig:
         )
         raw_gs = int(data.get("group_size", 128))
         eff_gs = 128 if raw_gs <= 0 else raw_gs
+        raw_sw = data.get("sliding_window")
         return cls(
             vocab_size=int(data.get("vocab_size", 32000)),
             hidden_size=int(data.get("hidden_size", 4096)),
@@ -116,6 +118,7 @@ class ModelConfig:
             eos_token_id=int(data.get("eos_token_id", 2)),
             experts=int(data.get("num_local_experts", data.get("experts", 1))),
             top_k_experts=int(data.get("num_experts_per_tok", 2)),
+            sliding_window=int(raw_sw) if raw_sw is not None else None,
         )
 
 

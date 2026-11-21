@@ -147,12 +147,20 @@ class MistralLayer:
         k = apply_rope(k, cos, sin, position_offset=pos_offset)
 
         if kv_cache is not None:
-            kv_cache.update(self.layer_idx, k, v)
+            kv_cache.update(self.layer_idx, k, v, defer_prune=(seq_len > 1))
             k_full, v_full = kv_cache.get_kv(self.layer_idx)
         else:
             k_full, v_full = k, v
 
-        attn_out = fused_attention_gqa(q, k_full, v_full, causal=True)
+        attn_out = fused_attention_gqa(
+            q,
+            k_full,
+            v_full,
+            causal=True,
+            sliding_window=int(self.config.sliding_window or 0),
+        )
+        if kv_cache is not None and seq_len > 1 and kv_cache.sliding_window is not None:
+            kv_cache.prune_outside_window(self.layer_idx)
         attn_2d = attn_out.transpose(1, 2).contiguous().view(bsz * seq_len, hidden_dim)
 
         o_proj = _quant_linear_cutile(attn_2d, weights.o_proj)
@@ -239,23 +247,27 @@ class MistralLayer:
         k = _pytorch_rope(k, cos, sin, pos_offset)
 
         if kv_cache is not None:
-            kv_cache.update(self.layer_idx, k, v)
+            kv_cache.update(self.layer_idx, k, v, defer_prune=(seq_len > 1))
             k_full, v_full = kv_cache.get_kv(self.layer_idx)
         else:
             k_full, v_full = k, v
 
         k_rep = k_full.repeat_interleave(self.config.gqa_ratio, dim=1)
         v_rep = v_full.repeat_interleave(self.config.gqa_ratio, dim=1)
-        is_causal = seq_len > 1 and k_full.shape[2] == seq_len
-        if seq_len > 1 and k_full.shape[2] > seq_len:
-            # Bottom-right causal mask when attending into cached prefix
-            s_kv = k_full.shape[2]
-            mask = torch.ones((seq_len, s_kv), device=q.device, dtype=torch.bool).tril(
-                diagonal=s_kv - seq_len
-            )
+        s_kv = k_full.shape[2]
+        sw = int(self.config.sliding_window or 0)
+        if sw > 0 or (seq_len > 1 and s_kv > seq_len):
+            q_p = torch.arange(seq_len, device=q.device).view(seq_len, 1) + (s_kv - seq_len)
+            k_p = torch.arange(s_kv, device=q.device).view(1, s_kv)
+            mask = k_p <= q_p
+            if sw > 0:
+                mask = mask & (k_p > q_p - sw)
             attn_out = F.scaled_dot_product_attention(q, k_rep, v_rep, attn_mask=mask)
         else:
+            is_causal = seq_len > 1 and s_kv == seq_len
             attn_out = F.scaled_dot_product_attention(q, k_rep, v_rep, is_causal=is_causal)
+        if kv_cache is not None and seq_len > 1 and kv_cache.sliding_window is not None:
+            kv_cache.prune_outside_window(self.layer_idx)
 
         attn_2d = attn_out.transpose(1, 2).contiguous().view(bsz * seq_len, hidden_dim)
         o_proj = _quant_linear_pytorch(attn_2d, weights.o_proj)

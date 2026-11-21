@@ -18,20 +18,14 @@ def attention_gqa_kernel(
     s_q: int,
     s_kv: int,
     kv_offset: int,
+    sliding_window: int,
     gqa_ratio: ct.Constant[int],
     bq: ct.Constant[int],
     bk: ct.Constant[int],
     d_head: ct.Constant[int],
     is_causal: ct.Constant[int],
 ) -> None:
-    """FlashAttention-2 tiled GQA kernel with online softmax.
-
-    Shapes:
-        q_ptr: (B * H_q, S_q, D) float16
-        k_ptr: (B * H_kv, S_kv, D) float16
-        v_ptr: (B * H_kv, S_kv, D) float16
-        o_ptr: (B * H_q, S_q, D) float16
-    """
+    """FlashAttention-2 tiled GQA kernel with online softmax and optional sliding window."""
     q_tile_idx = ct.bid(0)
     bh_q = ct.bid(1)
     bh_kv = bh_q // gqa_ratio
@@ -55,9 +49,15 @@ def attention_gqa_kernel(
     max_k = (q_tile_idx + 1) * bq + kv_offset if is_causal else s_kv
     if max_k > s_kv:
         max_k = s_kv
+    min_k = 0
+    if is_causal and sliding_window > 0:
+        cand_min = q_tile_idx * bq + kv_offset - sliding_window + 1
+        if cand_min > 0:
+            min_k = cand_min
+    start_tile = min_k // bk
     num_kv_tiles = (max_k + bk - 1) // bk
 
-    for kv_tile in range(num_kv_tiles):
+    for kv_tile in range(start_tile, num_kv_tiles):
         k_3d = ct.load(
             k_ptr,
             index=(bh_kv, kv_tile, 0),
@@ -82,6 +82,8 @@ def attention_gqa_kernel(
         valid = k_pos < s_kv
         if is_causal:
             valid = valid & (k_pos <= q_pos)
+            if sliding_window > 0:
+                valid = valid & (k_pos > q_pos - sliding_window)
         scores = ct.where(valid, scores, -1.0e9)
 
         m_tile = ct.max(scores, axis=1, keepdims=True)
@@ -114,6 +116,8 @@ def flash_decoding_split_kv_kernel(
     s_q: int,
     s_kv: int,
     kv_offset: int,
+    base_tile: int,
+    sliding_window: int,
     tiles_per_split: int,
     gqa_ratio: ct.Constant[int],
     bq: ct.Constant[int],
@@ -143,7 +147,7 @@ def flash_decoding_split_kv_kernel(
     q_pos = ct.reshape(ct.arange(bq, dtype=ct.int32) + kv_offset, (bq, 1))
     k_base = ct.arange(bk, dtype=ct.int32)
     total_kv_tiles = ct.cdiv(s_kv, bk)
-    start_tile = split_idx * tiles_per_split
+    start_tile = base_tile + split_idx * tiles_per_split
     end_tile = min(start_tile + tiles_per_split, total_kv_tiles)
 
     for kv_tile in range(start_tile, end_tile):
@@ -174,6 +178,8 @@ def flash_decoding_split_kv_kernel(
         valid = k_pos < s_kv
         if is_causal:
             valid = valid & (k_pos <= q_pos)
+            if sliding_window > 0:
+                valid = valid & (k_pos > q_pos - sliding_window)
         scores = ct.where(valid, scores, -1.0e9)
 
         m_tile = ct.max(scores, axis=1, keepdims=True)
@@ -254,6 +260,7 @@ def flash_decoding_split_kv(
     o_part_buf: torch.Tensor | None = None,
     lse_part_buf: torch.Tensor | None = None,
     out: torch.Tensor | None = None,
+    sliding_window: int = 0,
 ) -> torch.Tensor:
     """FlashDecoding Split-KV attention partitioning `seq_kv` across `num_splits` parallel CTAs."""
     bsz, h_q, s_q, d_head = q.shape
@@ -265,8 +272,12 @@ def flash_decoding_split_kv(
     bk = 64
 
     total_kv_tiles = (s_kv + bk - 1) // bk
-    eff_splits = max(1, min(num_splits, total_kv_tiles))
-    tiles_per_split = (total_kv_tiles + eff_splits - 1) // eff_splits
+    base_tile = (
+        max(0, kv_offset - sliding_window + 1) // bk if (causal and sliding_window > 0) else 0
+    )
+    active_tiles = max(1, total_kv_tiles - base_tile)
+    eff_splits = max(1, min(num_splits, active_tiles))
+    tiles_per_split = (active_tiles + eff_splits - 1) // eff_splits
 
     q_flat = (
         q.view(bsz * h_q, s_q, d_head)
@@ -310,6 +321,8 @@ def flash_decoding_split_kv(
             int(s_q),
             int(s_kv),
             int(kv_offset),
+            int(base_tile),
+            int(sliding_window),
             int(tiles_per_split),
             gqa_ratio,
             bq,
@@ -353,6 +366,7 @@ def attention_gqa_decode_pos_kernel(
     o_ptr,  # (B * H_q, 1, D) float16
     sm_scale: float,
     max_kv_tiles: int,
+    sliding_window: int,
     h_q: ct.Constant[int],
     gqa_ratio: ct.Constant[int],
     bq: ct.Constant[int],
@@ -387,9 +401,11 @@ def attention_gqa_decode_pos_kernel(
     acc = ct.zeros((bq, d_head), dtype=ct.float32)
     k_base = ct.arange(bk, dtype=ct.int32)
 
+    min_k = ct.maximum(0, cur_pos - sliding_window + 1) if sliding_window > 0 else 0
+    start_tile = (min_k // bk) if (sliding_window > 0 and dynamic_loop == 1) else 0
     loop_tiles = min(max_kv_tiles, (s_kv + bk - 1) // bk) if dynamic_loop == 1 else max_kv_tiles
 
-    for kv_tile in range(loop_tiles):
+    for kv_tile in range(start_tile, loop_tiles):
         k_3d = ct.load(
             k_ptr,
             index=(bh_kv, kv_tile, 0),
@@ -409,6 +425,8 @@ def attention_gqa_decode_pos_kernel(
 
         k_pos = ct.reshape(kv_tile * bk + k_base, (1, bk))
         valid = k_pos < s_kv
+        if sliding_window > 0:
+            valid = valid & (k_pos >= min_k)
         valid_col = ct.reshape(valid, (bk, 1))
         k_tile = ct.where(valid_col, k_tile, ct.astype(0.0, ct.float16))
         v_tile = ct.where(valid_col, v_tile, ct.astype(0.0, ct.float16))
@@ -445,6 +463,7 @@ def fused_attention_gqa_decode_pos(
     out: torch.Tensor,
     sm_scale: float | None = None,
     dynamic_loop: bool = True,
+    sliding_window: int = 0,
 ) -> torch.Tensor:
     """Launch CUDA-Graph-capturable GQA decode attention reading `pos_ptr` on GPU."""
     bsz, h_q, _, d_head = q.shape
@@ -473,6 +492,7 @@ def fused_attention_gqa_decode_pos(
             o_flat,
             float(scale),
             int(max_kv_tiles),
+            int(sliding_window),
             h_q,
             gqa_ratio,
             bq,
@@ -490,6 +510,7 @@ def fused_attention_gqa(
     v: torch.Tensor,
     causal: bool = True,
     sm_scale: float | None = None,
+    sliding_window: int = 0,
 ) -> torch.Tensor:
     """Compute Grouped-Query FlashAttention-2 in CuTile (auto-dispatches FlashDecoding for long-KV decode).
 
@@ -499,6 +520,7 @@ def fused_attention_gqa(
         v: (B, H_kv, S_kv, D) float16 CUDA tensor
         causal: Whether to apply causal masking (aligned to bottom-right for S_q <= S_kv).
         sm_scale: Optional softmax scale (defaults to 1 / sqrt(D)).
+        sliding_window: Optional causal sliding window size (0 disables window clipping).
     """
     if q.ndim != 4 or k.ndim != 4 or v.ndim != 4:
         raise ValueError(f"Expected 4D tensors (B, H, S, D), got {q.shape}, {k.shape}, {v.shape}")
@@ -509,7 +531,15 @@ def fused_attention_gqa(
         raise ValueError(f"H_q ({h_q}) must be divisible by H_kv ({h_kv})")
 
     if q.is_cuda and s_q <= 4 and s_kv >= 2048:
-        return flash_decoding_split_kv(q, k, v, num_splits=16, causal=causal, sm_scale=sm_scale)
+        return flash_decoding_split_kv(
+            q,
+            k,
+            v,
+            num_splits=16,
+            causal=causal,
+            sm_scale=sm_scale,
+            sliding_window=sliding_window,
+        )
 
     gqa_ratio = h_q // h_kv
     scale = sm_scale if sm_scale is not None else 1.0 / math.sqrt(d_head)
@@ -537,6 +567,7 @@ def fused_attention_gqa(
             int(s_q),
             int(s_kv),
             int(kv_offset),
+            int(sliding_window),
             gqa_ratio,
             bq,
             bk,

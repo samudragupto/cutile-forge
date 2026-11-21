@@ -12,7 +12,6 @@ import torch
 from cutile_forge.cuda_tile_init import ct
 from cutile_forge.kernels.embedding_lmhead import cutile_col_permute
 from cutile_forge.kernels.gemm_dequant import (
-    cutile_gemm_fp8,
     fused_gemm_dequant,
     unpack_int4_weights_torch,
 )
@@ -933,6 +932,67 @@ def gemm_fp8_block_scaled_kernel(
     ct.store(c_ptr, index=(pid_m, pid_n), tile=ct.astype(acc, ct.float16))
 
 
+@ct.kernel(occupancy=2)
+def gemm_fp8_w8a16_kernel(
+    a_ptr,  # (M, K) fp16
+    w_fp8_ptr,  # (K, N) float8_e4m3fn
+    c_ptr,  # (M, N) fp16
+    scale_b: float,
+    tm: ct.Constant[int],
+    tn: ct.Constant[int],
+    tk: ct.Constant[int],
+) -> None:
+    """Native per-tensor W8A16 FP8 (`float8_e4m3fn` weight x `fp16` activation) GEMM."""
+    pid_m = ct.bid(0)
+    pid_n = ct.bid(1)
+    num_k = ct.num_tiles(a_ptr, axis=1, shape=(tm, tk))
+    acc = ct.zeros((tm, tn), dtype=ct.float32)
+
+    for k in range(num_k):
+        tile_a = ct.load(
+            a_ptr, index=(pid_m, k), shape=(tm, tk), padding_mode=ct.PaddingMode.ZERO, latency=3
+        )
+        w_f8 = ct.load(
+            w_fp8_ptr,
+            index=(k, pid_n),
+            shape=(tk, tn),
+            padding_mode=ct.PaddingMode.ZERO,
+            latency=3,
+        )
+        w_fp16 = ct.astype(w_f8, ct.float16)
+        acc = ct.mma(tile_a, w_fp16, acc)
+
+    ct.store(c_ptr, index=(pid_m, pid_n), tile=ct.astype(acc * scale_b, ct.float16))
+
+
+def cutile_gemm_fp8_w8a16(
+    a: torch.Tensor,
+    weight_fp8: torch.Tensor,
+    scale_b: float = 1.0,
+    tile_shape: tuple[int, int, int] | None = None,
+    out: torch.Tensor | None = None,
+) -> torch.Tensor:
+    """Execute per-tensor FP8 weight x FP16 activation GEMM without activation quantization loss."""
+    m, _ = a.shape
+    n = weight_fp8.shape[1]
+    tm, tn, tk = tile_shape or ((16, 64, 64) if m <= 16 else (64, 64, 64))
+    c = out if out is not None else torch.empty((m, n), device=a.device, dtype=torch.float16)
+
+    if not a.is_cuda:
+        w_ref = weight_fp8.float() * float(scale_b)
+        c.copy_(torch.matmul(a.float(), w_ref).to(torch.float16))
+        return c
+
+    grid = (ct.cdiv(m, tm), ct.cdiv(n, tn), 1)
+    ct.launch(
+        torch.cuda.current_stream(),
+        grid,
+        gemm_fp8_w8a16_kernel,
+        (a.contiguous(), weight_fp8.contiguous(), c, float(scale_b), tm, tn, tk),
+    )
+    return c
+
+
 def quantize_fp8_block_scaled(
     weight: torch.Tensor,
     block_size: tuple[int, int] = (128, 128),
@@ -1232,18 +1292,13 @@ class UniversalQuantLinear:
             )
         elif self.fmt == QuantFormat.FP8:
             sc_b = float(self.tensors["scale"].item())
-            a_amax = float(x_2d.float().abs().max().clamp(min=1e-6).item())
-            sc_a = a_amax / 240.0
-            res = cutile_gemm_fp8(
-                (x_2d.float() / sc_a).clamp(-448.0, 448.0).to(torch.float8_e4m3fn),
+            res = cutile_gemm_fp8_w8a16(
+                x_2d,
                 self.tensors["weight_fp8"],
-                scale_a=sc_a,
                 scale_b=sc_b,
                 tile_shape=self.tile_shape,
+                out=out,
             )
-            if out is not None:
-                out.copy_(res)
-                res = out
         elif self.fmt == QuantFormat.FP8_BLOCK:
             res = cutile_gemm_fp8_block_scaled(
                 x_2d,

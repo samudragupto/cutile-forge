@@ -302,7 +302,13 @@ class InferenceEngine:
                 self._qkv_graphs[idx].replay()
                 self.kv_cache.update(idx, self._static_k[idx], self._static_v[idx])
                 k_full, v_full = self.kv_cache.get_kv(idx)
-                attn_out = fused_attention_gqa(self._static_q[idx], k_full, v_full, causal=True)
+                attn_out = fused_attention_gqa(
+                    self._static_q[idx],
+                    k_full,
+                    v_full,
+                    causal=True,
+                    sliding_window=int(self.config.sliding_window or 0),
+                )
                 self._static_attn[idx].copy_(
                     attn_out.transpose(1, 2).contiguous().view(1, self.config.hidden_size)
                 )

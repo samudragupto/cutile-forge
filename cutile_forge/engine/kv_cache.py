@@ -41,6 +41,7 @@ class PagedKVCache:
         dtype: torch.dtype = torch.float16,
         cpu_pool_pages: int = 64,
         kv_dtype: str = "fp16",
+        sliding_window: int | None = None,
     ) -> None:
         if page_size <= 0:
             raise ValueError(f"page_size must be positive, got {page_size}")
@@ -50,6 +51,9 @@ class PagedKVCache:
         self.num_kv_heads = num_kv_heads
         self.head_dim = head_dim
         self.page_size = page_size
+        self.sliding_window = (
+            sliding_window if (sliding_window is not None and sliding_window > 0) else None
+        )
         self.gpu_budget_bytes = gpu_budget_bytes
         self.device = torch.device(
             device if (str(device) != "cuda" or torch.cuda.is_available()) else "cpu"
@@ -175,7 +179,13 @@ class PagedKVCache:
             self.gpu_lru[key] = page.nbytes
         return page
 
-    def update(self, layer_idx: int, k_new: torch.Tensor, v_new: torch.Tensor) -> int:
+    def update(
+        self,
+        layer_idx: int,
+        k_new: torch.Tensor,
+        v_new: torch.Tensor,
+        defer_prune: bool = False,
+    ) -> int:
         """Append `(B=1, H_kv, S_new, D)` key/value tensors for `layer_idx`.
 
         Returns the new total sequence length stored for `layer_idx`.
@@ -260,7 +270,34 @@ class PagedKVCache:
         self._layer_lens[layer_idx] = new_len
         if layer_idx == 0:
             self.seq_len = new_len
+        if self.sliding_window is not None and not defer_prune:
+            self.prune_outside_window(layer_idx)
         return new_len
+
+    def prune_outside_window(self, layer_idx: int) -> None:
+        """Drop pages strictly older than `layer_len - sliding_window`."""
+        if self.sliding_window is None:
+            return
+        cur_len = self._layer_seq_len(layer_idx)
+        min_needed_pos = cur_len - self.sliding_window
+        if min_needed_pos > 0:
+            self.prune_before_pos(layer_idx, min_needed_pos)
+
+    def prune_before_pos(self, layer_idx: int, min_pos: int) -> None:
+        """Drop pages whose token positions all precede `min_pos`."""
+        min_keep_page = min_pos // self.page_size
+        stale = [k for k in self.pages if k[0] == layer_idx and k[1] < min_keep_page]
+        for k in stale:
+            page = self.pages.pop(k)
+            self.gpu_lru.pop(k, None)
+            if page.on_gpu:
+                self.gpu_used_bytes -= page.nbytes
+            else:
+                self._release_cpu_pair(page.k, page.v)
+
+    def seq_lens_valid(self, layer_idx: int = 0) -> int:
+        """Return number of valid tokens currently resident in pages for `layer_idx`."""
+        return sum(p.valid_tokens for (l_idx, _), p in self.pages.items() if l_idx == layer_idx)
 
     def _layer_seq_len(self, layer_idx: int) -> int:
         if layer_idx in self._layer_lens:

@@ -447,6 +447,7 @@ class NativeModelRuntime:
                 max_kv_len=bucket_len,
                 out=ws.attn_out,
                 dynamic_loop=dyn_loop,
+                sliding_window=int(cfg.sliding_window or 0),
             )
 
             attn_2d = ws.attn_out.view(bsz, cfg.hidden_size)
@@ -636,10 +637,13 @@ class NativeModelRuntime:
             kr = kf.repeat_interleave(cfg.gqa_ratio, dim=1)
             vr = vf.repeat_interleave(cfg.gqa_ratio, dim=1)
             s_kv = int(kf.shape[2])
-            if seq_len > 1 and s_kv > seq_len:
-                c_mask = torch.ones((seq_len, s_kv), device=q.device, dtype=torch.bool).tril(
-                    diagonal=s_kv - seq_len
-                )
+            sw = int(cfg.sliding_window or 0)
+            if sw > 0 or (seq_len > 1 and s_kv > seq_len):
+                q_p = torch.arange(seq_len, device=q.device).view(seq_len, 1) + (s_kv - seq_len)
+                k_p = torch.arange(s_kv, device=q.device).view(1, s_kv)
+                c_mask = k_p <= q_p
+                if sw > 0:
+                    c_mask = c_mask & (k_p > q_p - sw)
                 att = torch.nn.functional.scaled_dot_product_attention(q, kr, vr, attn_mask=c_mask)
             else:
                 att = torch.nn.functional.scaled_dot_product_attention(
@@ -690,7 +694,13 @@ class NativeModelRuntime:
         k = apply_rope(k, self._cos, self._sin, position_offset=pos_offset)
 
         k_full, v_full = self.kv_cache.append_and_get(idx, k, v, start_pos=pos_offset)
-        attn_out = fused_attention_gqa(q, k_full, v_full, causal=True)
+        attn_out = fused_attention_gqa(
+            q,
+            k_full,
+            v_full,
+            causal=True,
+            sliding_window=int(cfg.sliding_window or 0),
+        )
         attn_2d = (
             attn_out.view(batch_size, cfg.hidden_size)
             if seq_len == 1
