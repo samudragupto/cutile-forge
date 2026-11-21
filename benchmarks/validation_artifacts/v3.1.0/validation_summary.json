@@ -1,0 +1,78 @@
+{
+  "version": "3.1.0",
+  "headline": {
+    "native_single_stream_tok_s": 167.48,
+    "native_ttft_p50_ms": 16.74,
+    "native_itl_p50_ms": 5.8,
+    "native_peak_vram_mb": 8570.0
+  },
+  "correctness_errors": 0,
+  "server_5xx_error_rate_pct": 0.0,
+  "gptq_on_disk_ppl_rel_diff_pct": 0.0211,
+  "missing_coverage": [
+    {
+      "area": "clean_room_reproduction",
+      "status": "NOT_RUN"
+    },
+    {
+      "area": "external:TensorRT-LLM 1.3.0",
+      "status": "NOT_RUN",
+      "reason": "File \"/var/tmp/arrhat_models/venvs/trtllm_env/lib/python3.12/site-packages/tensorrt_llm/__init__.py\", line 28, in <module>\n    _prepare_environment()\n  File \"/var/tmp/arrhat_models/venvs/trtllm_env/li"
+    },
+    {
+      "area": "physical_multi_gpu",
+      "status": "PENDING_HARDWARE"
+    },
+    {
+      "area": "laptop_4060_v310_repro",
+      "status": "PENDING_HARDWARE"
+    },
+    {
+      "area": "independent_second_operator",
+      "status": "PENDING_INDEPENDENT_REPRODUCTION"
+    }
+  ],
+  "artifact_git_commits": {
+    "phase14b": "3488ebb2b5160c70b9ef1b1e49c11ce001165123",
+    "phase14c": "3488ebb2b5160c70b9ef1b1e49c11ce001165123",
+    "phase14d": "3488ebb2b5160c70b9ef1b1e49c11ce001165123",
+    "phase14e": "3488ebb2b5160c70b9ef1b1e49c11ce001165123",
+    "phase14f": "3488ebb2b5160c70b9ef1b1e49c11ce001165123",
+    "phase14g": "3488ebb2b5160c70b9ef1b1e49c11ce001165123"
+  },
+  "s_14b_metrics": [
+    "cutile_mistral_c16_tok_s",
+    "cutile_mistral_c1_tok_s",
+    "cutile_mistral_c4_tok_s",
+    "cutile_unified_qwen05b_c1_tok_s",
+    "hf_qwen05b_c1_tok_s",
+    "sglang_mistral_c16_tok_s",
+    "sglang_mistral_c1_tok_s",
+    "sglang_mistral_c4_tok_s",
+    "sglang_qwen_c16_tok_s",
+    "sglang_qwen_c1_tok_s",
+    "sglang_qwen_c4_tok_s",
+    "vllm_qwen_c16_tok_s",
+    "vllm_qwen_c1_tok_s",
+    "vllm_qwen_c4_tok_s"
+  ],
+  "s_14f_metrics": [
+    "c128_agg_tok_s",
+    "c128_itl_ms",
+    "c128_ttft_ms",
+    "c16_agg_tok_s",
+    "c16_itl_ms",
+    "c16_ttft_ms",
+    "c1_agg_tok_s",
+    "c1_itl_ms",
+    "c1_ttft_ms",
+    "c4_agg_tok_s",
+    "c4_itl_ms",
+    "c4_ttft_ms",
+    "c64_agg_tok_s",
+    "c64_itl_ms",
+    "c64_ttft_ms",
+    "soak_server_rss_mb",
+    "soak_server_vram_alloc_mb"
+  ]
+}

@@ -1,0 +1,84 @@
+{
+  "passed": false,
+  "regressions": [
+    {
+      "metric": "native_ttft_p50_ms",
+      "baseline": 6.114,
+      "current": 16.74,
+      "pct_change": 173.8,
+      "tolerance": "<=10.0%",
+      "status": "REGRESSION"
+    }
+  ],
+  "missing_coverage": [
+    {
+      "area": "clean_room_reproduction",
+      "status": "NOT_RUN"
+    },
+    {
+      "area": "external:TensorRT-LLM 1.3.0",
+      "status": "NOT_RUN",
+      "reason": "File \"/var/tmp/arrhat_models/venvs/trtllm_env/lib/python3.12/site-packages/tensorrt_llm/__init__.py\", line 28, in <module>\n    _prepare_environment()\n  File \"/var/tmp/arrhat_models/venvs/trtllm_env/li"
+    },
+    {
+      "area": "physical_multi_gpu",
+      "status": "PENDING_HARDWARE"
+    },
+    {
+      "area": "laptop_4060_v310_repro",
+      "status": "PENDING_HARDWARE"
+    },
+    {
+      "area": "independent_second_operator",
+      "status": "PENDING_INDEPENDENT_REPRODUCTION"
+    }
+  ],
+  "checks": [
+    {
+      "metric": "native_single_stream_tok_s",
+      "baseline": 172.581,
+      "current": 167.48,
+      "pct_change": -2.96,
+      "tolerance": ">=-5.0%",
+      "status": "PASS"
+    },
+    {
+      "metric": "native_ttft_p50_ms",
+      "baseline": 6.114,
+      "current": 16.74,
+      "pct_change": 173.8,
+      "tolerance": "<=10.0%",
+      "status": "REGRESSION"
+    },
+    {
+      "metric": "native_itl_p50_ms",
+      "baseline": 5.787,
+      "current": 5.8,
+      "pct_change": 0.22,
+      "tolerance": "<=10.0%",
+      "status": "PASS"
+    },
+    {
+      "metric": "native_peak_vram_mb",
+      "baseline": 8565.7,
+      "current": 8570.0,
+      "pct_change": 0.05,
+      "tolerance": "<=10.0%",
+      "status": "PASS"
+    },
+    {
+      "metric": "server_5xx_error_rate_pct",
+      "baseline": 0.0,
+      "current": 0.0,
+      "tolerance": "<=0.0%",
+      "status": "PASS"
+    },
+    {
+      "metric": "gptq_on_disk_ppl_rel_diff_pct",
+      "baseline": 0.0099,
+      "current": 0.0211,
+      "tolerance": "<=0.5%",
+      "status": "PASS"
+    }
+  ]
+}

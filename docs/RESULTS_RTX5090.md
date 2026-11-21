@@ -1,6 +1,6 @@
-# CuTileForge — RTX 5090 Benchmark Results (v3.0.0)
+# CuTileForge — RTX 5090 Benchmark Results (v3.1.0)
 
-**Author:** Arrhat Nag (`@samudragupto`)  
+**Authors:** Arrhat Nag (`@samudragupto`) and Rupesh Nasre  
 **Hardware:** Desktop Workstation · NVIDIA GeForce RTX 5090 (GB202, sm_120, 170 SMs, 32 GB GDDR7, ~1,792 GB/s) · Intel Core Ultra 9 285K (24C/24T) · 62 GB DDR5 · PCIe 5.0 x16  
 **Models:** `Mistral-7B-v0.1-GPTQ` (4.16 GB) · `Mixtral-8x7B-Instruct-v0.1-GPTQ` (23.8 GB) · `Llama-2-70B-Chat-GPTQ` (35.3 GB) · `Qwen/Qwen2.5-0.5B` · `google/siglip-base-patch16-224` · `openai/whisper-tiny`  
 **CUDA:** 13.2 (driver 595.58.03) · PyTorch 2.15+cu132 · `cuda-tile` 1.8.1
@@ -484,11 +484,19 @@ Validated on `1× NVIDIA GeForce RTX 5090` (`nvidia-smi -L`) via logical partiti
 - **Long-Context 32-Layer Attention (`synthetic-weights`)**: `8K`: **`1.327 ms/step`** (`fp16`) / `1.858 ms` (`fp8`); `16K`: **`2.133 ms/step`** (`fp16`) / `3.767 ms` (`fp8`); `32K`: **`3.861 ms/step`** (`fp16`) / `7.595 ms` (`fp8`).
 - **External Engine Comparison**:
   - `HF-Transformers-4.x (PyTorch 2.15+cu132)` on `Qwen/Qwen2.5-0.5B` (`real-checkpoint`): **`161.474 tok/s`** (`156.699–161.825 tok/s`).
-  - `vLLM (vllm==0.34.0)`: `NOT RUN: vllm==0.34.0 pins torch==2.14.0 (cu124) which lacks sm_120 Blackwell kernels and conflicts with workstation CUDA 13.2 / torch 2.15+cu132; source build blocked by missing nvcc on workstation`.
-  - `SGLang (sglang==0.5.23)`: `NOT RUN: sglang==0.5.23 pins torch==2.14.1 and sgl-kernel prebuilt wheels compiled for cu124 (no sm_120 / cu132 wheel); source build blocked by missing nvcc`.
-  - `TensorRT-LLM (tensorrt_llm==1.3.0)`: `NOT RUN: tensorrt_llm==1.3.0 requires torch<=2.14.0 and system OpenMPI/libmpi_cxx + nvcc toolkit not installed on workstation (no sudo allowed)`.
+  - `vLLM (vllm==0.34.0)`: Historical `v3.0.0` note recorded `NOT RUN` under `cu124` assumptions; in **`v3.1.0` (`phase14b`)** both `vLLM 0.34.0` and `SGLang 0.5.23` were installed and measured via PyPI `cu13` wheels (`TensorRT-LLM 1.3.0` remains `NOT_RUN`).
+
+### Phase 14 (`v3.1.0`) — Production Validation & Hardware Scaling (`benchmarks/validation_artifacts/v3.1.0/`)
+
+All raw manifests, per-run JSONL samples, command logs, environment captures, and SHA-256 digests are archived in `benchmarks/validation_artifacts/v3.1.0/` and visually plotted in `docs/figures/validation_v310/` (`fig_v310_1..6`):
+
+- **Matched Engine Comparisons (`phase14b_external_engines`)**: `SGLang 0.5.23` (`265.36 / 970.25 / 3,260.69 tok/s`, `18.52–18.54 GB` VRAM) vs CuTileForge `NativeModelRuntime` (`167.48 / 619.12 / 2,310.52 tok/s`, `8.57–8.68 GB` VRAM) on real `Mistral-7B-v0.1-GPTQ` (`vLLM 0.34.0` fails with `UNSUPPORTED` for `desc_act=True`); on `Qwen/Qwen2.5-0.5B` (`C=1`), SGLang (`804.45 tok/s`) > vLLM (`699.55 tok/s`) > HF Transformers (`159.13 tok/s`) > CuTileForge `UnifiedModelExecutor` (`92.7 tok/s`, `DEGRADED`).
+- **Real-Checkpoint Long Context (`phase14c_long_context`)**: Real 32L `Mistral-7B-v0.1-GPTQ` tested across `4K..32K` (`118.64 -> 46.97 tok/s` FP16, `106.66 -> 37.46 tok/s` FP8; `64K` `UNSUPPORTED`), and real 32L `Mixtral-8x7B-Instruct-v0.1-GPTQ` across `512..8192` (`33.03 -> 14.74 tok/s`, `27,934.4 MB` allocated VRAM).
+- **End-to-End Quantization Parity (`phase14e_quantization`)**: Real 32L on-disk GPTQ `END_TO_END_VERIFIED` (`2/2` exact greedy match, 256-token PPL `6.7058 vs 6.7072` = `0.0211%` diff); 13 repacked 8L configs `LAYER_VERIFIED_ONLY` (catching token divergence in `FP8_e4m3_tensor` with `1.2888%` PPL diff, `GGUF_Q4_K`, `AWQ_gs128`, `GPTQ_gs128_nodesc`).
+- **Live HTTP Serving Stress & Fault Injection (`phase14f_serving_stress`, `phase14g_reliability`)**: 15-minute live FastAPI soak (`10,092/10,092` OK, `0` failures, `505/505` malformed rejected, `0.0 MB/min` RSS slope) and `10/10` controlled fault scenarios `VERIFIED`.
+- **Full Validation Suite:** [HARDWARE_SUPPORT_MATRIX.md](HARDWARE_SUPPORT_MATRIX.md) · [MODEL_COMPATIBILITY.md](MODEL_COMPATIBILITY.md) · [QUANTIZATION_ACCURACY_REPORT.md](QUANTIZATION_ACCURACY_REPORT.md) · [EXTERNAL_ENGINE_COMPARISON.md](EXTERNAL_ENGINE_COMPARISON.md) · [SERVING_PRODUCTION_REPORT.md](SERVING_PRODUCTION_REPORT.md) · [RELIABILITY_REPORT.md](RELIABILITY_REPORT.md) · [KERNEL_REGRESSION_REPORT.md](KERNEL_REGRESSION_REPORT.md) · [REPRODUCE.md](REPRODUCE.md)
 
 ---
 
-*Full CSV data: `benchmarks/results_5090/`*
-*Methodology: `docs/BENCHMARK_METHODOLOGY.md`*
+*Full CSV data: `benchmarks/results_5090/` · Structured validation artifacts: `benchmarks/validation_artifacts/v3.1.0/`*
+*Methodology: `docs/BENCHMARK_METHODOLOGY.md` · Clean-room reproduction: `docs/REPRODUCE.md`*

@@ -1,0 +1,14 @@
+cff-version: 1.2.0
+title: "CuTileForge: A Tile-Fusion Graph Compiler and Hybrid PCIe-Streaming Inference Engine on NVIDIA CuTile"
+message: "If you use CuTileForge in research or engineering, please cite it using these metadata."
+type: software
+authors:
+  - family-names: Nag
+    given-names: Arrhat
+    alias: samudragupto
+  - family-names: Nasre
+    given-names: Rupesh
+repository-code: "https://github.com/samudragupto/cutile-forge"
+license: MIT
+version: "3.1.0"
+date-released: "2026-11-21"

@@ -1,17 +1,18 @@
-# CuTileForge (`v3.0.0`)
+# CuTileForge (`v3.1.0`)
 
-### *Native Tile-Fusion Compiler, Universal Quantization Engine, Multimodal Model Graph & Distributed Inference Runtime on NVIDIA CuTile (`sm_89` Ada & `sm_120` Blackwell)*
+### *Native Tile-Fusion Compiler, Universal Quantization Engine, Multimodal Model Graph & Production Validation Suite on NVIDIA CuTile (`sm_89` Ada & `sm_120` Blackwell)*
 
 [![CI](https://github.com/samudragupto/cutile-forge/actions/workflows/ci.yml/badge.svg)](https://github.com/samudragupto/cutile-forge/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/badge/release-v3.0.0-1b365d)](https://github.com/samudragupto/cutile-forge/releases/tag/v3.0.0)
-[![Tests](https://img.shields.io/badge/tests-259%2F259%20passed%20%7C%200%20skipped-16a34a)](tests/)
+[![Validation](https://github.com/samudragupto/cutile-forge/actions/workflows/validation.yml/badge.svg)](https://github.com/samudragupto/cutile-forge/actions/workflows/validation.yml)
+[![Release](https://img.shields.io/badge/release-v3.1.0-1b365d)](https://github.com/samudragupto/cutile-forge/releases/tag/v3.1.0)
+[![Tests](https://img.shields.io/badge/tests-265%20passed%20%7C%200%20skipped-16a34a)](tests/)
 [![mypy](https://img.shields.io/badge/mypy-92%20modules%20clean-0ea5e9)](cutile_forge/)
-[![Docker](https://img.shields.io/badge/ghcr.io-v3.0.0--cu132-2563eb)](https://github.com/samudragupto/cutile-forge/pkgs/container/cutile-forge)
+[![Docker](https://img.shields.io/badge/ghcr.io-v3.1.0--cu132-2563eb)](https://github.com/samudragupto/cutile-forge/pkgs/container/cutile-forge)
 [![License: MIT](https://img.shields.io/badge/License-MIT-6c757d.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](pyproject.toml)
 [![CUDA Targets](https://img.shields.io/badge/CUDA-sm__89%20%7C%20sm__120-76B900)](https://developer.nvidia.com/cuda-toolkit)
 
-**Author:** [Arrhat Nag](https://github.com/samudragupto) (`@samudragupto`)
+**Authors:** [Arrhat Nag](https://github.com/samudragupto) (`@samudragupto`) and Rupesh Nasre
 
 <p align="center">
   <a href="#abstract">Abstract</a> ·
@@ -573,9 +574,24 @@ curl -N http://127.0.0.1:8000/v1/chat/completions \
 - **Expert Parallelism:** `ExpertParallelMoE` (`all_to_all` token dispatch & combine)
 - **Distributed KV-Cache & Scheduler:** `DistributedPagedKVCache` (`PP × TP` head/layer sharding) and `DistributedScheduler` (`DP × PP × TP` load balancing)
 
-*Note: Validated for exact mathematical equivalence against single-device execution (`max_abs_diff == 0.0` for PP, EP, and Distributed KV-Cache; `< 2e-3` FP16 reduction tolerance for TP); multi-rank timings on this single-GPU workstation are executed via `LoopbackCommTransport` and explicitly labeled `simulated`.*
+*Note: Validated for exact mathematical equivalence against single-device execution (`max_abs_diff == 0.0` for PP, EP, and Distributed KV-Cache; `< 2e-3` FP16 reduction tolerance for TP); multi-rank timings on this single-GPU workstation are executed via `LoopbackCommTransport` and explicitly labeled `simulated` (`PENDING_HARDWARE` on physical multi-GPU NVLink/PCIe hosts).*
 
-### 3.5 Repository Architecture & Reproducibility
+### 3.5 Phase 14 — Production Validation & Hardware Scaling (`v3.1.0`)
+
+`v3.1.0` adds permanent release-validation infrastructure (`benchmarks/production/`, `benchmarks/baselines/v3.0.0_rtx5090_baseline.json`, and automated CI evidence schemas) distinguishing **`MEASURED`**, **`REPRODUCED`**, **`SIMULATED`**, **`DEGRADED`**, **`UNSUPPORTED`**, **`NOT_RUN`**, and **`PENDING_HARDWARE`** claims across real checkpoints and live serving:
+
+| Area | Verified result (`MEASURED` on RTX 5090, `sm_120`) | Limitation / unverified coverage |
+|---|---|---|
+| **Mistral-7B-v0.1-GPTQ (`C=1/4/16`)** | `167.48 / 619.12 / 2,310.52 tok/s` (`8,570–8,679 MB` VRAM); matched 16-tok TTFT `6.862 ms` (`+12.2%` vs `6.114 ms` `v3.0.0` baseline); `END_TO_END_VERIFIED` 256-tok PPL `6.7058 vs 6.7072` (`0.0211%` diff) | SGLang `0.5.23` is faster (`265.36 / 970.25 / 3,260.69 tok/s`, `18,516–18,536 MB` VRAM); `vLLM 0.34.0` marks `desc_act=True` GPTQ **`UNSUPPORTED`**; `TensorRT-LLM 1.3.0` **`NOT_RUN`** (`triton_kernels` import error) |
+| **Qwen2.5-0.5B (`FP16`, `C=1`)** | `HF Transformers 5.23.0`: `159.13 tok/s`; `vLLM 0.34.0`: `699.55 tok/s`; `SGLang 0.5.23`: `804.45 tok/s` | CuTileForge `UnifiedModelExecutor` runs at `92.7 tok/s` (**`DEGRADED`**, `0.58×` HF, `0.12×` SGLang — no Qwen2 native KV-cache + CUDA graph loop) |
+| **Real Long-Context (`Mistral-7B` & `Mixtral-8x7B`)** | Real 32L Mistral `4K..32K` runs (`118.64 -> 46.97 tok/s` FP16; `106.66 -> 37.46 tok/s` FP8) and real 32L Mixtral-8x7B `512..8192` (`33.03 -> 14.74 tok/s`, `27.93 GB` alloc) | Mistral `64K` **`UNSUPPORTED`** (`max_position_embeddings=32768`); quality degrades sharply `>4K` without sliding window (`PPL 602..16,606`); FP8 decode slower (`7.58 vs 3.84 ms` synthetic `32K`) |
+| **Quantization Accuracy (32L real + 8L repacked)** | Real 32L GPTQ: `2/2` exact greedy match (`0.0211%` PPL diff); 9/13 repacked 8L formats (`GPTQ`, `GGUF Q4_0/Q8_0/Q6_K/Q4_K_M`, `INT8`, `FP8_block128`) exact over 16 tokens | Repacked modes are **`LAYER_VERIFIED_ONLY`**; `FP8_e4m3_tensor` (`1.2888%` PPL drift, `div=7`), `GGUF_Q4_K` (`div=5`), `AWQ_gs128` (`div=13`), `GPTQ_nodesc` (`div=13`) show token divergence |
+| **Live Serving Soak & Fault Recovery** | **15-min sustained HTTP soak (`900.1 s`)**: `10,092/10,092` OK (`0` failures), `505/505` malformed rejected, `0.0 MB/min` RSS slope; `10/10` fault scenarios **`VERIFIED`** (`401`, `422`, `429`, SSE disconnect, CUDA-graph fallback, SIGTERM restart) | OpenAI `DynamicBatcher` aggregates **`189–199 tok/s`** (`C=16..128`, `9,124 ms` TTFT `p99` @ `C=128`), vs `2,310.52 tok/s` in direct `NativeModelRuntime` continuous batching |
+| **Multi-GPU Distribution** | Single-GPU loopback mathematical equivalence **`SIMULATED`** (`0.0` PP/EP/KV diff, `< 2e-3` TP) | Physical `2×`/`4×`/`8×` GPU NCCL scaling and NVLink/PCIe measurements remain **`PENDING_HARDWARE`** |
+
+- **Release Validation Reports:** [Hardware Support Matrix](docs/HARDWARE_SUPPORT_MATRIX.md) · [Model Compatibility](docs/MODEL_COMPATIBILITY.md) · [Quantization Accuracy](docs/QUANTIZATION_ACCURACY_REPORT.md) · [External Engine Comparison](docs/EXTERNAL_ENGINE_COMPARISON.md) · [Serving Production](docs/SERVING_PRODUCTION_REPORT.md) · [Reliability Report](docs/RELIABILITY_REPORT.md) · [Kernel Regression Report](docs/KERNEL_REGRESSION_REPORT.md) · [Clean-Room Reproduction](docs/REPRODUCE.md)
+
+### 3.6 Repository Architecture & Reproducibility
 
 ```text
 cutile-forge/
@@ -622,19 +638,19 @@ python3 scripts/generate_publication_figures.py
 ```
 
 #### Further Documentation
-- [docs/RESULTS_RTX5090.md](docs/RESULTS_RTX5090.md) — Complete RTX 5090 (`sm_120`) tables, figures, real 47B/70B logs, and Phases 9–13 telemetry
+- [docs/RESULTS_RTX5090.md](docs/RESULTS_RTX5090.md) — Complete RTX 5090 (`sm_120`) tables, figures, real 47B/70B logs, and Phases 9–14 telemetry
 - [docs/RESULTS.md](docs/RESULTS.md) — Lenovo LOQ 15APH8 RTX 4060 Laptop (`sm_89`, 8 GB VRAM) benchmark suite
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) & [docs/TFG_COMPILER.md](docs/TFG_COMPILER.md) — TFG IR, generalized passes, runtime, and Stage -1 DMA internals
 - [docs/paper/cutileforge_preprint.md](docs/paper/cutileforge_preprint.md) & [docs/blog/introducing-cutileforge.md](docs/blog/introducing-cutileforge.md) — Technical preprint & engineering writeup
 
-### 3.6 Citation & License
+### 3.7 Citation & License
 
 ```bibtex
-@software{nag2026cutileforge,
+@software{nag_nasre_2026_cutileforge,
   title   = {CuTileForge: A Tile-Fusion Graph Compiler and Hybrid PCIe-Streaming Inference Engine on NVIDIA CuTile},
-  author  = {Nag, Arrhat},
+  author  = {Nag, Arrhat and Nasre, Rupesh},
   year    = {2026},
-  version = {3.0.0},
+  version = {3.1.0},
   url     = {https://github.com/samudragupto/cutile-forge},
   license = {MIT}
 }

@@ -1,6 +1,6 @@
 # I Fused 8 CUDA Kernels into 3 Python Tiles on an 8 GB Laptop GPU
 
-**Authors:** Arrhat Nag (`@samudragupto`), Rupesh Nasre  
+**Authors:** Arrhat Nag (`@samudragupto`) and Rupesh Nasre  
 
 Running a 7-billion-parameter language model locally on an 8 GB laptop GPU usually forces an uncomfortable compromise: either you accept fragmented PyTorch eager execution with dozens of tiny kernel launches per layer, or you drop down to hundreds of lines of hand-tuned CUDA C++ templates (`cp.async`, shared-memory bank padding, warp-matrix fragments, and custom epilogues) that break the moment you want to fuse a new activation or quantization scheme.
 

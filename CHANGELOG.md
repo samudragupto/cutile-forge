@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.1.0] (2026-11-21) — Phase 14: Production Validation & Hardware Scaling
+
+**Authors:** Arrhat Nag (`@samudragupto`) and Rupesh Nasre
+
+CuTileForge `v3.1.0` adds permanent release-validation infrastructure, honest negative/degraded accounting, hardened FastAPI/SSE production serving, and reproducible evidence bundles (`benchmarks/validation_artifacts/v3.1.0/`):
+
+- **Validation Schema, Runner & Clean-Room Bundle (`benchmarks/production/schema.py`, `manifest.py`, `runner.py`, `scripts/reproduce_validation.sh`, `docs/REPRODUCE.md`)**: Every benchmark suite emits 7 reproducible artifacts (`manifest.json`, `samples.jsonl`, `summary.json`, `environment.json`, `commands.log`, `stdout.log`, `stderr.log`) with secret redaction, SHA-256 verification, and explicit `MEASURED` / `REPRODUCED` / `SIMULATED` / `DEGRADED` / `UNSUPPORTED` / `NOT_RUN` / `PENDING_HARDWARE` status labels.
+- **External Engine Benchmarking (`benchmarks/production/probe_external_engines.py`)**: Installed and measured `SGLang 0.5.23` (`265.36 tok/s` `C=1`, `3,260.69 tok/s` `C=16` on Mistral-7B-GPTQ; `804.45 tok/s` on Qwen2.5-0.5B) and `vLLM 0.34.0` (`699.55 tok/s` on Qwen2.5-0.5B; **`UNSUPPORTED`** on `desc_act=True` Mistral-7B-GPTQ) using PyPI `cu13` wheels; recorded `TensorRT-LLM 1.3.0` as **`NOT_RUN`** (`Vendored triton_kernels module not found`). Documented `Qwen2.5-0.5B` CuTileForge `UnifiedModelExecutor` (`92.7 tok/s`) as **`DEGRADED`** (`0.58×` HF, `0.12×` SGLang).
+- **Real Long-Context & Quantization Audits (`bench_long_context_real.py`, `bench_quant_e2e_parity.py`)**: Separated real-checkpoint `4K..32K` Mistral-7B (`118.64 -> 46.97 tok/s` FP16; `64K` `UNSUPPORTED`) and `512..8192` Mixtral-8x7B (`33.03 -> 14.74 tok/s`, `27.93 GB` VRAM) from synthetic FlashDecoding (`phase14c_synthetic_attention`). Verified 32L on-disk GPTQ end-to-end (`END_TO_END_VERIFIED`, `2/2` exact greedy match, `0.0211%` PPL diff) while honestly logging 8L repacked `LAYER_VERIFIED_ONLY` divergence in `FP8_e4m3_tensor` (`1.2888%` PPL diff), `GGUF_Q4_K`, `AWQ_gs128`, and `GPTQ_gs128_nodesc`.
+- **Hardened OpenAI Server, 15-Min Soak & 10 Fault Scenarios (`cutile_forge/server/app.py`, `cutile_forge/cli.py`, `bench_serving_stress.py`, `bench_reliability_faults.py`)**: Added strict request validation (`extra="forbid"`, `max_prompt_tokens`), loopback bind default (`127.0.0.1`), single-worker executor offload, client disconnect cancellation for SSE streams, eager CUDA-graph fallback on capture failure, 15-minute live HTTP soak (`10,092/10,092` OK, `0.0 MB/min` RSS slope), and `10/10` fault recovery tests.
+- **Permanent CI/Release Validation & Regression Gates (`compare_with_baseline.py`, `run_release_validation.py`, `.github/workflows/validation.yml`, `.github/workflows/production-validation.yml`, `CITATION.cff`)**: Added checked-in `v3.0.0` RTX 5090 baseline, 300-DPI validation figures (`docs/figures/validation_v310/`), and 8 dedicated Phase 14 validation reports in `docs/`.
+
 ## [3.0.0] (2026-11-21) — Consolidated Platform Release (Phases 9–13)
 
 CuTileForge `v3.0.0` consolidates the full `v2.4.0` → `v2.8.0` roadmap into a unified, publication-grade CuTile compiler, universal quantization engine, multi-architecture model graph, distributed runtime, and production serving platform (`259/259` passing tests, `0` skipped, `92` `mypy`-clean modules):
