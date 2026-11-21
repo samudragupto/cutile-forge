@@ -31,6 +31,7 @@ class FXCompileStats:
     bmm_lowerings: int = 0
     softmax_lowerings: int = 0
     cache_hit: bool = False
+    lowered_ops: list[str] = field(default_factory=list)
     fallback_ops: list[str] = field(default_factory=list)
 
 
@@ -173,6 +174,278 @@ def _cu_softmax(
     return F.softmax(x, dim=dim, _stacklevel=_stacklevel, dtype=dtype)
 
 
+def _cu_linear(
+    input: torch.Tensor,
+    weight: torch.Tensor,
+    bias: torch.Tensor | None = None,
+) -> torch.Tensor:
+    """Execute F.linear via CuTile cutile_gemm_fp16 when eligible."""
+    if input.is_cuda and input.dtype == torch.float16 and input.ndim in (2, 3) and weight.ndim == 2:
+        from cutile_forge.kernels.gemm_dequant import cutile_gemm_fp16
+
+        orig_shape = input.shape
+        out_2d = cutile_gemm_fp16(input.reshape(-1, orig_shape[-1]), weight.t().contiguous())
+        out = out_2d.view(*orig_shape[:-1], weight.shape[0])
+        return out + bias if bias is not None else out
+    return F.linear(input, weight, bias)
+
+
+def _cu_addmm(
+    input: torch.Tensor,
+    mat1: torch.Tensor,
+    mat2: torch.Tensor,
+    beta: float = 1,
+    alpha: float = 1,
+) -> torch.Tensor:
+    """Execute torch.addmm via CuTile cutile_gemm_fp16 when eligible."""
+    if (
+        mat1.is_cuda
+        and mat1.dtype == torch.float16
+        and mat2.dtype == torch.float16
+        and mat1.ndim == 2
+        and mat2.ndim == 2
+        and beta == 1
+        and alpha == 1
+    ):
+        from cutile_forge.kernels.gemm_dequant import cutile_gemm_fp16
+
+        return input + cutile_gemm_fp16(mat1, mat2)
+    return torch.addmm(input, mat1, mat2, beta=beta, alpha=alpha)
+
+
+def _cu_matmul(input: torch.Tensor, other: torch.Tensor) -> torch.Tensor:
+    """Execute torch.matmul via CuTile GEMM or BMM when eligible."""
+    if input.is_cuda and input.dtype == other.dtype:
+        if input.ndim == 2 and other.ndim == 2 and input.dtype == torch.float16:
+            from cutile_forge.kernels.gemm_dequant import cutile_gemm_fp16
+
+            return cutile_gemm_fp16(input, other)
+        if (
+            input.ndim == 3
+            and other.ndim == 3
+            and input.dtype in (torch.float16, torch.bfloat16, torch.float32)
+        ):
+            from cutile_forge.kernels.bmm import cutile_bmm
+
+            return cutile_bmm(input, other)
+    return torch.matmul(input, other)
+
+
+def _cu_layer_norm(
+    input: torch.Tensor,
+    normalized_shape: tuple[int, ...] | list[int],
+    weight: torch.Tensor | None = None,
+    bias: torch.Tensor | None = None,
+    eps: float = 1e-5,
+) -> torch.Tensor:
+    """Execute F.layer_norm via CuTile cutile_layernorm when eligible."""
+    if (
+        input.is_cuda
+        and input.dtype == torch.float16
+        and weight is not None
+        and len(normalized_shape) == 1
+    ):
+        from cutile_forge.kernels.layernorm import cutile_layernorm
+
+        return cutile_layernorm(input, weight, bias=bias, eps=eps)
+    return F.layer_norm(input, list(normalized_shape), weight=weight, bias=bias, eps=eps)
+
+
+def _cu_gelu(input: torch.Tensor, approximate: str = "none") -> torch.Tensor:
+    """Execute F.gelu via CuTile cutile_gelu when eligible."""
+    if (
+        input.is_cuda
+        and approximate == "tanh"
+        and input.dtype in (torch.float16, torch.bfloat16, torch.float32)
+    ):
+        from cutile_forge.kernels.activations import cutile_gelu
+
+        return cutile_gelu(input)
+    return F.gelu(input, approximate=approximate)
+
+
+def _cu_silu(input: torch.Tensor, inplace: bool = False) -> torch.Tensor:
+    """Execute F.silu via CuTile cutile_silu when eligible."""
+    if (
+        input.is_cuda
+        and not inplace
+        and input.dtype in (torch.float16, torch.bfloat16, torch.float32)
+    ):
+        from cutile_forge.kernels.activations import cutile_silu
+
+        return cutile_silu(input)
+    return F.silu(input, inplace=inplace)
+
+
+def _cu_sum(
+    input: torch.Tensor,
+    dim: Any = None,
+    keepdim: bool = False,
+    dtype: torch.dtype | None = None,
+) -> torch.Tensor:
+    """Execute torch.sum via CuTile cutile_reduce_sum when eligible."""
+    valid_dt = input.dtype in (torch.float16, torch.bfloat16, torch.float32)
+    if input.is_cuda and dtype is None and valid_dt:
+        from cutile_forge.kernels.reductions import cutile_reduce_sum
+
+        if isinstance(dim, int):
+            return cutile_reduce_sum(input, dim=dim, keepdim=keepdim)
+        if dim is None and not keepdim and input.ndim >= 1 and input.numel() > 0:
+            return cutile_reduce_sum(input.reshape(-1), dim=0)
+    if dim is None:
+        return torch.sum(input, dtype=dtype)
+    return torch.sum(input, dim=dim, keepdim=keepdim, dtype=dtype)
+
+
+def _cu_amax(
+    input: torch.Tensor,
+    dim: Any = None,
+    keepdim: bool = False,
+) -> torch.Tensor:
+    """Execute torch.amax via CuTile cutile_reduce_max when eligible."""
+    valid_dt = input.dtype in (torch.float16, torch.bfloat16, torch.float32)
+    if input.is_cuda and valid_dt and isinstance(dim, int):
+        from cutile_forge.kernels.reductions import cutile_reduce_max
+
+        return cutile_reduce_max(input, dim=dim, keepdim=keepdim)
+    if dim is None:
+        return torch.amax(input)
+    return torch.amax(input, dim=dim, keepdim=keepdim)
+
+
+def _cu_cumsum(
+    input: torch.Tensor,
+    dim: int,
+    dtype: torch.dtype | None = None,
+) -> torch.Tensor:
+    """Execute torch.cumsum via CuTile cutile_cumsum when eligible."""
+    if (
+        input.is_cuda
+        and dtype is None
+        and input.dtype in (torch.float16, torch.bfloat16, torch.float32)
+    ):
+        from cutile_forge.kernels.scan import cutile_cumsum
+
+        return cutile_cumsum(input, dim=dim)
+    return torch.cumsum(input, dim=dim, dtype=dtype)
+
+
+def _cu_conv2d(
+    input: torch.Tensor,
+    weight: torch.Tensor,
+    bias: torch.Tensor | None = None,
+    stride: Any = 1,
+    padding: Any = 0,
+    dilation: Any = 1,
+    groups: int = 1,
+) -> torch.Tensor:
+    """Execute F.conv2d via CuTile cutile_conv2d when eligible."""
+    if (
+        input.is_cuda
+        and groups == 1
+        and dilation in (1, (1, 1))
+        and input.dtype in (torch.float16, torch.bfloat16, torch.float32)
+    ):
+        from cutile_forge.kernels.indexing import cutile_conv2d
+
+        return cutile_conv2d(
+            input, weight, bias=bias, stride=stride, padding=padding, groups=groups
+        )
+    return F.conv2d(
+        input, weight, bias=bias, stride=stride, padding=padding, dilation=dilation, groups=groups
+    )
+
+
+def _cu_embedding(
+    input: torch.Tensor,
+    weight: torch.Tensor,
+    padding_idx: int | None = None,
+    max_norm: float | None = None,
+    norm_type: float = 2.0,
+    scale_grad_by_freq: bool = False,
+    sparse: bool = False,
+) -> torch.Tensor:
+    """Execute F.embedding via CuTile cutile_gather when eligible."""
+    if (
+        weight.is_cuda
+        and max_norm is None
+        and not scale_grad_by_freq
+        and not sparse
+        and weight.dtype in (torch.float16, torch.bfloat16, torch.float32)
+    ):
+        from cutile_forge.kernels.indexing import cutile_gather
+
+        out_2d = cutile_gather(weight, input.reshape(-1))
+        return out_2d.view(*input.shape, weight.shape[1])
+    return F.embedding(
+        input,
+        weight,
+        padding_idx=padding_idx,
+        max_norm=max_norm,
+        norm_type=norm_type,
+        scale_grad_by_freq=scale_grad_by_freq,
+        sparse=sparse,
+    )
+
+
+@dataclass(frozen=True)
+class ShapeGuard:
+    """Validates runtime tensor `(shape, dtype, device)` against a compiled FX entry."""
+
+    expected_specs: tuple[tuple[tuple[int, ...], str, str], ...]
+
+    @classmethod
+    def from_inputs(cls, inputs: list[torch.Tensor]) -> ShapeGuard:
+        specs = tuple(
+            (tuple(t.shape), str(t.dtype), str(t.device))
+            for t in inputs
+            if isinstance(t, torch.Tensor)
+        )
+        return cls(expected_specs=specs)
+
+    def matches(self, inputs: list[torch.Tensor]) -> bool:
+        actual = tuple(
+            (tuple(t.shape), str(t.dtype), str(t.device))
+            for t in inputs
+            if isinstance(t, torch.Tensor)
+        )
+        return actual == self.expected_specs
+
+
+class FXOpRegistry:
+    """Registry mapping PyTorch FX call targets to CuTile-accelerated lowering helpers."""
+
+    def __init__(self) -> None:
+        self._entries: dict[Any, tuple[str, Callable[..., Any]]] = {}
+
+    def register(self, target: Any, name: str, fn: Callable[..., Any]) -> None:
+        self._entries[target] = (name, fn)
+
+    def get(self, target: Any) -> tuple[str, Callable[..., Any]] | None:
+        return self._entries.get(target)
+
+    def supports(self, target: Any) -> bool:
+        return target in self._entries
+
+    def registered_ops(self) -> list[str]:
+        return sorted({name for name, _ in self._entries.values()})
+
+
+DEFAULT_FX_OP_REGISTRY = FXOpRegistry()
+DEFAULT_FX_OP_REGISTRY.register(F.linear, "linear", _cu_linear)
+DEFAULT_FX_OP_REGISTRY.register(torch.addmm, "addmm", _cu_addmm)
+DEFAULT_FX_OP_REGISTRY.register(torch.matmul, "matmul", _cu_matmul)
+DEFAULT_FX_OP_REGISTRY.register(operator.matmul, "matmul", _cu_matmul)
+DEFAULT_FX_OP_REGISTRY.register(F.layer_norm, "layer_norm", _cu_layer_norm)
+DEFAULT_FX_OP_REGISTRY.register(F.gelu, "gelu", _cu_gelu)
+DEFAULT_FX_OP_REGISTRY.register(F.silu, "silu", _cu_silu)
+DEFAULT_FX_OP_REGISTRY.register(torch.sum, "sum", _cu_sum)
+DEFAULT_FX_OP_REGISTRY.register(torch.amax, "amax", _cu_amax)
+DEFAULT_FX_OP_REGISTRY.register(torch.cumsum, "cumsum", _cu_cumsum)
+DEFAULT_FX_OP_REGISTRY.register(F.conv2d, "conv2d", _cu_conv2d)
+DEFAULT_FX_OP_REGISTRY.register(F.embedding, "embedding", _cu_embedding)
+
+
 _LOWERED_TARGETS = {
     _cu_fused_ffn_linear,
     _cu_fused_ln_residual,
@@ -180,20 +453,27 @@ _LOWERED_TARGETS = {
     _cu_fused_linear_silu,
     _cu_bmm,
     _cu_softmax,
+    _cu_linear,
+    _cu_addmm,
+    _cu_matmul,
+    _cu_layer_norm,
+    _cu_gelu,
+    _cu_silu,
+    _cu_sum,
+    _cu_amax,
+    _cu_cumsum,
+    _cu_conv2d,
+    _cu_embedding,
 }
 
 
 def _fx_cache_key(gm: fx.GraphModule, example_inputs: list[torch.Tensor]) -> str:
-    tensor_sig = [
-        (tuple(t.shape), str(t.dtype), str(t.device))
-        for t in example_inputs
-        if isinstance(t, torch.Tensor)
-    ]
+    guard = ShapeGuard.from_inputs(example_inputs)
     param_sig = [
         (name, t.data_ptr(), tuple(t.shape), str(t.dtype))
         for name, t in list(gm.named_parameters()) + list(gm.named_buffers())
     ]
-    raw = f"{gm.code}|{tensor_sig}|{param_sig}"
+    raw = f"{gm.code}|{guard.expected_specs}|{param_sig}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
@@ -218,6 +498,7 @@ def cutile_forge_backend(
             bmm_lowerings=cached_stats.bmm_lowerings,
             softmax_lowerings=cached_stats.softmax_lowerings,
             cache_hit=True,
+            lowered_ops=list(cached_stats.lowered_ops),
             fallback_ops=list(cached_stats.fallback_ops),
         )
         return cached_fn
@@ -232,6 +513,7 @@ def cutile_forge_backend(
     gemm_silu_fusions = 0
     bmm_lowerings = 0
     softmax_lowerings = 0
+    lowered_ops: list[str] = []
 
     # Pass 1: Match `linear -> silu -> linear`
     nodes_snapshot = list(graph.nodes)
@@ -265,6 +547,7 @@ def cutile_forge_backend(
                     graph.erase_node(silu_node)
                     graph.erase_node(up_node)
                     ffn_fusions += 1
+                    lowered_ops.append("fused_ffn_linear")
 
                     # Record in TFG IR for fusion verification
                     t_spec = DataTensor("h", (1, 1), "float16")
@@ -311,6 +594,7 @@ def cutile_forge_backend(
                 graph.erase_node(node)
                 graph.erase_node(add_node)
                 ln_res_fusions += 1
+                lowered_ops.append("fused_ln_residual")
 
     # Pass 3: Lower `scaled_dot_product_attention` -> `_cu_fused_sdpa`
     for node in list(graph.nodes):
@@ -320,6 +604,7 @@ def cutile_forge_backend(
             node.replace_all_uses_with(fused)
             graph.erase_node(node)
             attn_fusions += 1
+            lowered_ops.append("fused_sdpa")
 
     # Pass 4: Match standalone `linear -> silu` -> `_cu_fused_linear_silu`
     for node in list(graph.nodes):
@@ -340,6 +625,7 @@ def cutile_forge_backend(
                 graph.erase_node(node)
                 graph.erase_node(lin_node)
                 gemm_silu_fusions += 1
+                lowered_ops.append("fused_linear_silu")
 
     # Pass 5: Lower `torch.bmm` -> `_cu_bmm`
     for node in list(graph.nodes):
@@ -349,6 +635,7 @@ def cutile_forge_backend(
             node.replace_all_uses_with(fused)
             graph.erase_node(node)
             bmm_lowerings += 1
+            lowered_ops.append("bmm")
 
     # Pass 6: Lower `F.softmax` -> `_cu_softmax`
     for node in list(graph.nodes):
@@ -358,6 +645,19 @@ def cutile_forge_backend(
             node.replace_all_uses_with(fused)
             graph.erase_node(node)
             softmax_lowerings += 1
+            lowered_ops.append("softmax")
+
+    # Pass 7: General registry lowering for standalone ops
+    for node in list(graph.nodes):
+        if node.op == "call_function":
+            entry = DEFAULT_FX_OP_REGISTRY.get(node.target)
+            if entry is not None:
+                op_name, lowered_fn = entry
+                with graph.inserting_before(node):
+                    fused = graph.call_function(lowered_fn, args=node.args, kwargs=node.kwargs)
+                node.replace_all_uses_with(fused)
+                graph.erase_node(node)
+                lowered_ops.append(op_name)
 
     fallback_ops: list[str] = []
     for node in graph.nodes:
@@ -385,6 +685,7 @@ def cutile_forge_backend(
         bmm_lowerings=bmm_lowerings,
         softmax_lowerings=softmax_lowerings,
         cache_hit=False,
+        lowered_ops=lowered_ops,
         fallback_ops=fallback_ops,
     )
     LAST_FX_STATS = stats
