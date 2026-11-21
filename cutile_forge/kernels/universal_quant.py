@@ -676,20 +676,44 @@ def dequant_gguf_q6_k_reference(blocks_u8: torch.Tensor, k: int, n: int) -> torc
 
 def encode_fp32_to_gguf_q4_0(weight_kn: torch.Tensor) -> torch.Tensor:
     """Encode `(K, N)` weight matrix to raw GGUF Q4_0 `(N * K // 32, 18)` uint8 blocks."""
-    from gguf import quants
+    try:
+        from gguf import quants
 
-    w_nk = weight_kn.detach().cpu().float().t().contiguous().numpy()
-    raw = quants.Q4_0.quantize_blocks(w_nk.reshape(-1, 32))
-    return torch.from_numpy(np.ascontiguousarray(raw)).to(weight_kn.device)
+        w_nk = weight_kn.detach().cpu().float().t().contiguous().numpy()
+        raw = quants.Q4_0.quantize_blocks(w_nk.reshape(-1, 32))
+        return torch.from_numpy(np.ascontiguousarray(raw)).to(weight_kn.device)
+    except ImportError:
+        k, n = weight_kn.shape
+        num_blocks = (k * n) // 32
+        wb = weight_kn.detach().float().t().contiguous().view(num_blocks, 32)
+        idx = wb.abs().argmax(dim=-1, keepdim=True)
+        max_val = torch.gather(wb, 1, idx)
+        d = (max_val / -8.0).to(torch.float16)
+        id_val = torch.where(d.float() != 0, 1.0 / d.float(), torch.zeros_like(d.float()))
+        q = ((wb * id_val) + 8.5).to(torch.int32).clamp(0, 15).to(torch.uint8)
+        qs = q[:, :16] | (q[:, 16:] << 4)
+        d_u8 = d.view(torch.uint8).reshape(num_blocks, 2)
+        return torch.cat([d_u8, qs], dim=1).contiguous()
 
 
 def encode_fp32_to_gguf_q8_0(weight_kn: torch.Tensor) -> torch.Tensor:
     """Encode `(K, N)` weight matrix to raw GGUF Q8_0 `(N * K // 32, 34)` uint8 blocks."""
-    from gguf import quants
+    try:
+        from gguf import quants
 
-    w_nk = weight_kn.detach().cpu().float().t().contiguous().numpy()
-    raw = quants.Q8_0.quantize_blocks(w_nk.reshape(-1, 32))
-    return torch.from_numpy(np.ascontiguousarray(raw)).to(weight_kn.device)
+        w_nk = weight_kn.detach().cpu().float().t().contiguous().numpy()
+        raw = quants.Q8_0.quantize_blocks(w_nk.reshape(-1, 32))
+        return torch.from_numpy(np.ascontiguousarray(raw)).to(weight_kn.device)
+    except ImportError:
+        k, n = weight_kn.shape
+        num_blocks = (k * n) // 32
+        wb = weight_kn.detach().float().t().contiguous().view(num_blocks, 32)
+        amax = wb.abs().max(dim=-1, keepdim=True).values
+        d = (amax / 127.0).to(torch.float16)
+        id_val = torch.where(d.float() != 0, 1.0 / d.float(), torch.zeros_like(d.float()))
+        qs = (wb * id_val).round().clamp(-128, 127).to(torch.int8).view(torch.uint8)
+        d_u8 = d.view(torch.uint8).reshape(num_blocks, 2)
+        return torch.cat([d_u8, qs], dim=1).contiguous()
 
 
 def encode_fp32_to_gguf_q4_k(weight_kn: torch.Tensor) -> torch.Tensor:

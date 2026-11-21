@@ -33,6 +33,7 @@ dependencies = [
     "matplotlib>=3.8",
     "nvidia-ml-py>=12.535",
     "graphviz>=0.20",
+    "gguf>=0.10.0",
 ]
 
 [project.optional-dependencies]
