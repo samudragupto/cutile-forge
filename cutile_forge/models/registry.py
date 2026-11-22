@@ -418,14 +418,15 @@ def from_hf_config(config: dict[str, Any], name: str | None = None) -> UnifiedMo
         mlp_dim = int(merged.get("encoder_ffn_dim", merged.get("intermediate_size", 4 * d)))
         n_layers = int(merged.get("encoder_layers", merged["num_hidden_layers"]))
         eps = float(merged.get("layer_norm_eps", 1e-5))
+        act_fn = str(merged.get("activation_function", "gelu")).lower()
+        aud_act: Literal["gelu", "silu", "quick_gelu", "gelu_erf"] = (
+            "gelu_erf" if act_fn == "gelu" else "gelu"
+        )
         aud_in = AudioConvEmbedStage(
             hidden_size=d,
             num_mel_bins=int(merged.get("num_mel_bins", 80)),
             max_source_positions=int(merged.get("max_source_positions", 1500)),
-        )
-        act_fn = str(merged.get("activation_function", "gelu")).lower()
-        aud_act: Literal["gelu", "silu", "quick_gelu", "gelu_erf"] = (
-            "gelu_erf" if act_fn == "gelu" else "gelu"
+            activation=aud_act,
         )
         aud_blocks: list[BlockStage] = [
             ViTEncoderBlock(

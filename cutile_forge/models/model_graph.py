@@ -132,6 +132,7 @@ class AudioConvEmbedStage(InputStage):
 
     num_mel_bins: int = 80
     max_source_positions: int = 1500
+    activation: Literal["gelu", "silu", "quick_gelu", "gelu_erf"] = "gelu_erf"
 
 
 @dataclass
@@ -1231,7 +1232,7 @@ class UnifiedModelExecutor:
         aw: dict[str, Any],
         use_cutile: bool = True,
     ) -> torch.Tensor:
-        _ = ast
+        act_kind = str(getattr(ast, "activation", "gelu_erf"))
         if use_cutile and mel_features.is_cuda and mel_features.dtype == torch.float16:
             c1 = cutile_conv2d(
                 mel_features.unsqueeze(2),
@@ -1240,7 +1241,7 @@ class UnifiedModelExecutor:
                 stride=(1, 1),
                 padding=(0, 1),
             ).squeeze(2)
-            a1 = self._act(c1.transpose(1, 2).contiguous(), "gelu", use_cutile).transpose(1, 2)
+            a1 = self._act(c1.transpose(1, 2).contiguous(), act_kind, use_cutile).transpose(1, 2)
             c2 = cutile_conv2d(
                 a1.unsqueeze(2),
                 aw["conv2_w"].unsqueeze(2),
@@ -1248,7 +1249,7 @@ class UnifiedModelExecutor:
                 stride=(1, 2),
                 padding=(0, 1),
             ).squeeze(2)
-            a2 = self._act(c2.transpose(1, 2).contiguous(), "gelu", use_cutile)
+            a2 = self._act(c2.transpose(1, 2).contiguous(), act_kind, use_cutile)
         else:
             c1 = F.conv1d(
                 mel_features.float(),
@@ -1257,7 +1258,7 @@ class UnifiedModelExecutor:
                 stride=1,
                 padding=1,
             ).to(mel_features.dtype)
-            a1 = self._act(c1.transpose(1, 2).contiguous(), "gelu", use_cutile).transpose(1, 2)
+            a1 = self._act(c1.transpose(1, 2).contiguous(), act_kind, use_cutile).transpose(1, 2)
             c2 = F.conv1d(
                 a1.float(),
                 aw["conv2_w"].float(),
@@ -1265,7 +1266,7 @@ class UnifiedModelExecutor:
                 stride=2,
                 padding=1,
             ).to(mel_features.dtype)
-            a2 = self._act(c2.transpose(1, 2).contiguous(), "gelu", use_cutile)
+            a2 = self._act(c2.transpose(1, 2).contiguous(), act_kind, use_cutile)
         seq_len = a2.shape[1]
         return a2 + aw["pos_embed"][:seq_len, :].unsqueeze(0)
 
