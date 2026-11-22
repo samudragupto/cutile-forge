@@ -1,6 +1,6 @@
 # Regression Collection Report (`tier=full`)
 
-- **Commit:** `7c250021b764d30df62126e84486feac4db39e17` | **Hardware:** `NVIDIA GeForce RTX 5090 (sm_120)` | **Contended:** `False`
+- **Commit:** `c3034b112f198b819bfca27aca03b57a3f701194` | **Hardware:** `NVIDIA GeForce RTX 5090 (sm_120)` | **Contended:** `False`
 
 | Category | Model | Reference | Layers | Status | Key Parity / PPL Metrics | Notes |
 |---|---|---|---:|---|---|---|

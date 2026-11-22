@@ -1,9 +1,9 @@
 {
   "tier": "full",
-  "commit": "7c250021b764d30df62126e84486feac4db39e17",
+  "commit": "c3034b112f198b819bfca27aca03b57a3f701194",
   "hardware_id": "NVIDIA GeForce RTX 5090 (sm_120)",
   "contended": false,
-  "timestamp_utc": "2026-11-22T15:12:07.150556+00:00",
+  "timestamp_utc": "2026-11-22T15:41:35.785968+00:00",
   "results": [
     {
       "category": "Dense decoder",
@@ -25,9 +25,9 @@
         "greedy_total_prompts": 5,
         "greedy_tokens_per_prompt": 256,
         "greedy_tok_match_pct": 99.84,
-        "decode_med_tok_s": 169.93,
-        "decode_min_tok_s": 169.76,
-        "decode_max_tok_s": 170.25
+        "decode_med_tok_s": 169.94,
+        "decode_min_tok_s": 167.07,
+        "decode_max_tok_s": 170.08
       },
       "gates": [
         {
@@ -75,7 +75,9 @@
             "delta_on_ref_top1": 0.0,
             "delta_on_cu_top1": 0.0,
             "inter_runtime_delta_ulps": 0.0,
-            "classification": "EXACT_LOGIT_TIE"
+            "classification": "ONE_SIDED_TIE",
+            "cu_logits_source": "NativeModelRuntime.decode_step_replay(ws.hidden->cutile_rmsnorm->cutile_gemm_fp16)",
+            "ref_logits_source": "Mistral7B.forward(kv_cache=None,backend='pytorch')"
           }
         ]
       }
@@ -100,7 +102,7 @@
         "greedy_total_prompts": 5,
         "greedy_tokens_per_prompt": 256,
         "greedy_tok_match_pct": 99.92,
-        "prefill_512_med_ms": 10.86
+        "prefill_512_med_ms": 10.64
       },
       "gates": [
         {
@@ -148,7 +150,9 @@
             "delta_on_ref_top1": -0.015625,
             "delta_on_cu_top1": -0.015625,
             "inter_runtime_delta_ulps": 1.0,
-            "classification": "EXACT_LOGIT_TIE"
+            "classification": "ONE_SIDED_TIE",
+            "cu_logits_source": "UnifiedModelExecutor.forward(step_logits)",
+            "ref_logits_source": "HF AutoModelForCausalLM.forward(full_seq)"
           }
         ]
       }
@@ -173,9 +177,9 @@
         "greedy_total_prompts": 5,
         "greedy_tokens_per_prompt": 256,
         "greedy_tok_match_pct": 99.77,
-        "decode_med_tok_s": 41.61,
-        "decode_min_tok_s": 41.35,
-        "decode_max_tok_s": 41.92
+        "decode_med_tok_s": 43.36,
+        "decode_min_tok_s": 42.93,
+        "decode_max_tok_s": 43.67
       },
       "gates": [
         {
@@ -223,7 +227,9 @@
             "delta_on_ref_top1": -0.015625,
             "delta_on_cu_top1": -0.015625,
             "inter_runtime_delta_ulps": 1.0,
-            "classification": "EXACT_LOGIT_TIE"
+            "classification": "ONE_SIDED_TIE",
+            "cu_logits_source": "Mistral7B.forward(kv_cache=PagedKVCache,backend='cutile',last_token_only=True)",
+            "ref_logits_source": "Mistral7B.forward(kv_cache=None,backend='pytorch')"
           },
           {
             "prompt_idx": 2,
@@ -245,7 +251,9 @@
             "delta_on_ref_top1": -0.09375,
             "delta_on_cu_top1": 0.015625,
             "inter_runtime_delta_ulps": 6.0,
-            "classification": "SUBSTANTIVE_DIVERGENCE"
+            "classification": "SUBSTANTIVE_DIVERGENCE",
+            "cu_logits_source": "Mistral7B.forward(kv_cache=PagedKVCache,backend='cutile',last_token_only=True)",
+            "ref_logits_source": "Mistral7B.forward(kv_cache=None,backend='pytorch')"
           }
         ]
       }
@@ -402,9 +410,9 @@
         "greedy_total_prompts": 5,
         "greedy_tokens_per_prompt": 256,
         "greedy_tok_match_pct": 99.92,
-        "decode_med_tok_s": 3.88,
-        "decode_min_tok_s": 3.88,
-        "decode_max_tok_s": 3.88
+        "decode_med_tok_s": 3.92,
+        "decode_min_tok_s": 3.91,
+        "decode_max_tok_s": 3.92
       },
       "gates": [
         {
@@ -452,7 +460,9 @@
             "delta_on_ref_top1": 0.015625,
             "delta_on_cu_top1": 0.015625,
             "inter_runtime_delta_ulps": 1.0,
-            "classification": "EXACT_LOGIT_TIE"
+            "classification": "ONE_SIDED_TIE",
+            "cu_logits_source": "Mistral7B.forward(kv_cache=PagedKVCache,backend='cutile',last_token_only=True)",
+            "ref_logits_source": "Mistral7B.forward(kv_cache=None,backend='pytorch')"
           }
         ]
       }

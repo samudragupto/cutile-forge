@@ -1,0 +1,4938 @@
+{
+  "prompt_idx": 2,
+  "prompt_len_with_bos": 13,
+  "target_gen_step": 185,
+  "target_seq_pos": 197,
+  "step185_logits_4way": {
+    "cu_kv": {
+      "top1": 28723,
+      "top2": 28725,
+      "top1_logit": 22.4375,
+      "top2_logit": 22.390625,
+      "margin": 0.046875
+    },
+    "cu_nokv": {
+      "top1": 28725,
+      "top2": 28723,
+      "top1_logit": 22.5,
+      "top2_logit": 22.421875,
+      "margin": 0.078125
+    },
+    "pt_kv": {
+      "top1": 28725,
+      "top2": 28723,
+      "top1_logit": 22.484375,
+      "top2_logit": 22.40625,
+      "margin": 0.078125
+    },
+    "pt_nokv": {
+      "top1": 28725,
+      "top2": 28723,
+      "top1_logit": 22.484375,
+      "top2_logit": 22.421875,
+      "margin": 0.0625
+    }
+  },
+  "first_router_diff_all_positions": {
+    "seq_pos": 59,
+    "gen_step": 47,
+    "layer": 29,
+    "cu_top2": [
+      1,
+      7
+    ],
+    "pt_top2": [
+      1,
+      2
+    ],
+    "cu_cutoff_gap": 0.001241,
+    "pt_cutoff_gap": 0.000874,
+    "router_logits_max_diff": 0.002319
+  },
+  "total_router_diffs_across_all_pos_layer": 17,
+  "all_router_diffs": [
+    {
+      "seq_pos": 59,
+      "gen_step": 47,
+      "layer": 29,
+      "cu_top2": [
+        1,
+        7
+      ],
+      "pt_top2": [
+        1,
+        2
+      ],
+      "cu_cutoff_gap": 0.001241,
+      "pt_cutoff_gap": 0.000874,
+      "router_logits_max_diff": 0.002319
+    },
+    {
+      "seq_pos": 120,
+      "gen_step": 108,
+      "layer": 3,
+      "cu_top2": [
+        4,
+        7
+      ],
+      "pt_top2": [
+        4,
+        6
+      ],
+      "cu_cutoff_gap": 0.000524,
+      "pt_cutoff_gap": 0.000731,
+      "router_logits_max_diff": 0.001437
+    },
+    {
+      "seq_pos": 120,
+      "gen_step": 108,
+      "layer": 23,
+      "cu_top2": [
+        3,
+        6
+      ],
+      "pt_top2": [
+        6,
+        3
+      ],
+      "cu_cutoff_gap": 1.503338,
+      "pt_cutoff_gap": 1.44772,
+      "router_logits_max_diff": 0.086647
+    },
+    {
+      "seq_pos": 147,
+      "gen_step": 135,
+      "layer": 27,
+      "cu_top2": [
+        3,
+        7
+      ],
+      "pt_top2": [
+        3,
+        6
+      ],
+      "cu_cutoff_gap": 0.00134,
+      "pt_cutoff_gap": 0.001524,
+      "router_logits_max_diff": 0.005425
+    },
+    {
+      "seq_pos": 157,
+      "gen_step": 145,
+      "layer": 31,
+      "cu_top2": [
+        6,
+        7
+      ],
+      "pt_top2": [
+        6,
+        3
+      ],
+      "cu_cutoff_gap": 0.001208,
+      "pt_cutoff_gap": 0.002576,
+      "router_logits_max_diff": 0.003992
+    },
+    {
+      "seq_pos": 168,
+      "gen_step": 156,
+      "layer": 12,
+      "cu_top2": [
+        6,
+        1
+      ],
+      "pt_top2": [
+        6,
+        3
+      ],
+      "cu_cutoff_gap": 0.001252,
+      "pt_cutoff_gap": 0.000136,
+      "router_logits_max_diff": 0.001725
+    },
+    {
+      "seq_pos": 183,
+      "gen_step": 171,
+      "layer": 7,
+      "cu_top2": [
+        3,
+        5
+      ],
+      "pt_top2": [
+        3,
+        4
+      ],
+      "cu_cutoff_gap": 0.000354,
+      "pt_cutoff_gap": 0.002376,
+      "router_logits_max_diff": 0.001717
+    },
+    {
+      "seq_pos": 183,
+      "gen_step": 171,
+      "layer": 9,
+      "cu_top2": [
+        7,
+        6
+      ],
+      "pt_top2": [
+        7,
+        4
+      ],
+      "cu_cutoff_gap": 0.015254,
+      "pt_cutoff_gap": 0.023827,
+      "router_logits_max_diff": 0.040938
+    },
+    {
+      "seq_pos": 183,
+      "gen_step": 171,
+      "layer": 17,
+      "cu_top2": [
+        0,
+        2
+      ],
+      "pt_top2": [
+        0,
+        7
+      ],
+      "cu_cutoff_gap": 0.049831,
+      "pt_cutoff_gap": 0.015582,
+      "router_logits_max_diff": 0.043868
+    },
+    {
+      "seq_pos": 183,
+      "gen_step": 171,
+      "layer": 21,
+      "cu_top2": [
+        6,
+        0
+      ],
+      "pt_top2": [
+        0,
+        6
+      ],
+      "cu_cutoff_gap": 0.487905,
+      "pt_cutoff_gap": 0.54022,
+      "router_logits_max_diff": 0.224204
+    },
+    {
+      "seq_pos": 183,
+      "gen_step": 171,
+      "layer": 24,
+      "cu_top2": [
+        1,
+        4
+      ],
+      "pt_top2": [
+        4,
+        1
+      ],
+      "cu_cutoff_gap": 0.99237,
+      "pt_cutoff_gap": 1.063599,
+      "router_logits_max_diff": 0.097614
+    },
+    {
+      "seq_pos": 183,
+      "gen_step": 171,
+      "layer": 27,
+      "cu_top2": [
+        3,
+        2
+      ],
+      "pt_top2": [
+        3,
+        1
+      ],
+      "cu_cutoff_gap": 0.07753,
+      "pt_cutoff_gap": 0.021966,
+      "router_logits_max_diff": 0.106397
+    },
+    {
+      "seq_pos": 196,
+      "gen_step": 184,
+      "layer": 15,
+      "cu_top2": [
+        3,
+        2
+      ],
+      "pt_top2": [
+        3,
+        0
+      ],
+      "cu_cutoff_gap": 0.005257,
+      "pt_cutoff_gap": 0.013201,
+      "router_logits_max_diff": 0.031603
+    },
+    {
+      "seq_pos": 196,
+      "gen_step": 184,
+      "layer": 16,
+      "cu_top2": [
+        7,
+        3
+      ],
+      "pt_top2": [
+        7,
+        0
+      ],
+      "cu_cutoff_gap": 0.022515,
+      "pt_cutoff_gap": 0.096443,
+      "router_logits_max_diff": 0.110566
+    },
+    {
+      "seq_pos": 196,
+      "gen_step": 184,
+      "layer": 25,
+      "cu_top2": [
+        6,
+        2
+      ],
+      "pt_top2": [
+        2,
+        6
+      ],
+      "cu_cutoff_gap": 1.04222,
+      "pt_cutoff_gap": 1.390425,
+      "router_logits_max_diff": 0.388301
+    },
+    {
+      "seq_pos": 196,
+      "gen_step": 184,
+      "layer": 27,
+      "cu_top2": [
+        4,
+        5
+      ],
+      "pt_top2": [
+        4,
+        7
+      ],
+      "cu_cutoff_gap": 0.031379,
+      "pt_cutoff_gap": 0.099426,
+      "router_logits_max_diff": 0.230799
+    },
+    {
+      "seq_pos": 196,
+      "gen_step": 184,
+      "layer": 28,
+      "cu_top2": [
+        3,
+        1
+      ],
+      "pt_top2": [
+        3,
+        2
+      ],
+      "cu_cutoff_gap": 0.407191,
+      "pt_cutoff_gap": 0.056552,
+      "router_logits_max_diff": 0.233992
+    }
+  ],
+  "layer_diffs_at_step185": [
+    {
+      "layer": 0,
+      "cu_kv_vs_pt_nokv_max_abs": 0.000244,
+      "cu_kv_vs_pt_kv_max_abs": 0.000122,
+      "cu_nokv_vs_pt_nokv_max_abs": 0.000244,
+      "cu_kv_vs_cu_nokv_max_abs": 6.1e-05
+    },
+    {
+      "layer": 1,
+      "cu_kv_vs_pt_nokv_max_abs": 0.000488,
+      "cu_kv_vs_pt_kv_max_abs": 0.000244,
+      "cu_nokv_vs_pt_nokv_max_abs": 0.000488,
+      "cu_kv_vs_cu_nokv_max_abs": 0.000244
+    },
+    {
+      "layer": 2,
+      "cu_kv_vs_pt_nokv_max_abs": 0.003906,
+      "cu_kv_vs_pt_kv_max_abs": 0.003906,
+      "cu_nokv_vs_pt_nokv_max_abs": 0.000977,
+      "cu_kv_vs_cu_nokv_max_abs": 0.003906
+    },
+    {
+      "layer": 3,
+      "cu_kv_vs_pt_nokv_max_abs": 0.000977,
+      "cu_kv_vs_pt_kv_max_abs": 0.000977,
+      "cu_nokv_vs_pt_nokv_max_abs": 0.000977,
+      "cu_kv_vs_cu_nokv_max_abs": 0.000977
+    },
+    {
+      "layer": 4,
+      "cu_kv_vs_pt_nokv_max_abs": 0.007812,
+      "cu_kv_vs_pt_kv_max_abs": 0.007812,
+      "cu_nokv_vs_pt_nokv_max_abs": 0.007812,
+      "cu_kv_vs_cu_nokv_max_abs": 0.001953
+    },
+    {
+      "layer": 5,
+      "cu_kv_vs_pt_nokv_max_abs": 0.015625,
+      "cu_kv_vs_pt_kv_max_abs": 0.015625,
+      "cu_nokv_vs_pt_nokv_max_abs": 0.015625,
+      "cu_kv_vs_cu_nokv_max_abs": 0.001953
+    },
+    {
+      "layer": 6,
+      "cu_kv_vs_pt_nokv_max_abs": 0.007812,
+      "cu_kv_vs_pt_kv_max_abs": 0.015625,
+      "cu_nokv_vs_pt_nokv_max_abs": 0.011719,
+      "cu_kv_vs_cu_nokv_max_abs": 0.003906
+    },
+    {
+      "layer": 7,
+      "cu_kv_vs_pt_nokv_max_abs": 0.015625,
+      "cu_kv_vs_pt_kv_max_abs": 0.015625,
+      "cu_nokv_vs_pt_nokv_max_abs": 0.03125,
+      "cu_kv_vs_cu_nokv_max_abs": 0.015625
+    },
+    {
+      "layer": 8,
+      "cu_kv_vs_pt_nokv_max_abs": 0.03125,
+      "cu_kv_vs_pt_kv_max_abs": 0.03125,
+      "cu_nokv_vs_pt_nokv_max_abs": 0.012695,
+      "cu_kv_vs_cu_nokv_max_abs": 0.03125
+    },
+    {
+      "layer": 9,
+      "cu_kv_vs_pt_nokv_max_abs": 0.03125,
+      "cu_kv_vs_pt_kv_max_abs": 0.03125,
+      "cu_nokv_vs_pt_nokv_max_abs": 0.014648,
+      "cu_kv_vs_cu_nokv_max_abs": 0.03125
+    },
+    {
+      "layer": 10,
+      "cu_kv_vs_pt_nokv_max_abs": 0.03125,
+      "cu_kv_vs_pt_kv_max_abs": 0.03125,
+      "cu_nokv_vs_pt_nokv_max_abs": 0.015625,
+      "cu_kv_vs_cu_nokv_max_abs": 0.03125
+    },
+    {
+      "layer": 11,
+      "cu_kv_vs_pt_nokv_max_abs": 0.03125,
+      "cu_kv_vs_pt_kv_max_abs": 0.03125,
+      "cu_nokv_vs_pt_nokv_max_abs": 0.019531,
+      "cu_kv_vs_cu_nokv_max_abs": 0.03125
+    },
+    {
+      "layer": 12,
+      "cu_kv_vs_pt_nokv_max_abs": 0.0625,
+      "cu_kv_vs_pt_kv_max_abs": 0.017578,
+      "cu_nokv_vs_pt_nokv_max_abs": 0.020508,
+      "cu_kv_vs_cu_nokv_max_abs": 0.0625
+    },
+    {
+      "layer": 13,
+      "cu_kv_vs_pt_nokv_max_abs": 0.0625,
+      "cu_kv_vs_pt_kv_max_abs": 0.023438,
+      "cu_nokv_vs_pt_nokv_max_abs": 0.125,
+      "cu_kv_vs_cu_nokv_max_abs": 0.0625
+    },
+    {
+      "layer": 14,
+      "cu_kv_vs_pt_nokv_max_abs": 0.023682,
+      "cu_kv_vs_pt_kv_max_abs": 0.023438,
+      "cu_nokv_vs_pt_nokv_max_abs": 0.0625,
+      "cu_kv_vs_cu_nokv_max_abs": 0.0625
+    },
+    {
+      "layer": 15,
+      "cu_kv_vs_pt_nokv_max_abs": 0.0625,
+      "cu_kv_vs_pt_kv_max_abs": 0.0625,
+      "cu_nokv_vs_pt_nokv_max_abs": 0.0625,
+      "cu_kv_vs_cu_nokv_max_abs": 0.023438
+    },
+    {
+      "layer": 16,
+      "cu_kv_vs_pt_nokv_max_abs": 0.034668,
+      "cu_kv_vs_pt_kv_max_abs": 0.029297,
+      "cu_nokv_vs_pt_nokv_max_abs": 0.03125,
+      "cu_kv_vs_cu_nokv_max_abs": 0.03125
+    },
+    {
+      "layer": 17,
+      "cu_kv_vs_pt_nokv_max_abs": 0.0625,
+      "cu_kv_vs_pt_kv_max_abs": 0.0625,
+      "cu_nokv_vs_pt_nokv_max_abs": 0.03125,
+      "cu_kv_vs_cu_nokv_max_abs": 0.0625
+    },
+    {
+      "layer": 18,
+      "cu_kv_vs_pt_nokv_max_abs": 0.125,
+      "cu_kv_vs_pt_kv_max_abs": 0.125,
+      "cu_nokv_vs_pt_nokv_max_abs": 0.035156,
+      "cu_kv_vs_cu_nokv_max_abs": 0.15625
+    },
+    {
+      "layer": 19,
+      "cu_kv_vs_pt_nokv_max_abs": 0.109375,
+      "cu_kv_vs_pt_kv_max_abs": 0.125,
+      "cu_nokv_vs_pt_nokv_max_abs": 0.125,
+      "cu_kv_vs_cu_nokv_max_abs": 0.125
+    },
+    {
+      "layer": 20,
+      "cu_kv_vs_pt_nokv_max_abs": 0.125,
+      "cu_kv_vs_pt_kv_max_abs": 0.125,
+      "cu_nokv_vs_pt_nokv_max_abs": 0.0625,
+      "cu_kv_vs_cu_nokv_max_abs": 0.125
+    },
+    {
+      "layer": 21,
+      "cu_kv_vs_pt_nokv_max_abs": 0.125,
+      "cu_kv_vs_pt_kv_max_abs": 0.125,
+      "cu_nokv_vs_pt_nokv_max_abs": 0.0625,
+      "cu_kv_vs_cu_nokv_max_abs": 0.125
+    },
+    {
+      "layer": 22,
+      "cu_kv_vs_pt_nokv_max_abs": 0.15625,
+      "cu_kv_vs_pt_kv_max_abs": 0.15625,
+      "cu_nokv_vs_pt_nokv_max_abs": 0.125,
+      "cu_kv_vs_cu_nokv_max_abs": 0.125
+    },
+    {
+      "layer": 23,
+      "cu_kv_vs_pt_nokv_max_abs": 0.1875,
+      "cu_kv_vs_pt_kv_max_abs": 0.25,
+      "cu_nokv_vs_pt_nokv_max_abs": 0.125,
+      "cu_kv_vs_cu_nokv_max_abs": 0.25
+    },
+    {
+      "layer": 24,
+      "cu_kv_vs_pt_nokv_max_abs": 0.344238,
+      "cu_kv_vs_pt_kv_max_abs": 0.34375,
+      "cu_nokv_vs_pt_nokv_max_abs": 0.125,
+      "cu_kv_vs_cu_nokv_max_abs": 0.351562
+    },
+    {
+      "layer": 25,
+      "cu_kv_vs_pt_nokv_max_abs": 0.359375,
+      "cu_kv_vs_pt_kv_max_abs": 0.358398,
+      "cu_nokv_vs_pt_nokv_max_abs": 0.25,
+      "cu_kv_vs_cu_nokv_max_abs": 0.363281
+    },
+    {
+      "layer": 26,
+      "cu_kv_vs_pt_nokv_max_abs": 0.344727,
+      "cu_kv_vs_pt_kv_max_abs": 0.34082,
+      "cu_nokv_vs_pt_nokv_max_abs": 0.25,
+      "cu_kv_vs_cu_nokv_max_abs": 0.34375
+    },
+    {
+      "layer": 27,
+      "cu_kv_vs_pt_nokv_max_abs": 0.376953,
+      "cu_kv_vs_pt_kv_max_abs": 0.388672,
+      "cu_nokv_vs_pt_nokv_max_abs": 0.25,
+      "cu_kv_vs_cu_nokv_max_abs": 0.380859
+    },
+    {
+      "layer": 28,
+      "cu_kv_vs_pt_nokv_max_abs": 0.40332,
+      "cu_kv_vs_pt_kv_max_abs": 0.429688,
+      "cu_nokv_vs_pt_nokv_max_abs": 0.125,
+      "cu_kv_vs_cu_nokv_max_abs": 0.429688
+    },
+    {
+      "layer": 29,
+      "cu_kv_vs_pt_nokv_max_abs": 0.75,
+      "cu_kv_vs_pt_kv_max_abs": 0.716797,
+      "cu_nokv_vs_pt_nokv_max_abs": 0.125,
+      "cu_kv_vs_cu_nokv_max_abs": 0.712891
+    },
+    {
+      "layer": 30,
+      "cu_kv_vs_pt_nokv_max_abs": 0.763672,
+      "cu_kv_vs_pt_kv_max_abs": 0.724609,
+      "cu_nokv_vs_pt_nokv_max_abs": 0.25,
+      "cu_kv_vs_cu_nokv_max_abs": 0.75
+    },
+    {
+      "layer": 31,
+      "cu_kv_vs_pt_nokv_max_abs": 1.25,
+      "cu_kv_vs_pt_kv_max_abs": 0.78125,
+      "cu_nokv_vs_pt_nokv_max_abs": 0.25,
+      "cu_kv_vs_cu_nokv_max_abs": 1.0
+    }
+  ],
+  "window_177_185_per_layer": [
+    {
+      "seq_pos": 189,
+      "gen_step": 177,
+      "token_id": 302,
+      "layers": [
+        {
+          "layer": 0,
+          "match": true,
+          "cu_top2": [
+            1,
+            4
+          ],
+          "pt_top2": [
+            1,
+            4
+          ],
+          "cu_cutoff_gap": 0.043067,
+          "pt_cutoff_gap": 0.044114,
+          "router_logits_max_diff": 0.001518
+        },
+        {
+          "layer": 1,
+          "match": true,
+          "cu_top2": [
+            6,
+            0
+          ],
+          "pt_top2": [
+            6,
+            0
+          ],
+          "cu_cutoff_gap": 0.830521,
+          "pt_cutoff_gap": 0.830041,
+          "router_logits_max_diff": 0.001104
+        },
+        {
+          "layer": 2,
+          "match": true,
+          "cu_top2": [
+            6,
+            2
+          ],
+          "pt_top2": [
+            6,
+            2
+          ],
+          "cu_cutoff_gap": 0.018984,
+          "pt_cutoff_gap": 0.021185,
+          "router_logits_max_diff": 0.001873
+        },
+        {
+          "layer": 3,
+          "match": true,
+          "cu_top2": [
+            4,
+            2
+          ],
+          "pt_top2": [
+            4,
+            2
+          ],
+          "cu_cutoff_gap": 0.688301,
+          "pt_cutoff_gap": 0.687272,
+          "router_logits_max_diff": 0.001479
+        },
+        {
+          "layer": 4,
+          "match": true,
+          "cu_top2": [
+            7,
+            3
+          ],
+          "pt_top2": [
+            7,
+            3
+          ],
+          "cu_cutoff_gap": 0.131724,
+          "pt_cutoff_gap": 0.130629,
+          "router_logits_max_diff": 0.00124
+        },
+        {
+          "layer": 5,
+          "match": true,
+          "cu_top2": [
+            4,
+            1
+          ],
+          "pt_top2": [
+            4,
+            1
+          ],
+          "cu_cutoff_gap": 0.178893,
+          "pt_cutoff_gap": 0.178276,
+          "router_logits_max_diff": 0.001249
+        },
+        {
+          "layer": 6,
+          "match": true,
+          "cu_top2": [
+            5,
+            7
+          ],
+          "pt_top2": [
+            5,
+            7
+          ],
+          "cu_cutoff_gap": 0.385527,
+          "pt_cutoff_gap": 0.386688,
+          "router_logits_max_diff": 0.001297
+        },
+        {
+          "layer": 7,
+          "match": true,
+          "cu_top2": [
+            2,
+            6
+          ],
+          "pt_top2": [
+            2,
+            6
+          ],
+          "cu_cutoff_gap": 0.447842,
+          "pt_cutoff_gap": 0.450165,
+          "router_logits_max_diff": 0.002082
+        },
+        {
+          "layer": 8,
+          "match": true,
+          "cu_top2": [
+            5,
+            6
+          ],
+          "pt_top2": [
+            5,
+            6
+          ],
+          "cu_cutoff_gap": 0.912113,
+          "pt_cutoff_gap": 0.917971,
+          "router_logits_max_diff": 0.004816
+        },
+        {
+          "layer": 9,
+          "match": true,
+          "cu_top2": [
+            1,
+            7
+          ],
+          "pt_top2": [
+            1,
+            7
+          ],
+          "cu_cutoff_gap": 0.908757,
+          "pt_cutoff_gap": 0.911478,
+          "router_logits_max_diff": 0.005417
+        },
+        {
+          "layer": 10,
+          "match": true,
+          "cu_top2": [
+            4,
+            7
+          ],
+          "pt_top2": [
+            4,
+            7
+          ],
+          "cu_cutoff_gap": 0.570834,
+          "pt_cutoff_gap": 0.560523,
+          "router_logits_max_diff": 0.009523
+        },
+        {
+          "layer": 11,
+          "match": true,
+          "cu_top2": [
+            1,
+            0
+          ],
+          "pt_top2": [
+            1,
+            0
+          ],
+          "cu_cutoff_gap": 0.866949,
+          "pt_cutoff_gap": 0.870343,
+          "router_logits_max_diff": 0.006289
+        },
+        {
+          "layer": 12,
+          "match": true,
+          "cu_top2": [
+            5,
+            6
+          ],
+          "pt_top2": [
+            5,
+            6
+          ],
+          "cu_cutoff_gap": 0.413385,
+          "pt_cutoff_gap": 0.412687,
+          "router_logits_max_diff": 0.005164
+        },
+        {
+          "layer": 13,
+          "match": true,
+          "cu_top2": [
+            3,
+            0
+          ],
+          "pt_top2": [
+            3,
+            0
+          ],
+          "cu_cutoff_gap": 0.241561,
+          "pt_cutoff_gap": 0.244662,
+          "router_logits_max_diff": 0.003312
+        },
+        {
+          "layer": 14,
+          "match": true,
+          "cu_top2": [
+            4,
+            5
+          ],
+          "pt_top2": [
+            4,
+            5
+          ],
+          "cu_cutoff_gap": 0.423152,
+          "pt_cutoff_gap": 0.419817,
+          "router_logits_max_diff": 0.003075
+        },
+        {
+          "layer": 15,
+          "match": true,
+          "cu_top2": [
+            2,
+            1
+          ],
+          "pt_top2": [
+            2,
+            1
+          ],
+          "cu_cutoff_gap": 0.570721,
+          "pt_cutoff_gap": 0.568687,
+          "router_logits_max_diff": 0.00267
+        },
+        {
+          "layer": 16,
+          "match": true,
+          "cu_top2": [
+            6,
+            5
+          ],
+          "pt_top2": [
+            6,
+            5
+          ],
+          "cu_cutoff_gap": 0.592384,
+          "pt_cutoff_gap": 0.593687,
+          "router_logits_max_diff": 0.006184
+        },
+        {
+          "layer": 17,
+          "match": true,
+          "cu_top2": [
+            7,
+            1
+          ],
+          "pt_top2": [
+            7,
+            1
+          ],
+          "cu_cutoff_gap": 0.940399,
+          "pt_cutoff_gap": 0.94171,
+          "router_logits_max_diff": 0.002163
+        },
+        {
+          "layer": 18,
+          "match": true,
+          "cu_top2": [
+            1,
+            5
+          ],
+          "pt_top2": [
+            1,
+            5
+          ],
+          "cu_cutoff_gap": 0.329243,
+          "pt_cutoff_gap": 0.332102,
+          "router_logits_max_diff": 0.003108
+        },
+        {
+          "layer": 19,
+          "match": true,
+          "cu_top2": [
+            6,
+            3
+          ],
+          "pt_top2": [
+            6,
+            3
+          ],
+          "cu_cutoff_gap": 0.575812,
+          "pt_cutoff_gap": 0.583289,
+          "router_logits_max_diff": 0.004288
+        },
+        {
+          "layer": 20,
+          "match": true,
+          "cu_top2": [
+            0,
+            6
+          ],
+          "pt_top2": [
+            0,
+            6
+          ],
+          "cu_cutoff_gap": 0.376593,
+          "pt_cutoff_gap": 0.374789,
+          "router_logits_max_diff": 0.008632
+        },
+        {
+          "layer": 21,
+          "match": true,
+          "cu_top2": [
+            6,
+            0
+          ],
+          "pt_top2": [
+            6,
+            0
+          ],
+          "cu_cutoff_gap": 0.554528,
+          "pt_cutoff_gap": 0.557171,
+          "router_logits_max_diff": 0.010384
+        },
+        {
+          "layer": 22,
+          "match": true,
+          "cu_top2": [
+            4,
+            7
+          ],
+          "pt_top2": [
+            4,
+            7
+          ],
+          "cu_cutoff_gap": 1.200206,
+          "pt_cutoff_gap": 1.199842,
+          "router_logits_max_diff": 0.008771
+        },
+        {
+          "layer": 23,
+          "match": true,
+          "cu_top2": [
+            3,
+            1
+          ],
+          "pt_top2": [
+            3,
+            1
+          ],
+          "cu_cutoff_gap": 0.50877,
+          "pt_cutoff_gap": 0.507835,
+          "router_logits_max_diff": 0.005418
+        },
+        {
+          "layer": 24,
+          "match": true,
+          "cu_top2": [
+            0,
+            7
+          ],
+          "pt_top2": [
+            0,
+            7
+          ],
+          "cu_cutoff_gap": 0.345715,
+          "pt_cutoff_gap": 0.356811,
+          "router_logits_max_diff": 0.007285
+        },
+        {
+          "layer": 25,
+          "match": true,
+          "cu_top2": [
+            5,
+            0
+          ],
+          "pt_top2": [
+            5,
+            0
+          ],
+          "cu_cutoff_gap": 1.513239,
+          "pt_cutoff_gap": 1.519541,
+          "router_logits_max_diff": 0.007223
+        },
+        {
+          "layer": 26,
+          "match": true,
+          "cu_top2": [
+            0,
+            1
+          ],
+          "pt_top2": [
+            0,
+            1
+          ],
+          "cu_cutoff_gap": 0.786786,
+          "pt_cutoff_gap": 0.779665,
+          "router_logits_max_diff": 0.008034
+        },
+        {
+          "layer": 27,
+          "match": true,
+          "cu_top2": [
+            4,
+            3
+          ],
+          "pt_top2": [
+            4,
+            3
+          ],
+          "cu_cutoff_gap": 0.838944,
+          "pt_cutoff_gap": 0.845876,
+          "router_logits_max_diff": 0.00868
+        },
+        {
+          "layer": 28,
+          "match": true,
+          "cu_top2": [
+            4,
+            3
+          ],
+          "pt_top2": [
+            4,
+            3
+          ],
+          "cu_cutoff_gap": 0.184679,
+          "pt_cutoff_gap": 0.185474,
+          "router_logits_max_diff": 0.006778
+        },
+        {
+          "layer": 29,
+          "match": true,
+          "cu_top2": [
+            7,
+            4
+          ],
+          "pt_top2": [
+            7,
+            4
+          ],
+          "cu_cutoff_gap": 0.027151,
+          "pt_cutoff_gap": 0.029018,
+          "router_logits_max_diff": 0.00534
+        },
+        {
+          "layer": 30,
+          "match": true,
+          "cu_top2": [
+            6,
+            4
+          ],
+          "pt_top2": [
+            6,
+            4
+          ],
+          "cu_cutoff_gap": 1.704018,
+          "pt_cutoff_gap": 1.69942,
+          "router_logits_max_diff": 0.005412
+        },
+        {
+          "layer": 31,
+          "match": true,
+          "cu_top2": [
+            6,
+            2
+          ],
+          "pt_top2": [
+            6,
+            2
+          ],
+          "cu_cutoff_gap": 0.713392,
+          "pt_cutoff_gap": 0.707205,
+          "router_logits_max_diff": 0.008559
+        }
+      ]
+    },
+    {
+      "seq_pos": 190,
+      "gen_step": 178,
+      "token_id": 582,
+      "layers": [
+        {
+          "layer": 0,
+          "match": true,
+          "cu_top2": [
+            7,
+            0
+          ],
+          "pt_top2": [
+            7,
+            0
+          ],
+          "cu_cutoff_gap": 0.798645,
+          "pt_cutoff_gap": 0.799037,
+          "router_logits_max_diff": 0.00214
+        },
+        {
+          "layer": 1,
+          "match": true,
+          "cu_top2": [
+            5,
+            4
+          ],
+          "pt_top2": [
+            5,
+            4
+          ],
+          "cu_cutoff_gap": 0.106954,
+          "pt_cutoff_gap": 0.10578,
+          "router_logits_max_diff": 0.001773
+        },
+        {
+          "layer": 2,
+          "match": true,
+          "cu_top2": [
+            1,
+            2
+          ],
+          "pt_top2": [
+            1,
+            2
+          ],
+          "cu_cutoff_gap": 0.153256,
+          "pt_cutoff_gap": 0.15319,
+          "router_logits_max_diff": 0.000677
+        },
+        {
+          "layer": 3,
+          "match": true,
+          "cu_top2": [
+            0,
+            2
+          ],
+          "pt_top2": [
+            0,
+            2
+          ],
+          "cu_cutoff_gap": 0.437702,
+          "pt_cutoff_gap": 0.438699,
+          "router_logits_max_diff": 0.001365
+        },
+        {
+          "layer": 4,
+          "match": true,
+          "cu_top2": [
+            7,
+            4
+          ],
+          "pt_top2": [
+            7,
+            4
+          ],
+          "cu_cutoff_gap": 0.849785,
+          "pt_cutoff_gap": 0.853727,
+          "router_logits_max_diff": 0.00249
+        },
+        {
+          "layer": 5,
+          "match": true,
+          "cu_top2": [
+            1,
+            4
+          ],
+          "pt_top2": [
+            1,
+            4
+          ],
+          "cu_cutoff_gap": 0.315293,
+          "pt_cutoff_gap": 0.31554,
+          "router_logits_max_diff": 0.001972
+        },
+        {
+          "layer": 6,
+          "match": true,
+          "cu_top2": [
+            3,
+            7
+          ],
+          "pt_top2": [
+            3,
+            7
+          ],
+          "cu_cutoff_gap": 0.107743,
+          "pt_cutoff_gap": 0.108003,
+          "router_logits_max_diff": 0.001889
+        },
+        {
+          "layer": 7,
+          "match": true,
+          "cu_top2": [
+            5,
+            0
+          ],
+          "pt_top2": [
+            5,
+            0
+          ],
+          "cu_cutoff_gap": 0.050877,
+          "pt_cutoff_gap": 0.052673,
+          "router_logits_max_diff": 0.003164
+        },
+        {
+          "layer": 8,
+          "match": true,
+          "cu_top2": [
+            4,
+            2
+          ],
+          "pt_top2": [
+            4,
+            2
+          ],
+          "cu_cutoff_gap": 0.258187,
+          "pt_cutoff_gap": 0.264643,
+          "router_logits_max_diff": 0.005507
+        },
+        {
+          "layer": 9,
+          "match": true,
+          "cu_top2": [
+            0,
+            2
+          ],
+          "pt_top2": [
+            0,
+            2
+          ],
+          "cu_cutoff_gap": 0.107981,
+          "pt_cutoff_gap": 0.102109,
+          "router_logits_max_diff": 0.008256
+        },
+        {
+          "layer": 10,
+          "match": true,
+          "cu_top2": [
+            0,
+            7
+          ],
+          "pt_top2": [
+            0,
+            7
+          ],
+          "cu_cutoff_gap": 0.147381,
+          "pt_cutoff_gap": 0.143913,
+          "router_logits_max_diff": 0.00284
+        },
+        {
+          "layer": 11,
+          "match": true,
+          "cu_top2": [
+            4,
+            2
+          ],
+          "pt_top2": [
+            4,
+            2
+          ],
+          "cu_cutoff_gap": 0.539515,
+          "pt_cutoff_gap": 0.5403,
+          "router_logits_max_diff": 0.003779
+        },
+        {
+          "layer": 12,
+          "match": true,
+          "cu_top2": [
+            3,
+            4
+          ],
+          "pt_top2": [
+            3,
+            4
+          ],
+          "cu_cutoff_gap": 0.043859,
+          "pt_cutoff_gap": 0.041622,
+          "router_logits_max_diff": 0.006799
+        },
+        {
+          "layer": 13,
+          "match": true,
+          "cu_top2": [
+            0,
+            4
+          ],
+          "pt_top2": [
+            0,
+            4
+          ],
+          "cu_cutoff_gap": 0.114667,
+          "pt_cutoff_gap": 0.113644,
+          "router_logits_max_diff": 0.004273
+        },
+        {
+          "layer": 14,
+          "match": true,
+          "cu_top2": [
+            7,
+            2
+          ],
+          "pt_top2": [
+            7,
+            2
+          ],
+          "cu_cutoff_gap": 0.557604,
+          "pt_cutoff_gap": 0.557726,
+          "router_logits_max_diff": 0.005983
+        },
+        {
+          "layer": 15,
+          "match": true,
+          "cu_top2": [
+            5,
+            4
+          ],
+          "pt_top2": [
+            5,
+            4
+          ],
+          "cu_cutoff_gap": 0.121559,
+          "pt_cutoff_gap": 0.121657,
+          "router_logits_max_diff": 0.008738
+        },
+        {
+          "layer": 16,
+          "match": true,
+          "cu_top2": [
+            7,
+            6
+          ],
+          "pt_top2": [
+            7,
+            6
+          ],
+          "cu_cutoff_gap": 0.531518,
+          "pt_cutoff_gap": 0.52539,
+          "router_logits_max_diff": 0.006994
+        },
+        {
+          "layer": 17,
+          "match": true,
+          "cu_top2": [
+            6,
+            1
+          ],
+          "pt_top2": [
+            6,
+            1
+          ],
+          "cu_cutoff_gap": 0.374527,
+          "pt_cutoff_gap": 0.372416,
+          "router_logits_max_diff": 0.005024
+        },
+        {
+          "layer": 18,
+          "match": true,
+          "cu_top2": [
+            4,
+            7
+          ],
+          "pt_top2": [
+            4,
+            7
+          ],
+          "cu_cutoff_gap": 0.194583,
+          "pt_cutoff_gap": 0.196008,
+          "router_logits_max_diff": 0.006532
+        },
+        {
+          "layer": 19,
+          "match": true,
+          "cu_top2": [
+            1,
+            6
+          ],
+          "pt_top2": [
+            1,
+            6
+          ],
+          "cu_cutoff_gap": 0.440072,
+          "pt_cutoff_gap": 0.448838,
+          "router_logits_max_diff": 0.005078
+        },
+        {
+          "layer": 20,
+          "match": true,
+          "cu_top2": [
+            1,
+            6
+          ],
+          "pt_top2": [
+            1,
+            6
+          ],
+          "cu_cutoff_gap": 0.571216,
+          "pt_cutoff_gap": 0.580469,
+          "router_logits_max_diff": 0.007419
+        },
+        {
+          "layer": 21,
+          "match": true,
+          "cu_top2": [
+            6,
+            2
+          ],
+          "pt_top2": [
+            6,
+            2
+          ],
+          "cu_cutoff_gap": 1.127167,
+          "pt_cutoff_gap": 1.12886,
+          "router_logits_max_diff": 0.008397
+        },
+        {
+          "layer": 22,
+          "match": true,
+          "cu_top2": [
+            4,
+            1
+          ],
+          "pt_top2": [
+            4,
+            1
+          ],
+          "cu_cutoff_gap": 0.70639,
+          "pt_cutoff_gap": 0.70616,
+          "router_logits_max_diff": 0.004978
+        },
+        {
+          "layer": 23,
+          "match": true,
+          "cu_top2": [
+            3,
+            1
+          ],
+          "pt_top2": [
+            3,
+            1
+          ],
+          "cu_cutoff_gap": 0.889881,
+          "pt_cutoff_gap": 0.883205,
+          "router_logits_max_diff": 0.005069
+        },
+        {
+          "layer": 24,
+          "match": true,
+          "cu_top2": [
+            3,
+            7
+          ],
+          "pt_top2": [
+            3,
+            7
+          ],
+          "cu_cutoff_gap": 0.123819,
+          "pt_cutoff_gap": 0.127211,
+          "router_logits_max_diff": 0.010299
+        },
+        {
+          "layer": 25,
+          "match": true,
+          "cu_top2": [
+            3,
+            6
+          ],
+          "pt_top2": [
+            3,
+            6
+          ],
+          "cu_cutoff_gap": 0.073012,
+          "pt_cutoff_gap": 0.059291,
+          "router_logits_max_diff": 0.009267
+        },
+        {
+          "layer": 26,
+          "match": true,
+          "cu_top2": [
+            1,
+            2
+          ],
+          "pt_top2": [
+            1,
+            2
+          ],
+          "cu_cutoff_gap": 1.319759,
+          "pt_cutoff_gap": 1.323124,
+          "router_logits_max_diff": 0.006612
+        },
+        {
+          "layer": 27,
+          "match": true,
+          "cu_top2": [
+            4,
+            0
+          ],
+          "pt_top2": [
+            4,
+            0
+          ],
+          "cu_cutoff_gap": 1.7505,
+          "pt_cutoff_gap": 1.743332,
+          "router_logits_max_diff": 0.00764
+        },
+        {
+          "layer": 28,
+          "match": true,
+          "cu_top2": [
+            5,
+            4
+          ],
+          "pt_top2": [
+            5,
+            4
+          ],
+          "cu_cutoff_gap": 0.674772,
+          "pt_cutoff_gap": 0.666793,
+          "router_logits_max_diff": 0.009437
+        },
+        {
+          "layer": 29,
+          "match": true,
+          "cu_top2": [
+            7,
+            1
+          ],
+          "pt_top2": [
+            7,
+            1
+          ],
+          "cu_cutoff_gap": 1.346578,
+          "pt_cutoff_gap": 1.343745,
+          "router_logits_max_diff": 0.005799
+        },
+        {
+          "layer": 30,
+          "match": true,
+          "cu_top2": [
+            6,
+            7
+          ],
+          "pt_top2": [
+            6,
+            7
+          ],
+          "cu_cutoff_gap": 0.024996,
+          "pt_cutoff_gap": 0.026174,
+          "router_logits_max_diff": 0.007689
+        },
+        {
+          "layer": 31,
+          "match": true,
+          "cu_top2": [
+            4,
+            0
+          ],
+          "pt_top2": [
+            4,
+            0
+          ],
+          "cu_cutoff_gap": 0.277233,
+          "pt_cutoff_gap": 0.271312,
+          "router_logits_max_diff": 0.016478
+        }
+      ]
+    },
+    {
+      "seq_pos": 191,
+      "gen_step": 179,
+      "token_id": 298,
+      "layers": [
+        {
+          "layer": 0,
+          "match": true,
+          "cu_top2": [
+            4,
+            7
+          ],
+          "pt_top2": [
+            4,
+            7
+          ],
+          "cu_cutoff_gap": 0.017638,
+          "pt_cutoff_gap": 0.01668,
+          "router_logits_max_diff": 0.000876
+        },
+        {
+          "layer": 1,
+          "match": true,
+          "cu_top2": [
+            7,
+            3
+          ],
+          "pt_top2": [
+            7,
+            3
+          ],
+          "cu_cutoff_gap": 0.000557,
+          "pt_cutoff_gap": 0.000987,
+          "router_logits_max_diff": 0.002904
+        },
+        {
+          "layer": 2,
+          "match": true,
+          "cu_top2": [
+            0,
+            1
+          ],
+          "pt_top2": [
+            0,
+            1
+          ],
+          "cu_cutoff_gap": 0.531251,
+          "pt_cutoff_gap": 0.531629,
+          "router_logits_max_diff": 0.00136
+        },
+        {
+          "layer": 3,
+          "match": true,
+          "cu_top2": [
+            0,
+            4
+          ],
+          "pt_top2": [
+            0,
+            4
+          ],
+          "cu_cutoff_gap": 0.282746,
+          "pt_cutoff_gap": 0.283577,
+          "router_logits_max_diff": 0.001073
+        },
+        {
+          "layer": 4,
+          "match": true,
+          "cu_top2": [
+            7,
+            1
+          ],
+          "pt_top2": [
+            7,
+            1
+          ],
+          "cu_cutoff_gap": 0.694363,
+          "pt_cutoff_gap": 0.694109,
+          "router_logits_max_diff": 0.000692
+        },
+        {
+          "layer": 5,
+          "match": true,
+          "cu_top2": [
+            0,
+            4
+          ],
+          "pt_top2": [
+            0,
+            4
+          ],
+          "cu_cutoff_gap": 0.007067,
+          "pt_cutoff_gap": 0.005149,
+          "router_logits_max_diff": 0.001769
+        },
+        {
+          "layer": 6,
+          "match": true,
+          "cu_top2": [
+            4,
+            3
+          ],
+          "pt_top2": [
+            4,
+            3
+          ],
+          "cu_cutoff_gap": 0.232944,
+          "pt_cutoff_gap": 0.2314,
+          "router_logits_max_diff": 0.000783
+        },
+        {
+          "layer": 7,
+          "match": true,
+          "cu_top2": [
+            2,
+            6
+          ],
+          "pt_top2": [
+            2,
+            6
+          ],
+          "cu_cutoff_gap": 0.028363,
+          "pt_cutoff_gap": 0.027578,
+          "router_logits_max_diff": 0.000928
+        },
+        {
+          "layer": 8,
+          "match": true,
+          "cu_top2": [
+            6,
+            1
+          ],
+          "pt_top2": [
+            6,
+            1
+          ],
+          "cu_cutoff_gap": 1.541018,
+          "pt_cutoff_gap": 1.541401,
+          "router_logits_max_diff": 0.00092
+        },
+        {
+          "layer": 9,
+          "match": true,
+          "cu_top2": [
+            1,
+            7
+          ],
+          "pt_top2": [
+            1,
+            7
+          ],
+          "cu_cutoff_gap": 1.685475,
+          "pt_cutoff_gap": 1.685237,
+          "router_logits_max_diff": 0.004258
+        },
+        {
+          "layer": 10,
+          "match": true,
+          "cu_top2": [
+            4,
+            7
+          ],
+          "pt_top2": [
+            4,
+            7
+          ],
+          "cu_cutoff_gap": 0.62764,
+          "pt_cutoff_gap": 0.628271,
+          "router_logits_max_diff": 0.002081
+        },
+        {
+          "layer": 11,
+          "match": true,
+          "cu_top2": [
+            7,
+            1
+          ],
+          "pt_top2": [
+            7,
+            1
+          ],
+          "cu_cutoff_gap": 1.484214,
+          "pt_cutoff_gap": 1.485969,
+          "router_logits_max_diff": 0.0048
+        },
+        {
+          "layer": 12,
+          "match": true,
+          "cu_top2": [
+            5,
+            1
+          ],
+          "pt_top2": [
+            5,
+            1
+          ],
+          "cu_cutoff_gap": 0.885819,
+          "pt_cutoff_gap": 0.886801,
+          "router_logits_max_diff": 0.001651
+        },
+        {
+          "layer": 13,
+          "match": true,
+          "cu_top2": [
+            3,
+            5
+          ],
+          "pt_top2": [
+            3,
+            5
+          ],
+          "cu_cutoff_gap": 0.051707,
+          "pt_cutoff_gap": 0.052012,
+          "router_logits_max_diff": 0.001794
+        },
+        {
+          "layer": 14,
+          "match": true,
+          "cu_top2": [
+            4,
+            6
+          ],
+          "pt_top2": [
+            4,
+            6
+          ],
+          "cu_cutoff_gap": 0.039143,
+          "pt_cutoff_gap": 0.040661,
+          "router_logits_max_diff": 0.002576
+        },
+        {
+          "layer": 15,
+          "match": true,
+          "cu_top2": [
+            1,
+            2
+          ],
+          "pt_top2": [
+            1,
+            2
+          ],
+          "cu_cutoff_gap": 0.177415,
+          "pt_cutoff_gap": 0.17953,
+          "router_logits_max_diff": 0.003176
+        },
+        {
+          "layer": 16,
+          "match": true,
+          "cu_top2": [
+            6,
+            5
+          ],
+          "pt_top2": [
+            6,
+            5
+          ],
+          "cu_cutoff_gap": 0.613778,
+          "pt_cutoff_gap": 0.614444,
+          "router_logits_max_diff": 0.001901
+        },
+        {
+          "layer": 17,
+          "match": true,
+          "cu_top2": [
+            7,
+            1
+          ],
+          "pt_top2": [
+            7,
+            1
+          ],
+          "cu_cutoff_gap": 0.295388,
+          "pt_cutoff_gap": 0.294904,
+          "router_logits_max_diff": 0.001495
+        },
+        {
+          "layer": 18,
+          "match": true,
+          "cu_top2": [
+            1,
+            3
+          ],
+          "pt_top2": [
+            1,
+            3
+          ],
+          "cu_cutoff_gap": 0.871049,
+          "pt_cutoff_gap": 0.875312,
+          "router_logits_max_diff": 0.003154
+        },
+        {
+          "layer": 19,
+          "match": true,
+          "cu_top2": [
+            3,
+            6
+          ],
+          "pt_top2": [
+            3,
+            6
+          ],
+          "cu_cutoff_gap": 0.450655,
+          "pt_cutoff_gap": 0.447595,
+          "router_logits_max_diff": 0.00602
+        },
+        {
+          "layer": 20,
+          "match": true,
+          "cu_top2": [
+            0,
+            4
+          ],
+          "pt_top2": [
+            0,
+            4
+          ],
+          "cu_cutoff_gap": 0.072747,
+          "pt_cutoff_gap": 0.070287,
+          "router_logits_max_diff": 0.008785
+        },
+        {
+          "layer": 21,
+          "match": true,
+          "cu_top2": [
+            7,
+            0
+          ],
+          "pt_top2": [
+            7,
+            0
+          ],
+          "cu_cutoff_gap": 1.477396,
+          "pt_cutoff_gap": 1.466868,
+          "router_logits_max_diff": 0.010858
+        },
+        {
+          "layer": 22,
+          "match": true,
+          "cu_top2": [
+            4,
+            7
+          ],
+          "pt_top2": [
+            4,
+            7
+          ],
+          "cu_cutoff_gap": 1.044977,
+          "pt_cutoff_gap": 1.040323,
+          "router_logits_max_diff": 0.007452
+        },
+        {
+          "layer": 23,
+          "match": true,
+          "cu_top2": [
+            3,
+            1
+          ],
+          "pt_top2": [
+            3,
+            1
+          ],
+          "cu_cutoff_gap": 0.809805,
+          "pt_cutoff_gap": 0.80757,
+          "router_logits_max_diff": 0.013739
+        },
+        {
+          "layer": 24,
+          "match": true,
+          "cu_top2": [
+            0,
+            6
+          ],
+          "pt_top2": [
+            0,
+            6
+          ],
+          "cu_cutoff_gap": 0.675735,
+          "pt_cutoff_gap": 0.654923,
+          "router_logits_max_diff": 0.014354
+        },
+        {
+          "layer": 25,
+          "match": true,
+          "cu_top2": [
+            5,
+            6
+          ],
+          "pt_top2": [
+            5,
+            6
+          ],
+          "cu_cutoff_gap": 1.277047,
+          "pt_cutoff_gap": 1.271258,
+          "router_logits_max_diff": 0.008334
+        },
+        {
+          "layer": 26,
+          "match": true,
+          "cu_top2": [
+            0,
+            1
+          ],
+          "pt_top2": [
+            0,
+            1
+          ],
+          "cu_cutoff_gap": 1.006985,
+          "pt_cutoff_gap": 1.008902,
+          "router_logits_max_diff": 0.007478
+        },
+        {
+          "layer": 27,
+          "match": true,
+          "cu_top2": [
+            4,
+            3
+          ],
+          "pt_top2": [
+            4,
+            3
+          ],
+          "cu_cutoff_gap": 0.991987,
+          "pt_cutoff_gap": 0.993752,
+          "router_logits_max_diff": 0.008199
+        },
+        {
+          "layer": 28,
+          "match": true,
+          "cu_top2": [
+            3,
+            4
+          ],
+          "pt_top2": [
+            3,
+            4
+          ],
+          "cu_cutoff_gap": 0.880259,
+          "pt_cutoff_gap": 0.877973,
+          "router_logits_max_diff": 0.005005
+        },
+        {
+          "layer": 29,
+          "match": true,
+          "cu_top2": [
+            7,
+            4
+          ],
+          "pt_top2": [
+            7,
+            4
+          ],
+          "cu_cutoff_gap": 0.006171,
+          "pt_cutoff_gap": 0.004477,
+          "router_logits_max_diff": 0.003286
+        },
+        {
+          "layer": 30,
+          "match": true,
+          "cu_top2": [
+            6,
+            4
+          ],
+          "pt_top2": [
+            6,
+            4
+          ],
+          "cu_cutoff_gap": 0.01542,
+          "pt_cutoff_gap": 0.018062,
+          "router_logits_max_diff": 0.00563
+        },
+        {
+          "layer": 31,
+          "match": true,
+          "cu_top2": [
+            2,
+            7
+          ],
+          "pt_top2": [
+            2,
+            7
+          ],
+          "cu_cutoff_gap": 1.654281,
+          "pt_cutoff_gap": 1.658704,
+          "router_logits_max_diff": 0.010411
+        }
+      ]
+    },
+    {
+      "seq_pos": 192,
+      "gen_step": 180,
+      "token_id": 28705,
+      "layers": [
+        {
+          "layer": 0,
+          "match": true,
+          "cu_top2": [
+            7,
+            0
+          ],
+          "pt_top2": [
+            7,
+            0
+          ],
+          "cu_cutoff_gap": 0.306091,
+          "pt_cutoff_gap": 0.306574,
+          "router_logits_max_diff": 0.000796
+        },
+        {
+          "layer": 1,
+          "match": true,
+          "cu_top2": [
+            4,
+            7
+          ],
+          "pt_top2": [
+            4,
+            7
+          ],
+          "cu_cutoff_gap": 0.559047,
+          "pt_cutoff_gap": 0.559141,
+          "router_logits_max_diff": 0.000957
+        },
+        {
+          "layer": 2,
+          "match": true,
+          "cu_top2": [
+            4,
+            0
+          ],
+          "pt_top2": [
+            4,
+            0
+          ],
+          "cu_cutoff_gap": 1.812599,
+          "pt_cutoff_gap": 1.812743,
+          "router_logits_max_diff": 0.000476
+        },
+        {
+          "layer": 3,
+          "match": true,
+          "cu_top2": [
+            4,
+            0
+          ],
+          "pt_top2": [
+            4,
+            0
+          ],
+          "cu_cutoff_gap": 0.824681,
+          "pt_cutoff_gap": 0.826001,
+          "router_logits_max_diff": 0.001308
+        },
+        {
+          "layer": 4,
+          "match": true,
+          "cu_top2": [
+            3,
+            4
+          ],
+          "pt_top2": [
+            3,
+            4
+          ],
+          "cu_cutoff_gap": 0.228101,
+          "pt_cutoff_gap": 0.228923,
+          "router_logits_max_diff": 0.001004
+        },
+        {
+          "layer": 5,
+          "match": true,
+          "cu_top2": [
+            0,
+            3
+          ],
+          "pt_top2": [
+            0,
+            3
+          ],
+          "cu_cutoff_gap": 0.256065,
+          "pt_cutoff_gap": 0.257059,
+          "router_logits_max_diff": 0.001809
+        },
+        {
+          "layer": 6,
+          "match": true,
+          "cu_top2": [
+            4,
+            2
+          ],
+          "pt_top2": [
+            4,
+            2
+          ],
+          "cu_cutoff_gap": 0.472823,
+          "pt_cutoff_gap": 0.46925,
+          "router_logits_max_diff": 0.002184
+        },
+        {
+          "layer": 7,
+          "match": true,
+          "cu_top2": [
+            0,
+            7
+          ],
+          "pt_top2": [
+            0,
+            7
+          ],
+          "cu_cutoff_gap": 0.117639,
+          "pt_cutoff_gap": 0.116887,
+          "router_logits_max_diff": 0.001298
+        },
+        {
+          "layer": 8,
+          "match": true,
+          "cu_top2": [
+            6,
+            5
+          ],
+          "pt_top2": [
+            6,
+            5
+          ],
+          "cu_cutoff_gap": 0.137752,
+          "pt_cutoff_gap": 0.137291,
+          "router_logits_max_diff": 0.001704
+        },
+        {
+          "layer": 9,
+          "match": true,
+          "cu_top2": [
+            7,
+            1
+          ],
+          "pt_top2": [
+            7,
+            1
+          ],
+          "cu_cutoff_gap": 0.389528,
+          "pt_cutoff_gap": 0.387928,
+          "router_logits_max_diff": 0.003014
+        },
+        {
+          "layer": 10,
+          "match": true,
+          "cu_top2": [
+            4,
+            7
+          ],
+          "pt_top2": [
+            4,
+            7
+          ],
+          "cu_cutoff_gap": 0.164964,
+          "pt_cutoff_gap": 0.163726,
+          "router_logits_max_diff": 0.001461
+        },
+        {
+          "layer": 11,
+          "match": true,
+          "cu_top2": [
+            1,
+            7
+          ],
+          "pt_top2": [
+            1,
+            7
+          ],
+          "cu_cutoff_gap": 0.620449,
+          "pt_cutoff_gap": 0.622277,
+          "router_logits_max_diff": 0.004869
+        },
+        {
+          "layer": 12,
+          "match": true,
+          "cu_top2": [
+            2,
+            6
+          ],
+          "pt_top2": [
+            2,
+            6
+          ],
+          "cu_cutoff_gap": 0.72883,
+          "pt_cutoff_gap": 0.728567,
+          "router_logits_max_diff": 0.002409
+        },
+        {
+          "layer": 13,
+          "match": true,
+          "cu_top2": [
+            0,
+            3
+          ],
+          "pt_top2": [
+            0,
+            3
+          ],
+          "cu_cutoff_gap": 1.090805,
+          "pt_cutoff_gap": 1.090073,
+          "router_logits_max_diff": 0.001529
+        },
+        {
+          "layer": 14,
+          "match": true,
+          "cu_top2": [
+            4,
+            5
+          ],
+          "pt_top2": [
+            4,
+            5
+          ],
+          "cu_cutoff_gap": 1.025673,
+          "pt_cutoff_gap": 1.021905,
+          "router_logits_max_diff": 0.002566
+        },
+        {
+          "layer": 15,
+          "match": true,
+          "cu_top2": [
+            1,
+            5
+          ],
+          "pt_top2": [
+            1,
+            5
+          ],
+          "cu_cutoff_gap": 0.074197,
+          "pt_cutoff_gap": 0.073801,
+          "router_logits_max_diff": 0.001304
+        },
+        {
+          "layer": 16,
+          "match": true,
+          "cu_top2": [
+            1,
+            6
+          ],
+          "pt_top2": [
+            1,
+            6
+          ],
+          "cu_cutoff_gap": 1.076532,
+          "pt_cutoff_gap": 1.079126,
+          "router_logits_max_diff": 0.003142
+        },
+        {
+          "layer": 17,
+          "match": true,
+          "cu_top2": [
+            7,
+            4
+          ],
+          "pt_top2": [
+            7,
+            4
+          ],
+          "cu_cutoff_gap": 1.144458,
+          "pt_cutoff_gap": 1.143452,
+          "router_logits_max_diff": 0.002529
+        },
+        {
+          "layer": 18,
+          "match": true,
+          "cu_top2": [
+            1,
+            3
+          ],
+          "pt_top2": [
+            1,
+            3
+          ],
+          "cu_cutoff_gap": 0.759461,
+          "pt_cutoff_gap": 0.761431,
+          "router_logits_max_diff": 0.001514
+        },
+        {
+          "layer": 19,
+          "match": true,
+          "cu_top2": [
+            3,
+            2
+          ],
+          "pt_top2": [
+            3,
+            2
+          ],
+          "cu_cutoff_gap": 0.425013,
+          "pt_cutoff_gap": 0.422911,
+          "router_logits_max_diff": 0.002787
+        },
+        {
+          "layer": 20,
+          "match": true,
+          "cu_top2": [
+            5,
+            3
+          ],
+          "pt_top2": [
+            5,
+            3
+          ],
+          "cu_cutoff_gap": 0.050005,
+          "pt_cutoff_gap": 0.055049,
+          "router_logits_max_diff": 0.005018
+        },
+        {
+          "layer": 21,
+          "match": true,
+          "cu_top2": [
+            7,
+            0
+          ],
+          "pt_top2": [
+            7,
+            0
+          ],
+          "cu_cutoff_gap": 1.049605,
+          "pt_cutoff_gap": 1.046054,
+          "router_logits_max_diff": 0.004802
+        },
+        {
+          "layer": 22,
+          "match": true,
+          "cu_top2": [
+            7,
+            4
+          ],
+          "pt_top2": [
+            7,
+            4
+          ],
+          "cu_cutoff_gap": 0.801909,
+          "pt_cutoff_gap": 0.804785,
+          "router_logits_max_diff": 0.009267
+        },
+        {
+          "layer": 23,
+          "match": true,
+          "cu_top2": [
+            3,
+            6
+          ],
+          "pt_top2": [
+            3,
+            6
+          ],
+          "cu_cutoff_gap": 0.341126,
+          "pt_cutoff_gap": 0.348957,
+          "router_logits_max_diff": 0.006414
+        },
+        {
+          "layer": 24,
+          "match": true,
+          "cu_top2": [
+            0,
+            1
+          ],
+          "pt_top2": [
+            0,
+            1
+          ],
+          "cu_cutoff_gap": 0.432449,
+          "pt_cutoff_gap": 0.430203,
+          "router_logits_max_diff": 0.008269
+        },
+        {
+          "layer": 25,
+          "match": true,
+          "cu_top2": [
+            6,
+            5
+          ],
+          "pt_top2": [
+            6,
+            5
+          ],
+          "cu_cutoff_gap": 1.119562,
+          "pt_cutoff_gap": 1.118984,
+          "router_logits_max_diff": 0.008989
+        },
+        {
+          "layer": 26,
+          "match": true,
+          "cu_top2": [
+            3,
+            1
+          ],
+          "pt_top2": [
+            3,
+            1
+          ],
+          "cu_cutoff_gap": 0.524616,
+          "pt_cutoff_gap": 0.527099,
+          "router_logits_max_diff": 0.00876
+        },
+        {
+          "layer": 27,
+          "match": true,
+          "cu_top2": [
+            6,
+            1
+          ],
+          "pt_top2": [
+            6,
+            1
+          ],
+          "cu_cutoff_gap": 1.592679,
+          "pt_cutoff_gap": 1.596512,
+          "router_logits_max_diff": 0.004563
+        },
+        {
+          "layer": 28,
+          "match": true,
+          "cu_top2": [
+            3,
+            6
+          ],
+          "pt_top2": [
+            3,
+            6
+          ],
+          "cu_cutoff_gap": 3.154954,
+          "pt_cutoff_gap": 3.151871,
+          "router_logits_max_diff": 0.001868
+        },
+        {
+          "layer": 29,
+          "match": true,
+          "cu_top2": [
+            7,
+            5
+          ],
+          "pt_top2": [
+            7,
+            5
+          ],
+          "cu_cutoff_gap": 0.836427,
+          "pt_cutoff_gap": 0.83677,
+          "router_logits_max_diff": 0.004263
+        },
+        {
+          "layer": 30,
+          "match": true,
+          "cu_top2": [
+            7,
+            3
+          ],
+          "pt_top2": [
+            7,
+            3
+          ],
+          "cu_cutoff_gap": 1.131328,
+          "pt_cutoff_gap": 1.129272,
+          "router_logits_max_diff": 0.006213
+        },
+        {
+          "layer": 31,
+          "match": true,
+          "cu_top2": [
+            7,
+            2
+          ],
+          "pt_top2": [
+            7,
+            2
+          ],
+          "cu_cutoff_gap": 2.567901,
+          "pt_cutoff_gap": 2.565556,
+          "router_logits_max_diff": 0.006575
+        }
+      ]
+    },
+    {
+      "seq_pos": 193,
+      "gen_step": 181,
+      "token_id": 28770,
+      "layers": [
+        {
+          "layer": 0,
+          "match": true,
+          "cu_top2": [
+            2,
+            5
+          ],
+          "pt_top2": [
+            2,
+            5
+          ],
+          "cu_cutoff_gap": 0.484092,
+          "pt_cutoff_gap": 0.484025,
+          "router_logits_max_diff": 0.000418
+        },
+        {
+          "layer": 1,
+          "match": true,
+          "cu_top2": [
+            4,
+            7
+          ],
+          "pt_top2": [
+            4,
+            7
+          ],
+          "cu_cutoff_gap": 0.064206,
+          "pt_cutoff_gap": 0.065368,
+          "router_logits_max_diff": 0.000676
+        },
+        {
+          "layer": 2,
+          "match": true,
+          "cu_top2": [
+            0,
+            4
+          ],
+          "pt_top2": [
+            0,
+            4
+          ],
+          "cu_cutoff_gap": 0.824574,
+          "pt_cutoff_gap": 0.824311,
+          "router_logits_max_diff": 0.001116
+        },
+        {
+          "layer": 3,
+          "match": true,
+          "cu_top2": [
+            4,
+            2
+          ],
+          "pt_top2": [
+            4,
+            2
+          ],
+          "cu_cutoff_gap": 0.23622,
+          "pt_cutoff_gap": 0.236036,
+          "router_logits_max_diff": 0.000932
+        },
+        {
+          "layer": 4,
+          "match": true,
+          "cu_top2": [
+            2,
+            3
+          ],
+          "pt_top2": [
+            2,
+            3
+          ],
+          "cu_cutoff_gap": 0.001307,
+          "pt_cutoff_gap": 0.00064,
+          "router_logits_max_diff": 0.001553
+        },
+        {
+          "layer": 5,
+          "match": true,
+          "cu_top2": [
+            1,
+            2
+          ],
+          "pt_top2": [
+            1,
+            2
+          ],
+          "cu_cutoff_gap": 0.292199,
+          "pt_cutoff_gap": 0.291534,
+          "router_logits_max_diff": 0.001197
+        },
+        {
+          "layer": 6,
+          "match": true,
+          "cu_top2": [
+            4,
+            6
+          ],
+          "pt_top2": [
+            4,
+            6
+          ],
+          "cu_cutoff_gap": 0.147232,
+          "pt_cutoff_gap": 0.147441,
+          "router_logits_max_diff": 0.001996
+        },
+        {
+          "layer": 7,
+          "match": true,
+          "cu_top2": [
+            4,
+            0
+          ],
+          "pt_top2": [
+            4,
+            0
+          ],
+          "cu_cutoff_gap": 0.110523,
+          "pt_cutoff_gap": 0.112475,
+          "router_logits_max_diff": 0.001326
+        },
+        {
+          "layer": 8,
+          "match": true,
+          "cu_top2": [
+            6,
+            0
+          ],
+          "pt_top2": [
+            6,
+            0
+          ],
+          "cu_cutoff_gap": 0.129238,
+          "pt_cutoff_gap": 0.129172,
+          "router_logits_max_diff": 0.002898
+        },
+        {
+          "layer": 9,
+          "match": true,
+          "cu_top2": [
+            1,
+            7
+          ],
+          "pt_top2": [
+            1,
+            7
+          ],
+          "cu_cutoff_gap": 0.224597,
+          "pt_cutoff_gap": 0.222762,
+          "router_logits_max_diff": 0.003239
+        },
+        {
+          "layer": 10,
+          "match": true,
+          "cu_top2": [
+            2,
+            5
+          ],
+          "pt_top2": [
+            2,
+            5
+          ],
+          "cu_cutoff_gap": 0.287423,
+          "pt_cutoff_gap": 0.28732,
+          "router_logits_max_diff": 0.003647
+        },
+        {
+          "layer": 11,
+          "match": true,
+          "cu_top2": [
+            7,
+            1
+          ],
+          "pt_top2": [
+            7,
+            1
+          ],
+          "cu_cutoff_gap": 0.383462,
+          "pt_cutoff_gap": 0.381211,
+          "router_logits_max_diff": 0.00345
+        },
+        {
+          "layer": 12,
+          "match": true,
+          "cu_top2": [
+            2,
+            1
+          ],
+          "pt_top2": [
+            2,
+            1
+          ],
+          "cu_cutoff_gap": 0.080962,
+          "pt_cutoff_gap": 0.085368,
+          "router_logits_max_diff": 0.002311
+        },
+        {
+          "layer": 13,
+          "match": true,
+          "cu_top2": [
+            1,
+            0
+          ],
+          "pt_top2": [
+            1,
+            0
+          ],
+          "cu_cutoff_gap": 0.096706,
+          "pt_cutoff_gap": 0.09683,
+          "router_logits_max_diff": 0.003711
+        },
+        {
+          "layer": 14,
+          "match": true,
+          "cu_top2": [
+            4,
+            6
+          ],
+          "pt_top2": [
+            4,
+            6
+          ],
+          "cu_cutoff_gap": 0.890611,
+          "pt_cutoff_gap": 0.88902,
+          "router_logits_max_diff": 0.002436
+        },
+        {
+          "layer": 15,
+          "match": true,
+          "cu_top2": [
+            1,
+            3
+          ],
+          "pt_top2": [
+            1,
+            3
+          ],
+          "cu_cutoff_gap": 0.824381,
+          "pt_cutoff_gap": 0.822676,
+          "router_logits_max_diff": 0.002793
+        },
+        {
+          "layer": 16,
+          "match": true,
+          "cu_top2": [
+            3,
+            6
+          ],
+          "pt_top2": [
+            3,
+            6
+          ],
+          "cu_cutoff_gap": 0.159242,
+          "pt_cutoff_gap": 0.158337,
+          "router_logits_max_diff": 0.001823
+        },
+        {
+          "layer": 17,
+          "match": true,
+          "cu_top2": [
+            3,
+            1
+          ],
+          "pt_top2": [
+            3,
+            1
+          ],
+          "cu_cutoff_gap": 0.165377,
+          "pt_cutoff_gap": 0.171001,
+          "router_logits_max_diff": 0.003379
+        },
+        {
+          "layer": 18,
+          "match": true,
+          "cu_top2": [
+            0,
+            4
+          ],
+          "pt_top2": [
+            0,
+            4
+          ],
+          "cu_cutoff_gap": 0.97759,
+          "pt_cutoff_gap": 0.978413,
+          "router_logits_max_diff": 0.001796
+        },
+        {
+          "layer": 19,
+          "match": true,
+          "cu_top2": [
+            5,
+            6
+          ],
+          "pt_top2": [
+            5,
+            6
+          ],
+          "cu_cutoff_gap": 1.030886,
+          "pt_cutoff_gap": 1.030938,
+          "router_logits_max_diff": 0.001936
+        },
+        {
+          "layer": 20,
+          "match": true,
+          "cu_top2": [
+            0,
+            4
+          ],
+          "pt_top2": [
+            0,
+            4
+          ],
+          "cu_cutoff_gap": 0.618043,
+          "pt_cutoff_gap": 0.619084,
+          "router_logits_max_diff": 0.004765
+        },
+        {
+          "layer": 21,
+          "match": true,
+          "cu_top2": [
+            4,
+            6
+          ],
+          "pt_top2": [
+            4,
+            6
+          ],
+          "cu_cutoff_gap": 1.711979,
+          "pt_cutoff_gap": 1.715722,
+          "router_logits_max_diff": 0.008544
+        },
+        {
+          "layer": 22,
+          "match": true,
+          "cu_top2": [
+            0,
+            1
+          ],
+          "pt_top2": [
+            0,
+            1
+          ],
+          "cu_cutoff_gap": 1.570634,
+          "pt_cutoff_gap": 1.568026,
+          "router_logits_max_diff": 0.003797
+        },
+        {
+          "layer": 23,
+          "match": true,
+          "cu_top2": [
+            3,
+            1
+          ],
+          "pt_top2": [
+            3,
+            1
+          ],
+          "cu_cutoff_gap": 0.636379,
+          "pt_cutoff_gap": 0.637185,
+          "router_logits_max_diff": 0.002173
+        },
+        {
+          "layer": 24,
+          "match": true,
+          "cu_top2": [
+            0,
+            1
+          ],
+          "pt_top2": [
+            0,
+            1
+          ],
+          "cu_cutoff_gap": 2.171395,
+          "pt_cutoff_gap": 2.169212,
+          "router_logits_max_diff": 0.002688
+        },
+        {
+          "layer": 25,
+          "match": true,
+          "cu_top2": [
+            0,
+            5
+          ],
+          "pt_top2": [
+            0,
+            5
+          ],
+          "cu_cutoff_gap": 0.57794,
+          "pt_cutoff_gap": 0.573615,
+          "router_logits_max_diff": 0.006516
+        },
+        {
+          "layer": 26,
+          "match": true,
+          "cu_top2": [
+            1,
+            5
+          ],
+          "pt_top2": [
+            1,
+            5
+          ],
+          "cu_cutoff_gap": 0.657517,
+          "pt_cutoff_gap": 0.641091,
+          "router_logits_max_diff": 0.009709
+        },
+        {
+          "layer": 27,
+          "match": true,
+          "cu_top2": [
+            4,
+            6
+          ],
+          "pt_top2": [
+            4,
+            6
+          ],
+          "cu_cutoff_gap": 0.752796,
+          "pt_cutoff_gap": 0.751567,
+          "router_logits_max_diff": 0.004062
+        },
+        {
+          "layer": 28,
+          "match": true,
+          "cu_top2": [
+            6,
+            3
+          ],
+          "pt_top2": [
+            6,
+            3
+          ],
+          "cu_cutoff_gap": 0.400009,
+          "pt_cutoff_gap": 0.405089,
+          "router_logits_max_diff": 0.003554
+        },
+        {
+          "layer": 29,
+          "match": true,
+          "cu_top2": [
+            7,
+            6
+          ],
+          "pt_top2": [
+            7,
+            6
+          ],
+          "cu_cutoff_gap": 0.130024,
+          "pt_cutoff_gap": 0.127846,
+          "router_logits_max_diff": 0.006479
+        },
+        {
+          "layer": 30,
+          "match": true,
+          "cu_top2": [
+            7,
+            0
+          ],
+          "pt_top2": [
+            7,
+            0
+          ],
+          "cu_cutoff_gap": 0.293997,
+          "pt_cutoff_gap": 0.301492,
+          "router_logits_max_diff": 0.007395
+        },
+        {
+          "layer": 31,
+          "match": true,
+          "cu_top2": [
+            2,
+            7
+          ],
+          "pt_top2": [
+            2,
+            7
+          ],
+          "cu_cutoff_gap": 3.695758,
+          "pt_cutoff_gap": 3.690781,
+          "router_logits_max_diff": 0.005801
+        }
+      ]
+    },
+    {
+      "seq_pos": 194,
+      "gen_step": 182,
+      "token_id": 28750,
+      "layers": [
+        {
+          "layer": 0,
+          "match": true,
+          "cu_top2": [
+            6,
+            7
+          ],
+          "pt_top2": [
+            6,
+            7
+          ],
+          "cu_cutoff_gap": 0.713896,
+          "pt_cutoff_gap": 0.713481,
+          "router_logits_max_diff": 0.000765
+        },
+        {
+          "layer": 1,
+          "match": true,
+          "cu_top2": [
+            4,
+            3
+          ],
+          "pt_top2": [
+            4,
+            3
+          ],
+          "cu_cutoff_gap": 0.19184,
+          "pt_cutoff_gap": 0.189611,
+          "router_logits_max_diff": 0.001946
+        },
+        {
+          "layer": 2,
+          "match": true,
+          "cu_top2": [
+            4,
+            0
+          ],
+          "pt_top2": [
+            4,
+            0
+          ],
+          "cu_cutoff_gap": 1.206942,
+          "pt_cutoff_gap": 1.206123,
+          "router_logits_max_diff": 0.000967
+        },
+        {
+          "layer": 3,
+          "match": true,
+          "cu_top2": [
+            0,
+            6
+          ],
+          "pt_top2": [
+            0,
+            6
+          ],
+          "cu_cutoff_gap": 0.430288,
+          "pt_cutoff_gap": 0.429788,
+          "router_logits_max_diff": 0.002249
+        },
+        {
+          "layer": 4,
+          "match": true,
+          "cu_top2": [
+            4,
+            2
+          ],
+          "pt_top2": [
+            4,
+            2
+          ],
+          "cu_cutoff_gap": 0.214557,
+          "pt_cutoff_gap": 0.214582,
+          "router_logits_max_diff": 0.002012
+        },
+        {
+          "layer": 5,
+          "match": true,
+          "cu_top2": [
+            7,
+            0
+          ],
+          "pt_top2": [
+            7,
+            0
+          ],
+          "cu_cutoff_gap": 0.450839,
+          "pt_cutoff_gap": 0.453384,
+          "router_logits_max_diff": 0.001667
+        },
+        {
+          "layer": 6,
+          "match": true,
+          "cu_top2": [
+            5,
+            6
+          ],
+          "pt_top2": [
+            5,
+            6
+          ],
+          "cu_cutoff_gap": 0.473096,
+          "pt_cutoff_gap": 0.474964,
+          "router_logits_max_diff": 0.001372
+        },
+        {
+          "layer": 7,
+          "match": true,
+          "cu_top2": [
+            3,
+            6
+          ],
+          "pt_top2": [
+            3,
+            6
+          ],
+          "cu_cutoff_gap": 0.087348,
+          "pt_cutoff_gap": 0.087934,
+          "router_logits_max_diff": 0.00263
+        },
+        {
+          "layer": 8,
+          "match": true,
+          "cu_top2": [
+            7,
+            0
+          ],
+          "pt_top2": [
+            7,
+            0
+          ],
+          "cu_cutoff_gap": 0.574479,
+          "pt_cutoff_gap": 0.57529,
+          "router_logits_max_diff": 0.001887
+        },
+        {
+          "layer": 9,
+          "match": true,
+          "cu_top2": [
+            1,
+            7
+          ],
+          "pt_top2": [
+            1,
+            7
+          ],
+          "cu_cutoff_gap": 0.558973,
+          "pt_cutoff_gap": 0.555603,
+          "router_logits_max_diff": 0.002818
+        },
+        {
+          "layer": 10,
+          "match": true,
+          "cu_top2": [
+            2,
+            0
+          ],
+          "pt_top2": [
+            2,
+            0
+          ],
+          "cu_cutoff_gap": 1.056527,
+          "pt_cutoff_gap": 1.051854,
+          "router_logits_max_diff": 0.004102
+        },
+        {
+          "layer": 11,
+          "match": true,
+          "cu_top2": [
+            7,
+            2
+          ],
+          "pt_top2": [
+            7,
+            2
+          ],
+          "cu_cutoff_gap": 0.002621,
+          "pt_cutoff_gap": 0.007652,
+          "router_logits_max_diff": 0.002562
+        },
+        {
+          "layer": 12,
+          "match": true,
+          "cu_top2": [
+            2,
+            0
+          ],
+          "pt_top2": [
+            2,
+            0
+          ],
+          "cu_cutoff_gap": 0.593822,
+          "pt_cutoff_gap": 0.590311,
+          "router_logits_max_diff": 0.00253
+        },
+        {
+          "layer": 13,
+          "match": true,
+          "cu_top2": [
+            1,
+            6
+          ],
+          "pt_top2": [
+            1,
+            6
+          ],
+          "cu_cutoff_gap": 0.314603,
+          "pt_cutoff_gap": 0.310102,
+          "router_logits_max_diff": 0.003341
+        },
+        {
+          "layer": 14,
+          "match": true,
+          "cu_top2": [
+            6,
+            4
+          ],
+          "pt_top2": [
+            6,
+            4
+          ],
+          "cu_cutoff_gap": 0.519076,
+          "pt_cutoff_gap": 0.521853,
+          "router_logits_max_diff": 0.004599
+        },
+        {
+          "layer": 15,
+          "match": true,
+          "cu_top2": [
+            1,
+            3
+          ],
+          "pt_top2": [
+            1,
+            3
+          ],
+          "cu_cutoff_gap": 1.129672,
+          "pt_cutoff_gap": 1.131464,
+          "router_logits_max_diff": 0.002204
+        },
+        {
+          "layer": 16,
+          "match": true,
+          "cu_top2": [
+            3,
+            4
+          ],
+          "pt_top2": [
+            3,
+            4
+          ],
+          "cu_cutoff_gap": 1.198272,
+          "pt_cutoff_gap": 1.19832,
+          "router_logits_max_diff": 0.002696
+        },
+        {
+          "layer": 17,
+          "match": true,
+          "cu_top2": [
+            5,
+            7
+          ],
+          "pt_top2": [
+            5,
+            7
+          ],
+          "cu_cutoff_gap": 0.140332,
+          "pt_cutoff_gap": 0.138834,
+          "router_logits_max_diff": 0.003079
+        },
+        {
+          "layer": 18,
+          "match": true,
+          "cu_top2": [
+            7,
+            0
+          ],
+          "pt_top2": [
+            7,
+            0
+          ],
+          "cu_cutoff_gap": 0.442839,
+          "pt_cutoff_gap": 0.446093,
+          "router_logits_max_diff": 0.002666
+        },
+        {
+          "layer": 19,
+          "match": true,
+          "cu_top2": [
+            5,
+            2
+          ],
+          "pt_top2": [
+            5,
+            2
+          ],
+          "cu_cutoff_gap": 0.9182,
+          "pt_cutoff_gap": 0.922336,
+          "router_logits_max_diff": 0.002401
+        },
+        {
+          "layer": 20,
+          "match": true,
+          "cu_top2": [
+            1,
+            0
+          ],
+          "pt_top2": [
+            1,
+            0
+          ],
+          "cu_cutoff_gap": 0.36678,
+          "pt_cutoff_gap": 0.367241,
+          "router_logits_max_diff": 0.00351
+        },
+        {
+          "layer": 21,
+          "match": true,
+          "cu_top2": [
+            7,
+            6
+          ],
+          "pt_top2": [
+            7,
+            6
+          ],
+          "cu_cutoff_gap": 0.693158,
+          "pt_cutoff_gap": 0.698558,
+          "router_logits_max_diff": 0.005208
+        },
+        {
+          "layer": 22,
+          "match": true,
+          "cu_top2": [
+            7,
+            3
+          ],
+          "pt_top2": [
+            7,
+            3
+          ],
+          "cu_cutoff_gap": 0.677041,
+          "pt_cutoff_gap": 0.67741,
+          "router_logits_max_diff": 0.00618
+        },
+        {
+          "layer": 23,
+          "match": true,
+          "cu_top2": [
+            3,
+            0
+          ],
+          "pt_top2": [
+            3,
+            0
+          ],
+          "cu_cutoff_gap": 3.045472,
+          "pt_cutoff_gap": 3.050329,
+          "router_logits_max_diff": 0.005275
+        },
+        {
+          "layer": 24,
+          "match": true,
+          "cu_top2": [
+            2,
+            1
+          ],
+          "pt_top2": [
+            2,
+            1
+          ],
+          "cu_cutoff_gap": 0.868403,
+          "pt_cutoff_gap": 0.870029,
+          "router_logits_max_diff": 0.004975
+        },
+        {
+          "layer": 25,
+          "match": true,
+          "cu_top2": [
+            0,
+            3
+          ],
+          "pt_top2": [
+            0,
+            3
+          ],
+          "cu_cutoff_gap": 0.87468,
+          "pt_cutoff_gap": 0.872474,
+          "router_logits_max_diff": 0.007106
+        },
+        {
+          "layer": 26,
+          "match": true,
+          "cu_top2": [
+            6,
+            2
+          ],
+          "pt_top2": [
+            6,
+            2
+          ],
+          "cu_cutoff_gap": 0.407021,
+          "pt_cutoff_gap": 0.408987,
+          "router_logits_max_diff": 0.003686
+        },
+        {
+          "layer": 27,
+          "match": true,
+          "cu_top2": [
+            4,
+            6
+          ],
+          "pt_top2": [
+            4,
+            6
+          ],
+          "cu_cutoff_gap": 0.909942,
+          "pt_cutoff_gap": 0.908405,
+          "router_logits_max_diff": 0.006085
+        },
+        {
+          "layer": 28,
+          "match": true,
+          "cu_top2": [
+            6,
+            3
+          ],
+          "pt_top2": [
+            6,
+            3
+          ],
+          "cu_cutoff_gap": 1.816583,
+          "pt_cutoff_gap": 1.811489,
+          "router_logits_max_diff": 0.003399
+        },
+        {
+          "layer": 29,
+          "match": true,
+          "cu_top2": [
+            7,
+            1
+          ],
+          "pt_top2": [
+            7,
+            1
+          ],
+          "cu_cutoff_gap": 0.226095,
+          "pt_cutoff_gap": 0.234164,
+          "router_logits_max_diff": 0.006182
+        },
+        {
+          "layer": 30,
+          "match": true,
+          "cu_top2": [
+            7,
+            0
+          ],
+          "pt_top2": [
+            7,
+            0
+          ],
+          "cu_cutoff_gap": 1.410168,
+          "pt_cutoff_gap": 1.418992,
+          "router_logits_max_diff": 0.0075
+        },
+        {
+          "layer": 31,
+          "match": true,
+          "cu_top2": [
+            2,
+            7
+          ],
+          "pt_top2": [
+            2,
+            7
+          ],
+          "cu_cutoff_gap": 2.594289,
+          "pt_cutoff_gap": 2.590097,
+          "router_logits_max_diff": 0.007371
+        }
+      ]
+    },
+    {
+      "seq_pos": 195,
+      "gen_step": 183,
+      "token_id": 22709,
+      "layers": [
+        {
+          "layer": 0,
+          "match": true,
+          "cu_top2": [
+            4,
+            2
+          ],
+          "pt_top2": [
+            4,
+            2
+          ],
+          "cu_cutoff_gap": 0.361144,
+          "pt_cutoff_gap": 0.36129,
+          "router_logits_max_diff": 0.000254
+        },
+        {
+          "layer": 1,
+          "match": true,
+          "cu_top2": [
+            6,
+            4
+          ],
+          "pt_top2": [
+            6,
+            4
+          ],
+          "cu_cutoff_gap": 0.632976,
+          "pt_cutoff_gap": 0.632306,
+          "router_logits_max_diff": 0.000471
+        },
+        {
+          "layer": 2,
+          "match": true,
+          "cu_top2": [
+            4,
+            5
+          ],
+          "pt_top2": [
+            4,
+            5
+          ],
+          "cu_cutoff_gap": 0.499979,
+          "pt_cutoff_gap": 0.50042,
+          "router_logits_max_diff": 0.001077
+        },
+        {
+          "layer": 3,
+          "match": true,
+          "cu_top2": [
+            1,
+            0
+          ],
+          "pt_top2": [
+            1,
+            0
+          ],
+          "cu_cutoff_gap": 0.829813,
+          "pt_cutoff_gap": 0.82942,
+          "router_logits_max_diff": 0.002037
+        },
+        {
+          "layer": 4,
+          "match": true,
+          "cu_top2": [
+            2,
+            7
+          ],
+          "pt_top2": [
+            2,
+            7
+          ],
+          "cu_cutoff_gap": 0.906368,
+          "pt_cutoff_gap": 0.907013,
+          "router_logits_max_diff": 0.000905
+        },
+        {
+          "layer": 5,
+          "match": true,
+          "cu_top2": [
+            0,
+            4
+          ],
+          "pt_top2": [
+            0,
+            4
+          ],
+          "cu_cutoff_gap": 0.490841,
+          "pt_cutoff_gap": 0.490035,
+          "router_logits_max_diff": 0.001299
+        },
+        {
+          "layer": 6,
+          "match": true,
+          "cu_top2": [
+            1,
+            6
+          ],
+          "pt_top2": [
+            1,
+            6
+          ],
+          "cu_cutoff_gap": 0.3204,
+          "pt_cutoff_gap": 0.319273,
+          "router_logits_max_diff": 0.001358
+        },
+        {
+          "layer": 7,
+          "match": true,
+          "cu_top2": [
+            5,
+            4
+          ],
+          "pt_top2": [
+            5,
+            4
+          ],
+          "cu_cutoff_gap": 1.58427,
+          "pt_cutoff_gap": 1.586407,
+          "router_logits_max_diff": 0.003398
+        },
+        {
+          "layer": 8,
+          "match": true,
+          "cu_top2": [
+            1,
+            3
+          ],
+          "pt_top2": [
+            1,
+            3
+          ],
+          "cu_cutoff_gap": 0.28281,
+          "pt_cutoff_gap": 0.279095,
+          "router_logits_max_diff": 0.003197
+        },
+        {
+          "layer": 9,
+          "match": true,
+          "cu_top2": [
+            7,
+            3
+          ],
+          "pt_top2": [
+            7,
+            3
+          ],
+          "cu_cutoff_gap": 0.705156,
+          "pt_cutoff_gap": 0.699055,
+          "router_logits_max_diff": 0.004018
+        },
+        {
+          "layer": 10,
+          "match": true,
+          "cu_top2": [
+            0,
+            1
+          ],
+          "pt_top2": [
+            0,
+            1
+          ],
+          "cu_cutoff_gap": 0.121666,
+          "pt_cutoff_gap": 0.123733,
+          "router_logits_max_diff": 0.004455
+        },
+        {
+          "layer": 11,
+          "match": true,
+          "cu_top2": [
+            6,
+            7
+          ],
+          "pt_top2": [
+            6,
+            7
+          ],
+          "cu_cutoff_gap": 1.125734,
+          "pt_cutoff_gap": 1.128471,
+          "router_logits_max_diff": 0.002974
+        },
+        {
+          "layer": 12,
+          "match": true,
+          "cu_top2": [
+            4,
+            0
+          ],
+          "pt_top2": [
+            4,
+            0
+          ],
+          "cu_cutoff_gap": 0.50472,
+          "pt_cutoff_gap": 0.505232,
+          "router_logits_max_diff": 0.002276
+        },
+        {
+          "layer": 13,
+          "match": true,
+          "cu_top2": [
+            6,
+            1
+          ],
+          "pt_top2": [
+            6,
+            1
+          ],
+          "cu_cutoff_gap": 1.658566,
+          "pt_cutoff_gap": 1.657408,
+          "router_logits_max_diff": 0.001465
+        },
+        {
+          "layer": 14,
+          "match": true,
+          "cu_top2": [
+            6,
+            3
+          ],
+          "pt_top2": [
+            6,
+            3
+          ],
+          "cu_cutoff_gap": 1.10583,
+          "pt_cutoff_gap": 1.104454,
+          "router_logits_max_diff": 0.003482
+        },
+        {
+          "layer": 15,
+          "match": true,
+          "cu_top2": [
+            1,
+            7
+          ],
+          "pt_top2": [
+            1,
+            7
+          ],
+          "cu_cutoff_gap": 0.853751,
+          "pt_cutoff_gap": 0.848479,
+          "router_logits_max_diff": 0.005333
+        },
+        {
+          "layer": 16,
+          "match": true,
+          "cu_top2": [
+            3,
+            0
+          ],
+          "pt_top2": [
+            3,
+            0
+          ],
+          "cu_cutoff_gap": 0.297829,
+          "pt_cutoff_gap": 0.295865,
+          "router_logits_max_diff": 0.003622
+        },
+        {
+          "layer": 17,
+          "match": true,
+          "cu_top2": [
+            7,
+            5
+          ],
+          "pt_top2": [
+            7,
+            5
+          ],
+          "cu_cutoff_gap": 0.814604,
+          "pt_cutoff_gap": 0.809792,
+          "router_logits_max_diff": 0.003767
+        },
+        {
+          "layer": 18,
+          "match": true,
+          "cu_top2": [
+            7,
+            6
+          ],
+          "pt_top2": [
+            7,
+            6
+          ],
+          "cu_cutoff_gap": 0.682335,
+          "pt_cutoff_gap": 0.687835,
+          "router_logits_max_diff": 0.003952
+        },
+        {
+          "layer": 19,
+          "match": true,
+          "cu_top2": [
+            1,
+            5
+          ],
+          "pt_top2": [
+            1,
+            5
+          ],
+          "cu_cutoff_gap": 1.049692,
+          "pt_cutoff_gap": 1.049454,
+          "router_logits_max_diff": 0.005052
+        },
+        {
+          "layer": 20,
+          "match": true,
+          "cu_top2": [
+            7,
+            2
+          ],
+          "pt_top2": [
+            7,
+            2
+          ],
+          "cu_cutoff_gap": 0.359371,
+          "pt_cutoff_gap": 0.375926,
+          "router_logits_max_diff": 0.00896
+        },
+        {
+          "layer": 21,
+          "match": true,
+          "cu_top2": [
+            3,
+            7
+          ],
+          "pt_top2": [
+            3,
+            7
+          ],
+          "cu_cutoff_gap": 0.54449,
+          "pt_cutoff_gap": 0.539629,
+          "router_logits_max_diff": 0.005685
+        },
+        {
+          "layer": 22,
+          "match": true,
+          "cu_top2": [
+            0,
+            2
+          ],
+          "pt_top2": [
+            0,
+            2
+          ],
+          "cu_cutoff_gap": 0.786941,
+          "pt_cutoff_gap": 0.797607,
+          "router_logits_max_diff": 0.009701
+        },
+        {
+          "layer": 23,
+          "match": true,
+          "cu_top2": [
+            3,
+            0
+          ],
+          "pt_top2": [
+            3,
+            0
+          ],
+          "cu_cutoff_gap": 0.316284,
+          "pt_cutoff_gap": 0.316937,
+          "router_logits_max_diff": 0.006309
+        },
+        {
+          "layer": 24,
+          "match": true,
+          "cu_top2": [
+            7,
+            0
+          ],
+          "pt_top2": [
+            7,
+            0
+          ],
+          "cu_cutoff_gap": 0.542853,
+          "pt_cutoff_gap": 0.535666,
+          "router_logits_max_diff": 0.007732
+        },
+        {
+          "layer": 25,
+          "match": true,
+          "cu_top2": [
+            4,
+            6
+          ],
+          "pt_top2": [
+            4,
+            6
+          ],
+          "cu_cutoff_gap": 0.624207,
+          "pt_cutoff_gap": 0.62711,
+          "router_logits_max_diff": 0.008357
+        },
+        {
+          "layer": 26,
+          "match": true,
+          "cu_top2": [
+            4,
+            0
+          ],
+          "pt_top2": [
+            4,
+            0
+          ],
+          "cu_cutoff_gap": 1.694654,
+          "pt_cutoff_gap": 1.710388,
+          "router_logits_max_diff": 0.011455
+        },
+        {
+          "layer": 27,
+          "match": true,
+          "cu_top2": [
+            0,
+            2
+          ],
+          "pt_top2": [
+            0,
+            2
+          ],
+          "cu_cutoff_gap": 0.721391,
+          "pt_cutoff_gap": 0.712466,
+          "router_logits_max_diff": 0.007525
+        },
+        {
+          "layer": 28,
+          "match": true,
+          "cu_top2": [
+            4,
+            1
+          ],
+          "pt_top2": [
+            4,
+            1
+          ],
+          "cu_cutoff_gap": 0.303627,
+          "pt_cutoff_gap": 0.296159,
+          "router_logits_max_diff": 0.009301
+        },
+        {
+          "layer": 29,
+          "match": true,
+          "cu_top2": [
+            2,
+            0
+          ],
+          "pt_top2": [
+            2,
+            0
+          ],
+          "cu_cutoff_gap": 0.632039,
+          "pt_cutoff_gap": 0.636277,
+          "router_logits_max_diff": 0.008558
+        },
+        {
+          "layer": 30,
+          "match": true,
+          "cu_top2": [
+            7,
+            2
+          ],
+          "pt_top2": [
+            7,
+            2
+          ],
+          "cu_cutoff_gap": 0.090598,
+          "pt_cutoff_gap": 0.087504,
+          "router_logits_max_diff": 0.004491
+        },
+        {
+          "layer": 31,
+          "match": true,
+          "cu_top2": [
+            0,
+            5
+          ],
+          "pt_top2": [
+            0,
+            5
+          ],
+          "cu_cutoff_gap": 0.024408,
+          "pt_cutoff_gap": 0.01966,
+          "router_logits_max_diff": 0.014465
+        }
+      ]
+    },
+    {
+      "seq_pos": 196,
+      "gen_step": 184,
+      "token_id": 28748,
+      "layers": [
+        {
+          "layer": 0,
+          "match": true,
+          "cu_top2": [
+            1,
+            2
+          ],
+          "pt_top2": [
+            1,
+            2
+          ],
+          "cu_cutoff_gap": 0.196751,
+          "pt_cutoff_gap": 0.195922,
+          "router_logits_max_diff": 0.000644
+        },
+        {
+          "layer": 1,
+          "match": true,
+          "cu_top2": [
+            6,
+            1
+          ],
+          "pt_top2": [
+            6,
+            1
+          ],
+          "cu_cutoff_gap": 0.254191,
+          "pt_cutoff_gap": 0.253681,
+          "router_logits_max_diff": 0.000581
+        },
+        {
+          "layer": 2,
+          "match": true,
+          "cu_top2": [
+            4,
+            7
+          ],
+          "pt_top2": [
+            4,
+            7
+          ],
+          "cu_cutoff_gap": 0.01464,
+          "pt_cutoff_gap": 0.014836,
+          "router_logits_max_diff": 0.001009
+        },
+        {
+          "layer": 3,
+          "match": true,
+          "cu_top2": [
+            5,
+            4
+          ],
+          "pt_top2": [
+            5,
+            4
+          ],
+          "cu_cutoff_gap": 0.111961,
+          "pt_cutoff_gap": 0.11228,
+          "router_logits_max_diff": 0.001525
+        },
+        {
+          "layer": 4,
+          "match": true,
+          "cu_top2": [
+            7,
+            2
+          ],
+          "pt_top2": [
+            7,
+            2
+          ],
+          "cu_cutoff_gap": 0.440969,
+          "pt_cutoff_gap": 0.440167,
+          "router_logits_max_diff": 0.001908
+        },
+        {
+          "layer": 5,
+          "match": true,
+          "cu_top2": [
+            1,
+            4
+          ],
+          "pt_top2": [
+            1,
+            4
+          ],
+          "cu_cutoff_gap": 0.539515,
+          "pt_cutoff_gap": 0.539854,
+          "router_logits_max_diff": 0.002024
+        },
+        {
+          "layer": 6,
+          "match": true,
+          "cu_top2": [
+            0,
+            4
+          ],
+          "pt_top2": [
+            0,
+            4
+          ],
+          "cu_cutoff_gap": 0.085105,
+          "pt_cutoff_gap": 0.085266,
+          "router_logits_max_diff": 0.001981
+        },
+        {
+          "layer": 7,
+          "match": true,
+          "cu_top2": [
+            5,
+            3
+          ],
+          "pt_top2": [
+            5,
+            3
+          ],
+          "cu_cutoff_gap": 0.501382,
+          "pt_cutoff_gap": 0.499836,
+          "router_logits_max_diff": 0.001918
+        },
+        {
+          "layer": 8,
+          "match": true,
+          "cu_top2": [
+            2,
+            3
+          ],
+          "pt_top2": [
+            2,
+            3
+          ],
+          "cu_cutoff_gap": 0.445459,
+          "pt_cutoff_gap": 0.443378,
+          "router_logits_max_diff": 0.00503
+        },
+        {
+          "layer": 9,
+          "match": true,
+          "cu_top2": [
+            3,
+            7
+          ],
+          "pt_top2": [
+            3,
+            7
+          ],
+          "cu_cutoff_gap": 0.278976,
+          "pt_cutoff_gap": 0.265727,
+          "router_logits_max_diff": 0.017985
+        },
+        {
+          "layer": 10,
+          "match": true,
+          "cu_top2": [
+            6,
+            7
+          ],
+          "pt_top2": [
+            6,
+            7
+          ],
+          "cu_cutoff_gap": 0.147301,
+          "pt_cutoff_gap": 0.146969,
+          "router_logits_max_diff": 0.003379
+        },
+        {
+          "layer": 11,
+          "match": true,
+          "cu_top2": [
+            2,
+            0
+          ],
+          "pt_top2": [
+            2,
+            0
+          ],
+          "cu_cutoff_gap": 0.286487,
+          "pt_cutoff_gap": 0.286793,
+          "router_logits_max_diff": 0.011433
+        },
+        {
+          "layer": 12,
+          "match": true,
+          "cu_top2": [
+            1,
+            4
+          ],
+          "pt_top2": [
+            1,
+            4
+          ],
+          "cu_cutoff_gap": 0.281999,
+          "pt_cutoff_gap": 0.292854,
+          "router_logits_max_diff": 0.01192
+        },
+        {
+          "layer": 13,
+          "match": true,
+          "cu_top2": [
+            0,
+            4
+          ],
+          "pt_top2": [
+            0,
+            4
+          ],
+          "cu_cutoff_gap": 0.08957,
+          "pt_cutoff_gap": 0.080102,
+          "router_logits_max_diff": 0.008109
+        },
+        {
+          "layer": 14,
+          "match": true,
+          "cu_top2": [
+            2,
+            7
+          ],
+          "pt_top2": [
+            2,
+            7
+          ],
+          "cu_cutoff_gap": 0.291893,
+          "pt_cutoff_gap": 0.280878,
+          "router_logits_max_diff": 0.027401
+        },
+        {
+          "layer": 15,
+          "match": false,
+          "cu_top2": [
+            3,
+            2
+          ],
+          "pt_top2": [
+            3,
+            0
+          ],
+          "cu_cutoff_gap": 0.005257,
+          "pt_cutoff_gap": 0.013201,
+          "router_logits_max_diff": 0.031603
+        },
+        {
+          "layer": 16,
+          "match": false,
+          "cu_top2": [
+            7,
+            3
+          ],
+          "pt_top2": [
+            7,
+            0
+          ],
+          "cu_cutoff_gap": 0.022515,
+          "pt_cutoff_gap": 0.096443,
+          "router_logits_max_diff": 0.110566
+        },
+        {
+          "layer": 17,
+          "match": true,
+          "cu_top2": [
+            4,
+            7
+          ],
+          "pt_top2": [
+            4,
+            7
+          ],
+          "cu_cutoff_gap": 0.042771,
+          "pt_cutoff_gap": 0.257689,
+          "router_logits_max_diff": 0.347797
+        },
+        {
+          "layer": 18,
+          "match": true,
+          "cu_top2": [
+            7,
+            3
+          ],
+          "pt_top2": [
+            7,
+            3
+          ],
+          "cu_cutoff_gap": 0.090823,
+          "pt_cutoff_gap": 0.26432,
+          "router_logits_max_diff": 0.235111
+        },
+        {
+          "layer": 19,
+          "match": true,
+          "cu_top2": [
+            1,
+            0
+          ],
+          "pt_top2": [
+            1,
+            0
+          ],
+          "cu_cutoff_gap": 0.464182,
+          "pt_cutoff_gap": 0.455219,
+          "router_logits_max_diff": 0.179907
+        },
+        {
+          "layer": 20,
+          "match": true,
+          "cu_top2": [
+            6,
+            7
+          ],
+          "pt_top2": [
+            6,
+            7
+          ],
+          "cu_cutoff_gap": 0.307597,
+          "pt_cutoff_gap": 0.059555,
+          "router_logits_max_diff": 0.209137
+        },
+        {
+          "layer": 21,
+          "match": true,
+          "cu_top2": [
+            7,
+            0
+          ],
+          "pt_top2": [
+            7,
+            0
+          ],
+          "cu_cutoff_gap": 0.115554,
+          "pt_cutoff_gap": 0.06059,
+          "router_logits_max_diff": 0.211274
+        },
+        {
+          "layer": 22,
+          "match": true,
+          "cu_top2": [
+            2,
+            4
+          ],
+          "pt_top2": [
+            2,
+            4
+          ],
+          "cu_cutoff_gap": 0.052764,
+          "pt_cutoff_gap": 0.189251,
+          "router_logits_max_diff": 0.264404
+        },
+        {
+          "layer": 23,
+          "match": true,
+          "cu_top2": [
+            6,
+            3
+          ],
+          "pt_top2": [
+            6,
+            3
+          ],
+          "cu_cutoff_gap": 0.1853,
+          "pt_cutoff_gap": 0.124381,
+          "router_logits_max_diff": 0.285987
+        },
+        {
+          "layer": 24,
+          "match": true,
+          "cu_top2": [
+            7,
+            2
+          ],
+          "pt_top2": [
+            7,
+            2
+          ],
+          "cu_cutoff_gap": 0.676417,
+          "pt_cutoff_gap": 0.721971,
+          "router_logits_max_diff": 0.308199
+        },
+        {
+          "layer": 25,
+          "match": false,
+          "cu_top2": [
+            6,
+            2
+          ],
+          "pt_top2": [
+            2,
+            6
+          ],
+          "cu_cutoff_gap": 1.04222,
+          "pt_cutoff_gap": 1.390425,
+          "router_logits_max_diff": 0.388301
+        },
+        {
+          "layer": 26,
+          "match": true,
+          "cu_top2": [
+            2,
+            4
+          ],
+          "pt_top2": [
+            2,
+            4
+          ],
+          "cu_cutoff_gap": 0.2286,
+          "pt_cutoff_gap": 0.396899,
+          "router_logits_max_diff": 0.159473
+        },
+        {
+          "layer": 27,
+          "match": false,
+          "cu_top2": [
+            4,
+            5
+          ],
+          "pt_top2": [
+            4,
+            7
+          ],
+          "cu_cutoff_gap": 0.031379,
+          "pt_cutoff_gap": 0.099426,
+          "router_logits_max_diff": 0.230799
+        },
+        {
+          "layer": 28,
+          "match": false,
+          "cu_top2": [
+            3,
+            1
+          ],
+          "pt_top2": [
+            3,
+            2
+          ],
+          "cu_cutoff_gap": 0.407191,
+          "pt_cutoff_gap": 0.056552,
+          "router_logits_max_diff": 0.233992
+        },
+        {
+          "layer": 29,
+          "match": true,
+          "cu_top2": [
+            7,
+            1
+          ],
+          "pt_top2": [
+            7,
+            1
+          ],
+          "cu_cutoff_gap": 0.023759,
+          "pt_cutoff_gap": 0.207838,
+          "router_logits_max_diff": 0.176519
+        },
+        {
+          "layer": 30,
+          "match": true,
+          "cu_top2": [
+            7,
+            0
+          ],
+          "pt_top2": [
+            7,
+            0
+          ],
+          "cu_cutoff_gap": 0.13881,
+          "pt_cutoff_gap": 0.177646,
+          "router_logits_max_diff": 0.152283
+        },
+        {
+          "layer": 31,
+          "match": true,
+          "cu_top2": [
+            5,
+            1
+          ],
+          "pt_top2": [
+            5,
+            1
+          ],
+          "cu_cutoff_gap": 1.388829,
+          "pt_cutoff_gap": 1.498049,
+          "router_logits_max_diff": 0.199228
+        }
+      ]
+    },
+    {
+      "seq_pos": 197,
+      "gen_step": 185,
+      "token_id": 28713,
+      "layers": [
+        {
+          "layer": 0,
+          "match": true,
+          "cu_top2": [
+            3,
+            6
+          ],
+          "pt_top2": [
+            3,
+            6
+          ],
+          "cu_cutoff_gap": 0.037811,
+          "pt_cutoff_gap": 0.037642,
+          "router_logits_max_diff": 0.000369
+        },
+        {
+          "layer": 1,
+          "match": true,
+          "cu_top2": [
+            1,
+            6
+          ],
+          "pt_top2": [
+            1,
+            6
+          ],
+          "cu_cutoff_gap": 0.294563,
+          "pt_cutoff_gap": 0.294532,
+          "router_logits_max_diff": 0.000947
+        },
+        {
+          "layer": 2,
+          "match": true,
+          "cu_top2": [
+            4,
+            6
+          ],
+          "pt_top2": [
+            4,
+            6
+          ],
+          "cu_cutoff_gap": 0.277276,
+          "pt_cutoff_gap": 0.279882,
+          "router_logits_max_diff": 0.003667
+        },
+        {
+          "layer": 3,
+          "match": true,
+          "cu_top2": [
+            7,
+            4
+          ],
+          "pt_top2": [
+            7,
+            4
+          ],
+          "cu_cutoff_gap": 0.140334,
+          "pt_cutoff_gap": 0.140561,
+          "router_logits_max_diff": 0.001353
+        },
+        {
+          "layer": 4,
+          "match": true,
+          "cu_top2": [
+            1,
+            7
+          ],
+          "pt_top2": [
+            1,
+            7
+          ],
+          "cu_cutoff_gap": 0.305436,
+          "pt_cutoff_gap": 0.306609,
+          "router_logits_max_diff": 0.002594
+        },
+        {
+          "layer": 5,
+          "match": true,
+          "cu_top2": [
+            2,
+            6
+          ],
+          "pt_top2": [
+            2,
+            6
+          ],
+          "cu_cutoff_gap": 0.699158,
+          "pt_cutoff_gap": 0.700812,
+          "router_logits_max_diff": 0.004555
+        },
+        {
+          "layer": 6,
+          "match": true,
+          "cu_top2": [
+            5,
+            2
+          ],
+          "pt_top2": [
+            5,
+            2
+          ],
+          "cu_cutoff_gap": 1.235957,
+          "pt_cutoff_gap": 1.234509,
+          "router_logits_max_diff": 0.004429
+        },
+        {
+          "layer": 7,
+          "match": true,
+          "cu_top2": [
+            0,
+            4
+          ],
+          "pt_top2": [
+            0,
+            4
+          ],
+          "cu_cutoff_gap": 0.23844,
+          "pt_cutoff_gap": 0.231105,
+          "router_logits_max_diff": 0.005708
+        },
+        {
+          "layer": 8,
+          "match": true,
+          "cu_top2": [
+            6,
+            5
+          ],
+          "pt_top2": [
+            6,
+            5
+          ],
+          "cu_cutoff_gap": 0.790663,
+          "pt_cutoff_gap": 0.788624,
+          "router_logits_max_diff": 0.007667
+        },
+        {
+          "layer": 9,
+          "match": true,
+          "cu_top2": [
+            7,
+            4
+          ],
+          "pt_top2": [
+            7,
+            4
+          ],
+          "cu_cutoff_gap": 0.138559,
+          "pt_cutoff_gap": 0.134243,
+          "router_logits_max_diff": 0.010008
+        },
+        {
+          "layer": 10,
+          "match": true,
+          "cu_top2": [
+            0,
+            1
+          ],
+          "pt_top2": [
+            0,
+            1
+          ],
+          "cu_cutoff_gap": 1.332741,
+          "pt_cutoff_gap": 1.331123,
+          "router_logits_max_diff": 0.005881
+        },
+        {
+          "layer": 11,
+          "match": true,
+          "cu_top2": [
+            5,
+            7
+          ],
+          "pt_top2": [
+            5,
+            7
+          ],
+          "cu_cutoff_gap": 0.321448,
+          "pt_cutoff_gap": 0.315001,
+          "router_logits_max_diff": 0.007916
+        },
+        {
+          "layer": 12,
+          "match": true,
+          "cu_top2": [
+            4,
+            0
+          ],
+          "pt_top2": [
+            4,
+            0
+          ],
+          "cu_cutoff_gap": 0.642388,
+          "pt_cutoff_gap": 0.643595,
+          "router_logits_max_diff": 0.004145
+        },
+        {
+          "layer": 13,
+          "match": true,
+          "cu_top2": [
+            2,
+            6
+          ],
+          "pt_top2": [
+            2,
+            6
+          ],
+          "cu_cutoff_gap": 0.225082,
+          "pt_cutoff_gap": 0.226006,
+          "router_logits_max_diff": 0.00336
+        },
+        {
+          "layer": 14,
+          "match": true,
+          "cu_top2": [
+            3,
+            0
+          ],
+          "pt_top2": [
+            3,
+            0
+          ],
+          "cu_cutoff_gap": 0.704331,
+          "pt_cutoff_gap": 0.705616,
+          "router_logits_max_diff": 0.002519
+        },
+        {
+          "layer": 15,
+          "match": true,
+          "cu_top2": [
+            7,
+            1
+          ],
+          "pt_top2": [
+            7,
+            1
+          ],
+          "cu_cutoff_gap": 0.406536,
+          "pt_cutoff_gap": 0.400922,
+          "router_logits_max_diff": 0.004589
+        },
+        {
+          "layer": 16,
+          "match": true,
+          "cu_top2": [
+            3,
+            7
+          ],
+          "pt_top2": [
+            3,
+            7
+          ],
+          "cu_cutoff_gap": 0.527586,
+          "pt_cutoff_gap": 0.534799,
+          "router_logits_max_diff": 0.006481
+        },
+        {
+          "layer": 17,
+          "match": true,
+          "cu_top2": [
+            0,
+            5
+          ],
+          "pt_top2": [
+            0,
+            5
+          ],
+          "cu_cutoff_gap": 0.959044,
+          "pt_cutoff_gap": 0.959478,
+          "router_logits_max_diff": 0.00252
+        },
+        {
+          "layer": 18,
+          "match": true,
+          "cu_top2": [
+            2,
+            7
+          ],
+          "pt_top2": [
+            2,
+            7
+          ],
+          "cu_cutoff_gap": 0.303044,
+          "pt_cutoff_gap": 0.308363,
+          "router_logits_max_diff": 0.006248
+        },
+        {
+          "layer": 19,
+          "match": true,
+          "cu_top2": [
+            5,
+            1
+          ],
+          "pt_top2": [
+            5,
+            1
+          ],
+          "cu_cutoff_gap": 0.730458,
+          "pt_cutoff_gap": 0.721419,
+          "router_logits_max_diff": 0.011171
+        },
+        {
+          "layer": 20,
+          "match": true,
+          "cu_top2": [
+            7,
+            5
+          ],
+          "pt_top2": [
+            7,
+            5
+          ],
+          "cu_cutoff_gap": 0.337248,
+          "pt_cutoff_gap": 0.337812,
+          "router_logits_max_diff": 0.008406
+        },
+        {
+          "layer": 21,
+          "match": true,
+          "cu_top2": [
+            3,
+            6
+          ],
+          "pt_top2": [
+            3,
+            6
+          ],
+          "cu_cutoff_gap": 1.710811,
+          "pt_cutoff_gap": 1.708092,
+          "router_logits_max_diff": 0.008414
+        },
+        {
+          "layer": 22,
+          "match": true,
+          "cu_top2": [
+            3,
+            6
+          ],
+          "pt_top2": [
+            3,
+            6
+          ],
+          "cu_cutoff_gap": 0.635166,
+          "pt_cutoff_gap": 0.636405,
+          "router_logits_max_diff": 0.00821
+        },
+        {
+          "layer": 23,
+          "match": true,
+          "cu_top2": [
+            3,
+            6
+          ],
+          "pt_top2": [
+            3,
+            6
+          ],
+          "cu_cutoff_gap": 0.927876,
+          "pt_cutoff_gap": 0.930222,
+          "router_logits_max_diff": 0.007812
+        },
+        {
+          "layer": 24,
+          "match": true,
+          "cu_top2": [
+            5,
+            2
+          ],
+          "pt_top2": [
+            5,
+            2
+          ],
+          "cu_cutoff_gap": 0.151569,
+          "pt_cutoff_gap": 0.145079,
+          "router_logits_max_diff": 0.017868
+        },
+        {
+          "layer": 25,
+          "match": true,
+          "cu_top2": [
+            4,
+            1
+          ],
+          "pt_top2": [
+            4,
+            1
+          ],
+          "cu_cutoff_gap": 0.065569,
+          "pt_cutoff_gap": 0.049163,
+          "router_logits_max_diff": 0.016921
+        },
+        {
+          "layer": 26,
+          "match": true,
+          "cu_top2": [
+            6,
+            1
+          ],
+          "pt_top2": [
+            6,
+            1
+          ],
+          "cu_cutoff_gap": 0.278164,
+          "pt_cutoff_gap": 0.269203,
+          "router_logits_max_diff": 0.013725
+        },
+        {
+          "layer": 27,
+          "match": true,
+          "cu_top2": [
+            0,
+            2
+          ],
+          "pt_top2": [
+            0,
+            2
+          ],
+          "cu_cutoff_gap": 0.011463,
+          "pt_cutoff_gap": 0.035555,
+          "router_logits_max_diff": 0.020501
+        },
+        {
+          "layer": 28,
+          "match": true,
+          "cu_top2": [
+            4,
+            1
+          ],
+          "pt_top2": [
+            4,
+            1
+          ],
+          "cu_cutoff_gap": 0.206562,
+          "pt_cutoff_gap": 0.201689,
+          "router_logits_max_diff": 0.008553
+        },
+        {
+          "layer": 29,
+          "match": true,
+          "cu_top2": [
+            1,
+            2
+          ],
+          "pt_top2": [
+            1,
+            2
+          ],
+          "cu_cutoff_gap": 0.503669,
+          "pt_cutoff_gap": 0.518681,
+          "router_logits_max_diff": 0.020592
+        },
+        {
+          "layer": 30,
+          "match": true,
+          "cu_top2": [
+            6,
+            2
+          ],
+          "pt_top2": [
+            6,
+            2
+          ],
+          "cu_cutoff_gap": 1.0358,
+          "pt_cutoff_gap": 1.042725,
+          "router_logits_max_diff": 0.011714
+        },
+        {
+          "layer": 31,
+          "match": true,
+          "cu_top2": [
+            0,
+            4
+          ],
+          "pt_top2": [
+            0,
+            4
+          ],
+          "cu_cutoff_gap": 1.365635,
+          "pt_cutoff_gap": 1.377483,
+          "router_logits_max_diff": 0.017017
+        }
+      ]
+    }
+  ]
+}
