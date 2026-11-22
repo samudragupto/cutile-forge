@@ -19,6 +19,7 @@ import torch.nn.functional as F
 
 RegressionStatus = Literal["PASS", "FAIL", "NOT NATIVE", "SYNTHETIC-ONLY", "NOT RUN"]
 RegressionTier = Literal["fast", "full"]
+GateComparator = Literal[">=", "<=", ">", "<", "=="]
 
 REGRESSION_PROMPTS: tuple[str, ...] = (
     "Explain how GPU Tensor Cores accelerate matrix multiplication.",
@@ -55,6 +56,67 @@ PPL_PASSAGE = (
 
 
 @dataclass
+class GateResult:
+    """Single numeric/count gate outcome preserving full float precision."""
+
+    gate_name: str
+    raw_value: float
+    comparator: GateComparator
+    threshold: float
+    passed: bool
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "gate_name": self.gate_name,
+            "raw_value": float(self.raw_value),
+            "comparator": self.comparator,
+            "threshold": float(self.threshold),
+            "passed": bool(self.passed),
+        }
+
+    def format_failure(self) -> str:
+        return f"{self.gate_name}={self.raw_value!r} ({self.comparator} {self.threshold!r})"
+
+
+def evaluate_gate(
+    gate_name: str,
+    raw_value: float,
+    comparator: GateComparator,
+    threshold: float,
+) -> GateResult:
+    """Evaluate a gate strictly without rounding or threshold relaxation."""
+    val = float(raw_value)
+    thr = float(threshold)
+    if comparator == ">=":
+        passed = val >= thr
+    elif comparator == "<=":
+        passed = val <= thr
+    elif comparator == ">":
+        passed = val > thr
+    elif comparator == "<":
+        passed = val < thr
+    elif comparator == "==":
+        passed = val == thr
+    else:
+        raise ValueError(f"Unsupported comparator: {comparator!r}")
+    return GateResult(
+        gate_name=gate_name,
+        raw_value=val,
+        comparator=comparator,
+        threshold=thr,
+        passed=passed,
+    )
+
+
+def summarize_failed_gates(gates: list[GateResult]) -> str | None:
+    """Return canonical summary string containing ONLY failed gates."""
+    failed = [g for g in gates if not g.passed]
+    if not failed:
+        return None
+    return "; ".join(g.format_failure() for g in failed)
+
+
+@dataclass
 class RegressionResult:
     category: str
     model: str
@@ -66,6 +128,7 @@ class RegressionResult:
     native_execution: bool
     failing_check: str | None = None
     metrics: dict[str, Any] = field(default_factory=dict)
+    gates: list[GateResult] = field(default_factory=list)
     notes: str = ""
 
     def to_dict(self) -> dict[str, Any]:
@@ -80,6 +143,7 @@ class RegressionResult:
             "native_execution": self.native_execution,
             "failing_check": self.failing_check,
             "metrics": self.metrics,
+            "gates": [g.to_dict() for g in self.gates],
             "notes": self.notes,
         }
 
@@ -136,8 +200,11 @@ class RegressionReport:
                 parts.append(
                     f"ppl={m['ppl_cutile']:.3f} vs {m.get('ppl_ref', 0):.3f} ({m.get('ppl_tokens', 0)} tok)"
                 )
-            if r.failing_check:
-                parts.append(f"FAIL:{r.failing_check}")
+            failed_gates = [g for g in r.gates if not g.passed]
+            if failed_gates:
+                parts.append("FAIL: " + "; ".join(g.format_failure() for g in failed_gates))
+            elif r.failing_check:
+                parts.append(f"FAIL: {r.failing_check}")
             lines.append(
                 f"| {r.category} | {r.model} | `{r.reference_impl}` | {r.layers_evaluated} | `{r.status}` | {', '.join(parts) or '—'} | {r.notes} |"
             )
@@ -542,14 +609,12 @@ def _eval_qwen25(num_prompts: int, greedy_tokens: int) -> RegressionResult:
     del hf_m, weights, ex
     _cleanup_gpu()
 
-    cos_ok = cos >= 0.9999
-    ppl_ok = abs(ppl_cu - ppl_rf) / max(1e-9, ppl_rf) <= 0.01
-    greedy_ok = exact_prompts == num_prompts
-    failing = (
-        None
-        if (cos_ok and ppl_ok and greedy_ok)
-        else f"cos={cos_ok},ppl={ppl_ok},greedy={greedy_ok}"
-    )
+    gates = [
+        evaluate_gate("logit_cos_sim", cos, ">=", 0.9999),
+        evaluate_gate("ppl_rel_diff", abs(ppl_cu - ppl_rf) / max(1e-9, ppl_rf), "<=", 0.01),
+        evaluate_gate("greedy_exact_matches", float(exact_prompts), "==", float(num_prompts)),
+    ]
+    failing = summarize_failed_gates(gates)
     return RegressionResult(
         category="Small decoder",
         model="Qwen2.5-0.5B",
@@ -560,6 +625,7 @@ def _eval_qwen25(num_prompts: int, greedy_tokens: int) -> RegressionResult:
         weight_source="real-checkpoint",
         native_execution=True,
         failing_check=failing,
+        gates=gates,
         metrics={
             "logit_cos_sim": round(cos, 6),
             "max_abs_diff": round(max_diff, 4),
@@ -600,17 +666,22 @@ def _eval_siglip() -> RegressionResult:
 
     del hf_v, weights, ex
     _cleanup_gpu()
-    ok = cos >= 0.9999 and diff < 5e-2
+    gates = [
+        evaluate_gate("emb_cos_sim", cos, ">=", 0.9999),
+        evaluate_gate("max_abs_diff", diff, "<", 5e-2),
+    ]
+    failing = summarize_failed_gates(gates)
     return RegressionResult(
         category="Vision",
         model="SigLIP ViT-B/16",
         checkpoint=repo,
         reference_impl=f"transformers=={transformers.__version__} (SiglipVisionModel)",
         layers_evaluated=12,
-        status="PASS" if ok else "FAIL",
+        status="PASS" if failing is None else "FAIL",
         weight_source="real-checkpoint",
         native_execution=True,
-        failing_check=None if ok else f"emb_cos={cos:.6f},max_diff={diff:.4f}",
+        failing_check=failing,
+        gates=gates,
         metrics={"emb_cos_sim": round(cos, 6), "max_abs_diff": round(diff, 5)},
         notes="UnifiedModelExecutor executes native CuTile patch GEMM, LayerNorm, bidirectional FlashAttention, GELU",
     )
@@ -640,17 +711,22 @@ def _eval_whisper() -> RegressionResult:
 
     del hf_w, weights, ex
     _cleanup_gpu()
-    ok = cos >= 0.9999 and diff < 1e-1
+    gates = [
+        evaluate_gate("emb_cos_sim", cos, ">=", 0.9999),
+        evaluate_gate("max_abs_diff", diff, "<", 1e-1),
+    ]
+    failing = summarize_failed_gates(gates)
     return RegressionResult(
         category="Audio",
         model="Whisper-Tiny",
         checkpoint=repo,
         reference_impl=f"transformers=={transformers.__version__} (WhisperModel.encoder)",
         layers_evaluated=4,
-        status="PASS" if ok else "FAIL",
+        status="PASS" if failing is None else "FAIL",
         weight_source="real-checkpoint",
         native_execution=True,
-        failing_check=None if ok else f"emb_cos={cos:.6f},max_diff={diff:.4f}",
+        failing_check=failing,
+        gates=gates,
         metrics={"emb_cos_sim": round(cos, 6), "max_abs_diff": round(diff, 5)},
         notes="UnifiedModelExecutor executes native CuTile Conv1d(via cutile_conv2d), LayerNorm, bidirectional FlashAttention, GELU",
     )
@@ -717,17 +793,23 @@ def _eval_mistral_native(num_prompts: int, greedy_tokens: int) -> RegressionResu
 
     del rt, model, weights
     _cleanup_gpu()
-    ok = cos >= 0.9999 and abs(ppl_cu - ppl_rf) / ppl_rf <= 0.01 and exact_prompts == num_prompts
+    gates = [
+        evaluate_gate("logit_cos_sim", cos, ">=", 0.9999),
+        evaluate_gate("ppl_rel_diff", abs(ppl_cu - ppl_rf) / ppl_rf, "<=", 0.01),
+        evaluate_gate("greedy_exact_matches", float(exact_prompts), "==", float(num_prompts)),
+    ]
+    failing = summarize_failed_gates(gates)
     return RegressionResult(
         category="Dense decoder",
         model="Mistral-7B",
         checkpoint=str(ckpt_dir),
         reference_impl="Mistral7B(backend='pytorch', GPTQ-32L)",
         layers_evaluated=32,
-        status="PASS" if ok else "FAIL",
+        status="PASS" if failing is None else "FAIL",
         weight_source="real-checkpoint",
         native_execution=True,
-        failing_check=None if ok else f"cos={cos:.6f},greedy={exact_prompts}/{num_prompts}",
+        failing_check=failing,
+        gates=gates,
         metrics={
             "logit_cos_sim": round(cos, 6),
             "max_abs_diff": round(max_diff, 4),
@@ -834,8 +916,13 @@ def _eval_gptq_streaming_model(
 
     del kv, model, weights
     _cleanup_gpu()
-    ok = cos >= 0.9999 and abs(ppl_cu - ppl_rf) / ppl_rf <= 0.01 and exact_prompts == num_prompts
-    status: RegressionStatus = "PASS" if ok else "FAIL"
+    gates = [
+        evaluate_gate("logit_cos_sim", cos, ">=", 0.9999),
+        evaluate_gate("ppl_rel_diff", abs(ppl_cu - ppl_rf) / ppl_rf, "<=", 0.01),
+        evaluate_gate("greedy_exact_matches", float(exact_prompts), "==", float(num_prompts)),
+    ]
+    failing = summarize_failed_gates(gates)
+    status: RegressionStatus = "PASS" if failing is None else "FAIL"
     return RegressionResult(
         category=category,
         model=model_label,
@@ -845,7 +932,8 @@ def _eval_gptq_streaming_model(
         status=status,
         weight_source="real-checkpoint",
         native_execution=True,
-        failing_check=None if ok else f"cos={cos:.6f},greedy={exact_prompts}/{num_prompts}",
+        failing_check=failing,
+        gates=gates,
         metrics={
             "logit_cos_sim": round(cos, 6),
             "max_abs_diff": round(max_diff, 4),
@@ -915,17 +1003,22 @@ def _eval_llava() -> RegressionResult:
 
     del hf_ll, weights, ex
     _cleanup_gpu()
-    ok = cos >= 0.9999 and cu_toks == ref_toks
+    gates = [
+        evaluate_gate("logit_cos_sim", cos, ">=", 0.9999),
+        evaluate_gate("greedy_token_matches", float(m_cnt), "==", 16.0),
+    ]
+    failing = summarize_failed_gates(gates)
     return RegressionResult(
         category="Multimodal",
         model="LLaVA-1.5",
         checkpoint=repo,
         reference_impl=f"transformers=={transformers.__version__} (LlavaForConditionalGeneration)",
         layers_evaluated=55,
-        status="PASS" if ok else "FAIL",
+        status="PASS" if failing is None else "FAIL",
         weight_source="real-checkpoint",
         native_execution=True,
-        failing_check=None if ok else f"cos={cos:.6f},greedy={m_cnt}/16",
+        failing_check=failing,
+        gates=gates,
         metrics={
             "logit_cos_sim": round(cos, 6),
             "max_abs_diff": round(diff, 4),
@@ -970,17 +1063,22 @@ def _eval_dit_xl2() -> RegressionResult:
 
     del dit, weights, ex
     _cleanup_gpu()
-    ok = cos >= 0.9999 and diff < 5e-2
+    gates = [
+        evaluate_gate("output_cos_sim", cos, ">=", 0.9999),
+        evaluate_gate("max_abs_diff", diff, "<", 5e-2),
+    ]
+    failing = summarize_failed_gates(gates)
     return RegressionResult(
         category="Diffusion",
         model="DiT-XL/2",
         checkpoint=repo,
         reference_impl=f"diffusers=={diffusers.__version__} (DiTTransformer2DModel)",
         layers_evaluated=28,
-        status="PASS" if ok else "FAIL",
+        status="PASS" if failing is None else "FAIL",
         weight_source="real-checkpoint",
         native_execution=True,
-        failing_check=None if ok else f"cos={cos:.6f},max_diff={diff:.4f}",
+        failing_check=failing,
+        gates=gates,
         metrics={"output_cos_sim": round(cos, 6), "max_abs_diff": round(diff, 5)},
         notes="User-approved DiT-XL/2-256; UnifiedModelExecutor executes native CuTile LayerNorm, patch GEMM, d=72 FlashAttention",
     )
