@@ -21,7 +21,11 @@ RegressionStatus = Literal["PASS", "FAIL", "NOT NATIVE", "SYNTHETIC-ONLY", "NOT 
 RegressionTier = Literal["fast", "full"]
 GateComparator = Literal[">=", "<=", ">", "<", "=="]
 GreedyMismatchClass = Literal[
-    "EXACT_LOGIT_TIE", "NUMERIC_NEAR_TIE", "SUBSTANTIVE_DIVERGENCE", "UNCLASSIFIED"
+    "EXACT_LOGIT_TIE",
+    "ONE_SIDED_TIE",
+    "NUMERIC_NEAR_TIE",
+    "SUBSTANTIVE_DIVERGENCE",
+    "UNCLASSIFIED",
 ]
 
 REGRESSION_PROMPTS: tuple[str, ...] = (
@@ -143,6 +147,8 @@ class GreedyMismatchDiagnostic:
     delta_on_cu_top1: float | None
     inter_runtime_delta_ulps: float | None
     classification: GreedyMismatchClass
+    cu_logits_source: str = ""
+    ref_logits_source: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -166,6 +172,8 @@ class GreedyMismatchDiagnostic:
             "delta_on_cu_top1": self.delta_on_cu_top1,
             "inter_runtime_delta_ulps": self.inter_runtime_delta_ulps,
             "classification": self.classification,
+            "cu_logits_source": self.cu_logits_source,
+            "ref_logits_source": self.ref_logits_source,
         }
 
 
@@ -175,6 +183,8 @@ def classify_greedy_mismatch(
     cu_logits: torch.Tensor | None,
     ref_logits: torch.Tensor | None,
     dtype: torch.dtype = torch.float16,
+    cu_logits_source: str = "",
+    ref_logits_source: str = "",
 ) -> GreedyMismatchDiagnostic:
     """Classify the first greedy mismatch step using dtype ULP margins (diagnostic only)."""
     dtype_str = str(dtype).replace("torch.", "")
@@ -200,6 +210,8 @@ def classify_greedy_mismatch(
             delta_on_cu_top1=None,
             inter_runtime_delta_ulps=None,
             classification="UNCLASSIFIED",
+            cu_logits_source=cu_logits_source,
+            ref_logits_source=ref_logits_source,
         )
 
     cu_f = cu_logits.detach().reshape(-1).float()
@@ -230,6 +242,8 @@ def classify_greedy_mismatch(
             delta_on_cu_top1=None,
             inter_runtime_delta_ulps=None,
             classification="UNCLASSIFIED",
+            cu_logits_source=cu_logits_source,
+            ref_logits_source=ref_logits_source,
         )
 
     ref_vals, ref_idx = torch.topk(ref_f, k=2)
@@ -250,8 +264,10 @@ def classify_greedy_mismatch(
     delta_cu_top1 = float(c1_val - ref_f[c1_id].item())
     inter_delta_ulps = max(abs(delta_ref_top1), abs(delta_cu_top1)) / ulp
 
-    if ref_margin == 0.0 or cu_margin == 0.0:
+    if ref_margin == 0.0 and cu_margin == 0.0:
         classification: GreedyMismatchClass = "EXACT_LOGIT_TIE"
+    elif ref_margin == 0.0 or cu_margin == 0.0:
+        classification = "ONE_SIDED_TIE"
     elif min(ref_margin_ulps, cu_margin_ulps) <= 2.0:
         classification = "NUMERIC_NEAR_TIE"
     else:
@@ -278,6 +294,8 @@ def classify_greedy_mismatch(
         delta_on_cu_top1=delta_cu_top1,
         inter_runtime_delta_ulps=inter_delta_ulps,
         classification=classification,
+        cu_logits_source=cu_logits_source,
+        ref_logits_source=ref_logits_source,
     )
 
 
@@ -789,6 +807,8 @@ def _eval_qwen25(num_prompts: int, greedy_tokens: int) -> RegressionResult:
                     cu_logits=step_logits_cpu[div_step],
                     ref_logits=ref_full[len(p_ids) - 1 + div_step],
                     dtype=torch.float16,
+                    cu_logits_source="UnifiedModelExecutor.forward(step_logits)",
+                    ref_logits_source="HF AutoModelForCausalLM.forward(full_seq)",
                 ).to_dict()
             )
         del step_logits_cpu
@@ -1004,8 +1024,13 @@ def _eval_mistral_native(num_prompts: int, greedy_tokens: int) -> RegressionResu
                             pos=len(p_ids) + s,
                         )
                     h_step = rt._get_or_create_workspace(1).hidden
+                    cu_src = "NativeModelRuntime.decode_step_replay(ws.hidden->cutile_rmsnorm->cutile_gemm_fp16)"
                 hn_step = cutile_rmsnorm(h_step, model.weights.norm, eps=model.config.rms_norm_eps)
                 cu_div_logits = cutile_gemm_fp16(hn_step, lm_head_t)[0]
+                if div_step == 0:
+                    cu_src = (
+                        "NativeModelRuntime.prefill_layers(h->cutile_rmsnorm->cutile_gemm_fp16)"
+                    )
             mismatch_diags.append(
                 classify_greedy_mismatch(
                     prompt_idx=p_idx,
@@ -1013,6 +1038,8 @@ def _eval_mistral_native(num_prompts: int, greedy_tokens: int) -> RegressionResu
                     cu_logits=cu_div_logits,
                     ref_logits=ref_full[len(p_ids) - 1 + div_step],
                     dtype=torch.float16,
+                    cu_logits_source=cu_src,
+                    ref_logits_source="Mistral7B.forward(kv_cache=None,backend='pytorch')",
                 ).to_dict()
             )
 
@@ -1154,6 +1181,8 @@ def _eval_gptq_streaming_model(
                     cu_logits=step_logits_cpu[div_step],
                     ref_logits=ref_full[len(p_ids) - 1 + div_step],
                     dtype=torch.float16,
+                    cu_logits_source="Mistral7B.forward(kv_cache=PagedKVCache,backend='cutile',last_token_only=True)",
+                    ref_logits_source="Mistral7B.forward(kv_cache=None,backend='pytorch')",
                 ).to_dict()
             )
         del step_logits_cpu
