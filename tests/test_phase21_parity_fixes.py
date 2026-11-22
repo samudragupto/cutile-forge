@@ -82,3 +82,21 @@ def test_whisper_audio_embed_uses_gelu_erf() -> None:
 
     max_diff = float((cand - ref).abs().max().item())
     assert max_diff < 1e-5, f"Whisper audio stem GELU mismatch (tanh vs erf): max_diff={max_diff}"
+
+
+def test_fused_topk_gating_preserves_fp32_tie_margin() -> None:
+    """Repro: moe_softmax_kernel truncating probs to fp16 collapses <2.4e-4 margins before topk."""
+    from cutile_forge.kernels.moe_fused import fused_topk_gating
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    # Top-1 is expert 5; expert 7 leads expert 3 by 5e-5 logit (~1.55e-5 prob < FP16 ULP 2.44e-4).
+    row = [-10.0, -10.0, -10.0, 0.0, -10.0, 0.2, -10.0, 5e-5]
+    logits = torch.tensor([row, row, row, row], device=device, dtype=torch.float32)
+
+    ref_probs = torch.softmax(logits, dim=-1)
+    _, ref_idx = torch.topk(ref_probs, k=2, dim=-1)
+    _, got_idx = fused_topk_gating(logits, top_k=2)
+
+    assert torch.equal(
+        got_idx, ref_idx
+    ), f"Expected FP32 experts {ref_idx.tolist()}, got {got_idx.tolist()}"
