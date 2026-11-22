@@ -143,7 +143,7 @@ def test_hf_transformers_parity_llama_qwen2_mistral_and_mixtral() -> None:
             ct_mx_out.flatten(), hf_mx_out.flatten(), dim=0
         ).item()
     )
-    assert mx_cos > 0.998 and float(mx_diff.median().item()) < 2e-2
+    assert mx_cos >= 0.999 and float(mx_diff.median().item()) < 2e-2
 
 
 def test_advanced_moe_shared_experts_and_single_gpu_ep_partition_invariance() -> None:

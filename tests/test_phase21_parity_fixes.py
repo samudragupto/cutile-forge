@@ -100,3 +100,43 @@ def test_fused_topk_gating_preserves_fp32_tie_margin() -> None:
     assert torch.equal(
         got_idx, ref_idx
     ), f"Expected FP32 experts {ref_idx.tolist()}, got {got_idx.tolist()}"
+
+
+def test_moe_routing_expert_id_ordering_and_shapes() -> None:
+    """Verify exact expert ID agreement, descending top-k ordering, and M in (1, 16, 64) parity."""
+    from cutile_forge.kernels.moe_fused import cutile_moe_router_topk, fused_topk_gating
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    torch.manual_seed(17)
+    num_experts = 8
+    k_dim = 128
+    top_k = 2
+    router_w = torch.randn((num_experts, k_dim), device=device, dtype=torch.float32) * 0.25
+
+    for m in (1, 16, 64):
+        x = torch.randn((m, k_dim), device=device, dtype=torch.float32) * 0.5
+        logits_fp32 = torch.matmul(x, router_w.t())
+        ref_probs_full = torch.softmax(logits_fp32, dim=-1)
+        ref_vals, ref_idx = torch.topk(ref_probs_full, k=top_k, dim=-1)
+        ref_probs = ref_vals / ref_vals.sum(dim=-1, keepdim=True).clamp(min=1e-6)
+
+        # 1. fused_topk_gating on FP32 logits across M=1, 16, 64
+        got_probs, got_idx = fused_topk_gating(logits_fp32, top_k=top_k)
+        assert got_idx.shape == (m, top_k)
+        assert got_probs.shape == (m, top_k)
+        assert torch.equal(got_idx, ref_idx), f"M={m}: fused_topk_gating expert ID mismatch"
+        assert bool((got_probs[:, 0] >= got_probs[:, 1]).all()), f"M={m}: top-k order violated"
+        assert float((got_probs.float() - ref_probs).abs().max().item()) < 1e-2
+
+        # 2. cutile_moe_router_topk on well-separated FP16 inputs across M=1, 16, 64
+        x16 = x.to(torch.float16)
+        w16 = router_w.to(torch.float16)
+        ref_logits_16 = torch.matmul(x16.float(), w16.float().t())
+        _, ref_idx_16 = torch.topk(torch.softmax(ref_logits_16, dim=-1), k=top_k, dim=-1)
+        cu_probs, cu_idx = cutile_moe_router_topk(x16, w16, top_k=top_k)
+        assert cu_idx.shape == (m, top_k)
+        assert cu_probs.shape == (m, top_k)
+        assert torch.equal(
+            cu_idx.to(torch.int64), ref_idx_16
+        ), f"M={m}: cutile_moe_router_topk expert ID mismatch"
+        assert bool((cu_probs[:, 0] >= cu_probs[:, 1]).all()), f"M={m}: router top-k order violated"

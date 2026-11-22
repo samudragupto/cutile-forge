@@ -232,7 +232,7 @@ def test_moe_variants_numerical_parity() -> None:
                 out_cu.flatten().float(), out_ref.flatten().float(), dim=0
             ).item()
         )
-        assert cos > 0.998 and float(diff.median().item()) < 1e-2
+        assert cos >= 0.999 and float(diff.median().item()) < 1e-2
 
 
 def test_vit_and_llava_multimodal_forward_parity() -> None:
