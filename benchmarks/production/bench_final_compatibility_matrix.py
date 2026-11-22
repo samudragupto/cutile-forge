@@ -214,39 +214,33 @@ def build_compatibility_matrix(
             or (r_soak.get("requests_ok", 0) == r_soak.get("requests_sent", -1))
         )
     )
-    http_art = (
-        "benchmarks/validation_artifacts/v3.6.0/phase20_serving_stress/manifest.json"
-        if stress_v360
-        else "benchmarks/validation_artifacts/v3.3.0/phase16_optimized/manifest.json"
-    )
-    add_cell(
-        "mistral",
-        "safetensors",
-        "gptq_int4_desc_act",
-        "http",
-        _status_from_bool(http_ok),
-        http_art,
-        (
-            f"soak_ok={r_soak.get('soak_ok')}, soak_fail={r_soak.get('soak_fail')}, itl_p50={r_soak.get('itl_p50_ms')}ms"
-            if r_soak and "soak_ok" in r_soak
-            else f"http_stream_c64={r_soak.get('agg_tok_s_med') if r_soak else 'N/A'} tok/s"
-        ),
-        "Representative localhost 127.0.0.1 OpenAI HTTP/SSE continuous-batching soak & serving cell.",
-    )
-
     repro_sum = _find_record(serv_recs, stage="reproducibility_summary_3runs") or {}
     c64_nonstream = repro_sum.get("metrics", {}).get("http_nonstream_c64", {})
     c64_pct = float(c64_nonstream.get("vs_inproc_pct_med", 0.0))
     c64_tok = c64_nonstream.get("agg_tok_s_med", "N/A")
+    http_art = (
+        "benchmarks/validation_artifacts/v3.3.0/phase16_optimized/manifest.json"
+        if c64_pct < 85.0
+        else (
+            "benchmarks/validation_artifacts/v3.6.0/phase20_serving_stress/manifest.json"
+            if stress_v360
+            else "benchmarks/validation_artifacts/v3.3.0/phase16_optimized/manifest.json"
+        )
+    )
+    soak_str = (
+        f"soak_ok={r_soak.get('soak_ok')}, soak_fail={r_soak.get('soak_fail')}, itl_p50={r_soak.get('itl_p50_ms')}ms"
+        if r_soak and "soak_ok" in r_soak
+        else f"http_stream_c64={r_soak.get('agg_tok_s_med') if r_soak else 'N/A'} tok/s"
+    )
     add_cell(
         "mistral",
         "safetensors",
         "gptq_int4_desc_act",
         "http",
-        "PASS" if c64_pct >= 85.0 else "FAIL",
-        "benchmarks/validation_artifacts/v3.3.0/phase16_optimized/manifest.json",
-        f"http_nonstream_c64={c64_tok} tok/s ({c64_pct}% of in-process vs >=85%)",
-        "Phase 16 3-run HTTP non-streaming C=64 throughput gate; 84.99% < 85% is FAIL (single run0 85.02% does not override 3-run median).",
+        _status_from_bool(http_ok and c64_pct >= 85.0),
+        http_art,
+        f"{soak_str}; http_nonstream_c64={c64_tok} tok/s ({c64_pct}% vs >=85%)",
+        "Phase 20 localhost HTTP/SSE soak passes, but Phase 16 3-run HTTP non-streaming C=64 throughput gate is FAIL (84.99% < 85%; single run0 85.02% does not override 3-run median).",
     )
 
     add_cell(
