@@ -1,0 +1,65 @@
+{
+  "before": {
+    "M=1": {
+      "median_us": 35.616,
+      "min_us": 34.752,
+      "max_us": 47.616,
+      "runs": 200
+    },
+    "M=16": {
+      "median_us": 36.416,
+      "min_us": 34.944,
+      "max_us": 44.128,
+      "runs": 200
+    },
+    "M=256": {
+      "median_us": 35.808,
+      "min_us": 34.816,
+      "max_us": 39.136,
+      "runs": 200
+    }
+  },
+  "after": {
+    "M=1": {
+      "median_us": 34.336,
+      "min_us": 33.184,
+      "max_us": 45.152,
+      "runs": 200
+    },
+    "M=16": {
+      "median_us": 35.104,
+      "min_us": 33.696,
+      "max_us": 45.408,
+      "runs": 200
+    },
+    "M=256": {
+      "median_us": 34.72,
+      "min_us": 33.216,
+      "max_us": 38.336,
+      "runs": 200
+    }
+  },
+  "delta": {
+    "M=1": {
+      "before_median_us": 35.616,
+      "after_median_us": 34.336,
+      "diff_us": -1.28,
+      "pct_change": -3.59
+    },
+    "M=16": {
+      "before_median_us": 36.416,
+      "after_median_us": 35.104,
+      "diff_us": -1.312,
+      "pct_change": -3.6
+    },
+    "M=256": {
+      "before_median_us": 35.808,
+      "after_median_us": 34.72,
+      "diff_us": -1.088,
+      "pct_change": -3.04
+    }
+  },
+  "hardware": "NVIDIA GeForce RTX 5090",
+  "provenance": "synthetic-weights",
+  "warmup_runs": 50
+}

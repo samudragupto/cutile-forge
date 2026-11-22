@@ -28,7 +28,7 @@ def moe_softmax_kernel(
     ex = ct.exp(tile - ct.reshape(row_max, (1, 1)))
     denom = ct.sum(ex, axis=1)
     probs = ex / ct.reshape(denom, (1, 1))
-    ct.store(probs_ptr, index=(row, 0), tile=ct.astype(probs, ct.float16))
+    ct.store(probs_ptr, index=(row, 0), tile=ct.astype(probs, probs_ptr.dtype))
 
 
 @ct.kernel(occupancy=2)
@@ -120,17 +120,17 @@ def fused_topk_gating(
         raise ValueError(f"top_k={top_k} invalid for num_experts={num_experts}")
 
     if logits.is_cuda and (num_experts & (num_experts - 1)) == 0:
-        probs = torch.empty((m, num_experts), device=logits.device, dtype=torch.float16)
+        probs = torch.empty((m, num_experts), device=logits.device, dtype=torch.float32)
         ct.launch(
             torch.cuda.current_stream(),
             (m, 1, 1),
             moe_softmax_kernel,
-            (logits.to(torch.float16).contiguous(), probs, num_experts),
+            (logits.to(torch.float32).contiguous(), probs, num_experts),
         )
     else:
-        probs = torch.softmax(logits.float(), dim=-1).to(torch.float16)
+        probs = torch.softmax(logits.float(), dim=-1)
 
-    topk_vals, topk_idx = torch.topk(probs.float(), k=top_k, dim=-1)
+    topk_vals, topk_idx = torch.topk(probs, k=top_k, dim=-1)
     topk_probs = (topk_vals / topk_vals.sum(dim=-1, keepdim=True).clamp(min=1e-6)).to(torch.float16)
     return topk_probs, topk_idx
 

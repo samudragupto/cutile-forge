@@ -186,7 +186,7 @@ class MistralLayer:
             and weights.moe_w2 is not None
             and weights.moe_w3 is not None
         ):
-            r_logits = torch.matmul(post_norm, weights.moe_gate.t())
+            r_logits = torch.matmul(post_norm.float(), weights.moe_gate.float().t())
             probs, indices = fused_topk_gating(r_logits, top_k=self.config.top_k_experts)
             ffn_out = torch.zeros_like(post_norm)
             for e in range(len(weights.moe_w1)):
@@ -293,7 +293,7 @@ class MistralLayer:
             and weights.moe_w2 is not None
             and weights.moe_w3 is not None
         ):
-            r_logits = torch.matmul(post_norm, weights.moe_gate.t())
+            r_logits = torch.matmul(post_norm.float(), weights.moe_gate.float().t())
             probs, indices = fused_topk_gating(r_logits, top_k=self.config.top_k_experts)
             ffn_out = torch.zeros_like(post_norm)
             for e in range(len(weights.moe_w1)):
