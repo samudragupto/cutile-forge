@@ -141,6 +141,7 @@ class DiffusionPatchEmbedStage(InputStage):
     image_size: int = 32
     patch_size: int = 2
     in_channels: int = 4
+    downscale_freq_shift: float = 1.0
 
     @property
     def num_patches(self) -> int:
@@ -1269,13 +1270,18 @@ class UnifiedModelExecutor:
         return a2 + aw["pos_embed"][:seq_len, :].unsqueeze(0)
 
     def _timestep_embedding(
-        self, timesteps: torch.Tensor, dim: int, dtype: torch.dtype
+        self,
+        timesteps: torch.Tensor,
+        dim: int,
+        dtype: torch.dtype,
+        downscale_freq_shift: float = 1.0,
     ) -> torch.Tensor:
         half = dim // 2
+        denom = max(1.0, float(half) - float(downscale_freq_shift))
         freqs = torch.exp(
             -math.log(10000.0)
             * torch.arange(0, half, device=timesteps.device, dtype=torch.float32)
-            / max(1, half)
+            / denom
         )
         args = timesteps.float().view(-1, 1) * freqs.view(1, -1)
         return torch.cat([torch.cos(args), torch.sin(args)], dim=-1).to(dtype)
@@ -1488,12 +1494,22 @@ class UnifiedModelExecutor:
             )
             if "t_fc1_w" in dw:
                 t_dim = int(dw["t_fc1_w"].shape[0])
-                t_emb = self._timestep_embedding(ts, t_dim, pixel_values.dtype)
+                t_emb = self._timestep_embedding(
+                    ts,
+                    t_dim,
+                    pixel_values.dtype,
+                    downscale_freq_shift=g.input_stage.downscale_freq_shift,
+                )
                 t_emb_raw = t_emb
                 t_cond = self._dit_conditioning(t_emb, class_labels, dw, use_cutile)
             elif weights["blocks"] and "t_fc1_w" in weights["blocks"][0]:
                 t_dim = int(weights["blocks"][0]["t_fc1_w"].shape[0])
-                t_emb = self._timestep_embedding(ts, t_dim, pixel_values.dtype)
+                t_emb = self._timestep_embedding(
+                    ts,
+                    t_dim,
+                    pixel_values.dtype,
+                    downscale_freq_shift=g.input_stage.downscale_freq_shift,
+                )
                 t_emb_raw = t_emb
                 t_cond = self._dit_conditioning(
                     t_emb, class_labels, weights["blocks"][0], use_cutile
