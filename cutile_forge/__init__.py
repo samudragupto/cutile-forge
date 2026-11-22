@@ -4,7 +4,7 @@ from cutile_forge.doctor import run_diagnostics
 from cutile_forge.forge.fx_backend import register_cutile_forge_backend
 from cutile_forge.sdk import Device, DType, Graph, compile
 
-__version__ = "3.6.0"
+__version__ = "3.7.0"
 version = __version__
 
 register_cutile_forge_backend()

@@ -34,7 +34,7 @@ class _MiniTransformerBlock(nn.Module):
 def test_cutile_forge_backend_registered() -> None:
     import torch._dynamo as dynamo
 
-    assert cutile_forge.__version__ == "3.6.0"
+    assert cutile_forge.__version__ == "3.7.0"
     assert "cutile_forge" in dynamo.list_backends()
 
 

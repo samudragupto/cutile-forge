@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.7.0] (2026-11-22) — Phase 21: Numerical Parity Closure & Gate Reporting
+
+**Authors:** Arrhat Nag (`@samudragupto`) and Rupesh Nasre
+
+CuTileForge `v3.7.0` closes the architectural numerical parity bugs across the 8-model regression suite, makes per-gate raw reporting unambiguous without relaxing any threshold, and documents exact root-cause diagnostics across every decoder, encoder, and diffusion stage (`benchmarks/validation_artifacts/v3.7.0/`):
+
+- **Explicit Per-Gate Reporting (`cutile_forge/regress.py`, `tests/test_phase21_regress_format.py`)**: Replaced ambiguous `PASS`/`True`/`False` formatting with structured `GateResult` entries (`gate_name`, full-precision `raw_value`, `comparator`, `threshold`, `passed`) in JSON/Markdown and failure-only summary strings so gates like `Mistral-7B` (`cos=0.9999995231628418` passing, `greedy=4/5` failing) are never conflated.
+- **DiT-XL/2 Timestep Embedding Parity (`cutile_forge/models/model_graph.py`, `tests/test_phase21_parity_fixes.py`)**: Fixed `_timestep_embedding` in `UnifiedModelExecutor` to match `diffusers` `DiTTransformer2DModel` (`downscale_freq_shift=1`, denominator `half - 1 = 127` instead of `128`), eliminating the stage-0 divergence (`1.2422` max abs diff in FP32).
+- **Whisper-Tiny Audio Stem `gelu_erf` Parity (`cutile_forge/models/model_graph.py`, `cutile_forge/models/registry.py`)**: Honored `conv_act` (`"gelu_erf"`) in `_run_audio_embed` instead of hardcoding `gelu` (tanh), eliminating the `6.46e-4` conv-stem activation error against HuggingFace `WhisperModel`.
+- **Mixtral / MoE Router FP32 Preservation (`cutile_forge/kernels/moe_fused.py`, `cutile_forge/engine/model.py`)**: Updated `moe_softmax_kernel` (`probs_ptr.dtype`), `fused_topk_gating`, and `MoEFFNBlock` (`r_logits = torch.matmul(post_norm.float(), weights.moe_gate.float().t())`) to keep router logits and softmax->`topk` selection in FP32 (improving `fused_topk_gating` median latency by `3.0%–3.6%` at `M=1/16/256` while eliminating FP16 expert-selection flips).
+- **Stage-by-Stage Parity Diagnostics (`benchmarks/validation_artifacts/v3.7.0/diag/`)**: Preserved full FP32/FP16 reference noise floors and per-layer divergence traces for all 7 previously failing models (`DiT-XL/2`, `Whisper-Tiny`, `SigLIP ViT-B/16`, `Mistral-7B`, `Qwen2.5-0.5B`, `Mixtral-8x7B`, `Llama-2-70B`), distinguishing genuine bugs from 1-ULP FP16 greedy near-ties and FP16 outlier channels inside encoder noise floors.
+
 ## [3.6.0] (2026-11-22) — Phases 19–20 & Final Campaign Compatibility Matrix
 
 **Authors:** Arrhat Nag (`@samudragupto`) and Rupesh Nasre

@@ -1,0 +1,1155 @@
+{
+  "whisper_tiny": {
+    "input_sha256": "17d028248390e7384e44956b91f1dbccb77f24391d15284ed1109587bc15222c",
+    "hf_noise_floor": {
+      "sdpa_fp16_vs_fp32": {
+        "stage": "hf_sdpa_fp16_vs_fp32",
+        "shape": [
+          1,
+          1500,
+          384
+        ],
+        "max_abs_diff": 0.2489643096923828,
+        "rel_max_diff": 0.013229444288136322,
+        "cosine": 0.9999969005584717,
+        "worst_index": [
+          0,
+          170,
+          17
+        ],
+        "cand_val": 12.625,
+        "ref_val": 12.376035690307617,
+        "ref_mag_at_worst": 12.376035690307617,
+        "worst_channel": 17,
+        "worst_channel_max_ref": 18.818954467773438,
+        "median_channel_max_ref": 1.9281867742538452,
+        "outlier_channel_ratio": 9.759923011117971
+      },
+      "eager_fp16_vs_fp32": {
+        "stage": "hf_eager_fp16_vs_fp32",
+        "shape": [
+          1,
+          1500,
+          384
+        ],
+        "max_abs_diff": 0.44565677642822266,
+        "rel_max_diff": 0.023681271836402423,
+        "cosine": 0.9999958872795105,
+        "worst_index": [
+          0,
+          781,
+          17
+        ],
+        "cand_val": 12.6328125,
+        "ref_val": 12.187155723571777,
+        "ref_mag_at_worst": 12.187155723571777,
+        "worst_channel": 17,
+        "worst_channel_max_ref": 18.818954467773438,
+        "median_channel_max_ref": 1.9281867742538452,
+        "outlier_channel_ratio": 9.759923011117971
+      },
+      "sdpa_fp16_vs_eager_fp16": {
+        "stage": "hf_sdpa_vs_eager",
+        "shape": [
+          1,
+          1500,
+          384
+        ],
+        "max_abs_diff": 0.3251953125,
+        "rel_max_diff": 0.017286129568106313,
+        "cosine": 0.9999970197677612,
+        "worst_index": [
+          0,
+          1474,
+          17
+        ],
+        "cand_val": 1.7890625,
+        "ref_val": 1.4638671875,
+        "ref_mag_at_worst": 1.4638671875,
+        "worst_channel": 17,
+        "worst_channel_max_ref": 18.8125,
+        "median_channel_max_ref": 1.9267578125,
+        "outlier_channel_ratio": 9.763811454637608
+      }
+    },
+    "config_activation_function": "gelu_erf",
+    "stages_use_cutile_true": [
+      {
+        "stage": "conv1",
+        "shape": [
+          1,
+          384,
+          3000
+        ],
+        "max_abs_diff": 0.00390625,
+        "rel_max_diff": 0.0005787037037037037,
+        "cosine": 1.0,
+        "worst_index": [
+          0,
+          3,
+          218
+        ],
+        "cand_val": -4.04296875,
+        "ref_val": -4.046875,
+        "ref_mag_at_worst": 4.046875,
+        "worst_channel": 218,
+        "worst_channel_max_ref": 6.3359375,
+        "median_channel_max_ref": 6.2734375,
+        "outlier_channel_ratio": 1.0099626400996264
+      },
+      {
+        "stage": "conv2",
+        "shape": [
+          1,
+          384,
+          1500
+        ],
+        "max_abs_diff": 0.00390625,
+        "rel_max_diff": 0.0008216926869350862,
+        "cosine": 0.9999999403953552,
+        "worst_index": [
+          0,
+          24,
+          1233
+        ],
+        "cand_val": -4.74609375,
+        "ref_val": -4.75,
+        "ref_mag_at_worst": 4.75,
+        "worst_channel": 1233,
+        "worst_channel_max_ref": 4.75,
+        "median_channel_max_ref": 4.75,
+        "outlier_channel_ratio": 1.0
+      },
+      {
+        "stage": "block_0",
+        "shape": [
+          1,
+          1500,
+          384
+        ],
+        "max_abs_diff": 0.0068359375,
+        "rel_max_diff": 0.001800411522633745,
+        "cosine": 0.9999991655349731,
+        "worst_index": [
+          0,
+          170,
+          375
+        ],
+        "cand_val": 1.0029296875,
+        "ref_val": 0.99609375,
+        "ref_mag_at_worst": 0.99609375,
+        "worst_channel": 375,
+        "worst_channel_max_ref": 1.7119140625,
+        "median_channel_max_ref": 0.9755859375,
+        "outlier_channel_ratio": 1.7547547547547548
+      },
+      {
+        "stage": "block_1",
+        "shape": [
+          1,
+          1500,
+          384
+        ],
+        "max_abs_diff": 0.01171875,
+        "rel_max_diff": 0.0012254901960784314,
+        "cosine": 0.9999985694885254,
+        "worst_index": [
+          0,
+          636,
+          17
+        ],
+        "cand_val": 4.08984375,
+        "ref_val": 4.1015625,
+        "ref_mag_at_worst": 4.1015625,
+        "worst_channel": 17,
+        "worst_channel_max_ref": 5.125,
+        "median_channel_max_ref": 1.529296875,
+        "outlier_channel_ratio": 3.351213282247765
+      },
+      {
+        "stage": "block_2",
+        "shape": [
+          1,
+          1500,
+          384
+        ],
+        "max_abs_diff": 1.125,
+        "rel_max_diff": 0.0049504950495049506,
+        "cosine": 0.9999915361404419,
+        "worst_index": [
+          0,
+          731,
+          375
+        ],
+        "cand_val": 114.8125,
+        "ref_val": 115.9375,
+        "ref_mag_at_worst": 115.9375,
+        "worst_channel": 375,
+        "worst_channel_max_ref": 227.25,
+        "median_channel_max_ref": 3.4375,
+        "outlier_channel_ratio": 66.10909090909091
+      },
+      {
+        "stage": "block_3",
+        "shape": [
+          1,
+          1500,
+          384
+        ],
+        "max_abs_diff": 2.3125,
+        "rel_max_diff": 0.009236145781328009,
+        "cosine": 0.9999851584434509,
+        "worst_index": [
+          0,
+          752,
+          375
+        ],
+        "cand_val": 48.4375,
+        "ref_val": 46.125,
+        "ref_mag_at_worst": 46.125,
+        "worst_channel": 375,
+        "worst_channel_max_ref": 250.375,
+        "median_channel_max_ref": 4.60546875,
+        "outlier_channel_ratio": 54.36471586089907
+      },
+      {
+        "stage": "final_ln",
+        "shape": [
+          1,
+          1500,
+          384
+        ],
+        "max_abs_diff": 0.5234375,
+        "rel_max_diff": 0.02782392026578073,
+        "cosine": 0.9999914169311523,
+        "worst_index": [
+          0,
+          170,
+          17
+        ],
+        "cand_val": 12.1015625,
+        "ref_val": 12.625,
+        "ref_mag_at_worst": 12.625,
+        "worst_channel": 17,
+        "worst_channel_max_ref": 18.8125,
+        "median_channel_max_ref": 1.927734375,
+        "outlier_channel_ratio": 9.75886524822695
+      }
+    ],
+    "stages_use_cutile_false": [
+      {
+        "stage": "conv1",
+        "shape": [
+          1,
+          384,
+          3000
+        ],
+        "max_abs_diff": 0.00390625,
+        "rel_max_diff": 0.0005787037037037037,
+        "cosine": 1.0,
+        "worst_index": [
+          0,
+          3,
+          218
+        ],
+        "cand_val": -4.04296875,
+        "ref_val": -4.046875,
+        "ref_mag_at_worst": 4.046875,
+        "worst_channel": 218,
+        "worst_channel_max_ref": 6.3359375,
+        "median_channel_max_ref": 6.2734375,
+        "outlier_channel_ratio": 1.0099626400996264
+      },
+      {
+        "stage": "conv2",
+        "shape": [
+          1,
+          384,
+          1500
+        ],
+        "max_abs_diff": 0.00390625,
+        "rel_max_diff": 0.0008216926869350862,
+        "cosine": 0.9999999403953552,
+        "worst_index": [
+          0,
+          24,
+          1233
+        ],
+        "cand_val": -4.74609375,
+        "ref_val": -4.75,
+        "ref_mag_at_worst": 4.75,
+        "worst_channel": 1233,
+        "worst_channel_max_ref": 4.75,
+        "median_channel_max_ref": 4.75,
+        "outlier_channel_ratio": 1.0
+      },
+      {
+        "stage": "block_0",
+        "shape": [
+          1,
+          1500,
+          384
+        ],
+        "max_abs_diff": 0.0068359375,
+        "rel_max_diff": 0.001800411522633745,
+        "cosine": 0.9999991655349731,
+        "worst_index": [
+          0,
+          170,
+          375
+        ],
+        "cand_val": 1.0029296875,
+        "ref_val": 0.99609375,
+        "ref_mag_at_worst": 0.99609375,
+        "worst_channel": 375,
+        "worst_channel_max_ref": 1.7119140625,
+        "median_channel_max_ref": 0.9755859375,
+        "outlier_channel_ratio": 1.7547547547547548
+      },
+      {
+        "stage": "block_1",
+        "shape": [
+          1,
+          1500,
+          384
+        ],
+        "max_abs_diff": 0.01171875,
+        "rel_max_diff": 0.0012254901960784314,
+        "cosine": 0.9999985098838806,
+        "worst_index": [
+          0,
+          895,
+          375
+        ],
+        "cand_val": 4.41015625,
+        "ref_val": 4.421875,
+        "ref_mag_at_worst": 4.421875,
+        "worst_channel": 375,
+        "worst_channel_max_ref": 6.4140625,
+        "median_channel_max_ref": 1.529296875,
+        "outlier_channel_ratio": 4.194125159642401
+      },
+      {
+        "stage": "block_2",
+        "shape": [
+          1,
+          1500,
+          384
+        ],
+        "max_abs_diff": 1.25,
+        "rel_max_diff": 0.005500550055005501,
+        "cosine": 0.999990701675415,
+        "worst_index": [
+          0,
+          1442,
+          375
+        ],
+        "cand_val": 133.625,
+        "ref_val": 132.375,
+        "ref_mag_at_worst": 132.375,
+        "worst_channel": 375,
+        "worst_channel_max_ref": 227.25,
+        "median_channel_max_ref": 3.4375,
+        "outlier_channel_ratio": 66.10909090909091
+      },
+      {
+        "stage": "block_3",
+        "shape": [
+          1,
+          1500,
+          384
+        ],
+        "max_abs_diff": 2.84375,
+        "rel_max_diff": 0.011357963055416875,
+        "cosine": 0.999982476234436,
+        "worst_index": [
+          0,
+          1444,
+          375
+        ],
+        "cand_val": 43.0,
+        "ref_val": 45.84375,
+        "ref_mag_at_worst": 45.84375,
+        "worst_channel": 375,
+        "worst_channel_max_ref": 250.375,
+        "median_channel_max_ref": 4.60546875,
+        "outlier_channel_ratio": 54.36471586089907
+      },
+      {
+        "stage": "final_ln",
+        "shape": [
+          1,
+          1500,
+          384
+        ],
+        "max_abs_diff": 0.525390625,
+        "rel_max_diff": 0.027927740863787374,
+        "cosine": 0.9999910593032837,
+        "worst_index": [
+          0,
+          1474,
+          17
+        ],
+        "cand_val": 2.314453125,
+        "ref_val": 1.7890625,
+        "ref_mag_at_worst": 1.7890625,
+        "worst_channel": 17,
+        "worst_channel_max_ref": 18.8125,
+        "median_channel_max_ref": 1.927734375,
+        "outlier_channel_ratio": 9.75886524822695
+      }
+    ],
+    "ablations": {
+      "baseline_all_cutile_gelu_tanh": {
+        "max_abs_diff": 0.640625,
+        "cosine": 0.9999570846557617
+      },
+      "pt_conv1d_only": {
+        "max_abs_diff": 0.72265625,
+        "cosine": 0.999956488609314
+      },
+      "gelu_erf_only": {
+        "max_abs_diff": 0.3134765625,
+        "cosine": 0.9999958276748657
+      },
+      "pt_attn_only": {
+        "max_abs_diff": 0.6640625,
+        "cosine": 0.9999569058418274
+      },
+      "pt_ln_only": {
+        "max_abs_diff": 0.640625,
+        "cosine": 0.9999595284461975
+      },
+      "pt_conv1d_and_gelu_erf": {
+        "max_abs_diff": 0.21875,
+        "cosine": 0.9999959468841553
+      },
+      "all_pt_ops_gelu_erf": {
+        "max_abs_diff": 0.28125,
+        "cosine": 0.9999954700469971
+      }
+    }
+  },
+  "siglip_vit_b16": {
+    "input_sha256": "df79c52b59200a437f21eb64c2869349a8ee568fb62c329068b64966a13bfc9d",
+    "hf_noise_floor": {
+      "sdpa_fp16_vs_fp32": {
+        "stage": "hf_sdpa_fp16_vs_fp32",
+        "shape": [
+          1,
+          196,
+          768
+        ],
+        "max_abs_diff": 0.13229632377624512,
+        "rel_max_diff": 0.005037184812724071,
+        "cosine": 0.9999843835830688,
+        "worst_index": [
+          0,
+          183,
+          510
+        ],
+        "cand_val": 1.6357421875,
+        "ref_val": 1.5034458637237549,
+        "ref_mag_at_worst": 1.5034458637237549,
+        "worst_channel": 510,
+        "worst_channel_max_ref": 6.628803730010986,
+        "median_channel_max_ref": 3.9983015060424805,
+        "outlier_channel_ratio": 1.6579049178740344
+      },
+      "eager_fp16_vs_fp32": {
+        "stage": "hf_eager_fp16_vs_fp32",
+        "shape": [
+          1,
+          196,
+          768
+        ],
+        "max_abs_diff": 0.15546703338623047,
+        "rel_max_diff": 0.005919409981315,
+        "cosine": 0.9999788999557495,
+        "worst_index": [
+          0,
+          121,
+          246
+        ],
+        "cand_val": 2.373046875,
+        "ref_val": 2.5285139083862305,
+        "ref_mag_at_worst": 2.5285139083862305,
+        "worst_channel": 246,
+        "worst_channel_max_ref": 8.827529907226562,
+        "median_channel_max_ref": 3.9983015060424805,
+        "outlier_channel_ratio": 2.207819969025811
+      },
+      "sdpa_fp16_vs_eager_fp16": {
+        "stage": "hf_sdpa_vs_eager",
+        "shape": [
+          1,
+          196,
+          768
+        ],
+        "max_abs_diff": 0.173828125,
+        "rel_max_diff": 0.006618084473527662,
+        "cosine": 0.9999772310256958,
+        "worst_index": [
+          0,
+          121,
+          246
+        ],
+        "cand_val": 2.546875,
+        "ref_val": 2.373046875,
+        "ref_mag_at_worst": 2.373046875,
+        "worst_channel": 246,
+        "worst_channel_max_ref": 8.8203125,
+        "median_channel_max_ref": 4.0,
+        "outlier_channel_ratio": 2.205078125
+      }
+    },
+    "stages_use_cutile_true": [
+      {
+        "stage": "patch_pos_embed",
+        "shape": [
+          1,
+          196,
+          768
+        ],
+        "max_abs_diff": 0.00048828125,
+        "rel_max_diff": 5.178127589063794e-05,
+        "cosine": 1.0,
+        "worst_index": [
+          0,
+          20,
+          316
+        ],
+        "cand_val": 0.53564453125,
+        "ref_val": 0.5361328125,
+        "ref_mag_at_worst": 0.5361328125,
+        "worst_channel": 316,
+        "worst_channel_max_ref": 0.8125,
+        "median_channel_max_ref": 0.8349609375,
+        "outlier_channel_ratio": 0.9730994152046784
+      },
+      {
+        "stage": "block_0",
+        "shape": [
+          1,
+          196,
+          768
+        ],
+        "max_abs_diff": 0.0078125,
+        "rel_max_diff": 0.00065359477124183,
+        "cosine": 0.9999995827674866,
+        "worst_index": [
+          0,
+          40,
+          182
+        ],
+        "cand_val": 4.203125,
+        "ref_val": 4.1953125,
+        "ref_mag_at_worst": 4.1953125,
+        "worst_channel": 182,
+        "worst_channel_max_ref": 4.796875,
+        "median_channel_max_ref": 1.060546875,
+        "outlier_channel_ratio": 4.523020257826888
+      },
+      {
+        "stage": "block_1",
+        "shape": [
+          1,
+          196,
+          768
+        ],
+        "max_abs_diff": 0.0078125,
+        "rel_max_diff": 0.000700770847932726,
+        "cosine": 0.9999987483024597,
+        "worst_index": [
+          0,
+          4,
+          404
+        ],
+        "cand_val": 3.0625,
+        "ref_val": 3.0546875,
+        "ref_mag_at_worst": 3.0546875,
+        "worst_channel": 404,
+        "worst_channel_max_ref": 3.58984375,
+        "median_channel_max_ref": 0.767578125,
+        "outlier_channel_ratio": 4.676844783715013
+      },
+      {
+        "stage": "block_2",
+        "shape": [
+          1,
+          196,
+          768
+        ],
+        "max_abs_diff": 0.009765625,
+        "rel_max_diff": 0.0010575296108291032,
+        "cosine": 0.9999983310699463,
+        "worst_index": [
+          0,
+          187,
+          404
+        ],
+        "cand_val": 2.9375,
+        "ref_val": 2.927734375,
+        "ref_mag_at_worst": 2.927734375,
+        "worst_channel": 404,
+        "worst_channel_max_ref": 3.5,
+        "median_channel_max_ref": 0.677734375,
+        "outlier_channel_ratio": 5.164265129682997
+      },
+      {
+        "stage": "block_3",
+        "shape": [
+          1,
+          196,
+          768
+        ],
+        "max_abs_diff": 0.009765625,
+        "rel_max_diff": 0.0011241007194244604,
+        "cosine": 0.9999971985816956,
+        "worst_index": [
+          0,
+          71,
+          404
+        ],
+        "cand_val": 2.61328125,
+        "ref_val": 2.623046875,
+        "ref_mag_at_worst": 2.623046875,
+        "worst_channel": 404,
+        "worst_channel_max_ref": 3.357421875,
+        "median_channel_max_ref": 0.646484375,
+        "outlier_channel_ratio": 5.193353474320242
+      },
+      {
+        "stage": "block_4",
+        "shape": [
+          1,
+          196,
+          768
+        ],
+        "max_abs_diff": 0.03125,
+        "rel_max_diff": 0.002028397565922921,
+        "cosine": 0.9999960660934448,
+        "worst_index": [
+          0,
+          86,
+          299
+        ],
+        "cand_val": 10.1796875,
+        "ref_val": 10.1484375,
+        "ref_mag_at_worst": 10.1484375,
+        "worst_channel": 299,
+        "worst_channel_max_ref": 10.1484375,
+        "median_channel_max_ref": 0.64111328125,
+        "outlier_channel_ratio": 15.82939832444783
+      },
+      {
+        "stage": "block_5",
+        "shape": [
+          1,
+          196,
+          768
+        ],
+        "max_abs_diff": 0.375,
+        "rel_max_diff": 0.003054989816700611,
+        "cosine": 0.9999979734420776,
+        "worst_index": [
+          0,
+          25,
+          650
+        ],
+        "cand_val": -121.125,
+        "ref_val": -120.75,
+        "ref_mag_at_worst": 120.75,
+        "worst_channel": 650,
+        "worst_channel_max_ref": 122.75,
+        "median_channel_max_ref": 0.7109375,
+        "outlier_channel_ratio": 172.65934065934067
+      },
+      {
+        "stage": "block_6",
+        "shape": [
+          1,
+          196,
+          768
+        ],
+        "max_abs_diff": 0.375,
+        "rel_max_diff": 0.002477291494632535,
+        "cosine": 0.9999980926513672,
+        "worst_index": [
+          0,
+          25,
+          650
+        ],
+        "cand_val": -149.5,
+        "ref_val": -149.125,
+        "ref_mag_at_worst": 149.125,
+        "worst_channel": 650,
+        "worst_channel_max_ref": 151.375,
+        "median_channel_max_ref": 0.837890625,
+        "outlier_channel_ratio": 180.66200466200465
+      },
+      {
+        "stage": "block_7",
+        "shape": [
+          1,
+          196,
+          768
+        ],
+        "max_abs_diff": 0.375,
+        "rel_max_diff": 0.002277904328018223,
+        "cosine": 0.9999982118606567,
+        "worst_index": [
+          0,
+          25,
+          650
+        ],
+        "cand_val": -162.625,
+        "ref_val": -162.25,
+        "ref_mag_at_worst": 162.25,
+        "worst_channel": 650,
+        "worst_channel_max_ref": 164.625,
+        "median_channel_max_ref": 0.955078125,
+        "outlier_channel_ratio": 172.3680981595092
+      },
+      {
+        "stage": "block_8",
+        "shape": [
+          1,
+          196,
+          768
+        ],
+        "max_abs_diff": 0.375,
+        "rel_max_diff": 0.002167630057803468,
+        "cosine": 0.9999977350234985,
+        "worst_index": [
+          0,
+          25,
+          650
+        ],
+        "cand_val": -170.875,
+        "ref_val": -170.5,
+        "ref_mag_at_worst": 170.5,
+        "worst_channel": 650,
+        "worst_channel_max_ref": 173.0,
+        "median_channel_max_ref": 1.15234375,
+        "outlier_channel_ratio": 150.12881355932203
+      },
+      {
+        "stage": "block_9",
+        "shape": [
+          1,
+          196,
+          768
+        ],
+        "max_abs_diff": 0.375,
+        "rel_max_diff": 0.0021382751247327157,
+        "cosine": 0.9999963045120239,
+        "worst_index": [
+          0,
+          25,
+          650
+        ],
+        "cand_val": -173.25,
+        "ref_val": -172.875,
+        "ref_mag_at_worst": 172.875,
+        "worst_channel": 650,
+        "worst_channel_max_ref": 175.375,
+        "median_channel_max_ref": 1.48828125,
+        "outlier_channel_ratio": 117.83727034120734
+      },
+      {
+        "stage": "block_10",
+        "shape": [
+          1,
+          196,
+          768
+        ],
+        "max_abs_diff": 0.375,
+        "rel_max_diff": 0.0020876826722338203,
+        "cosine": 0.9999940395355225,
+        "worst_index": [
+          0,
+          25,
+          650
+        ],
+        "cand_val": -177.5,
+        "ref_val": -177.125,
+        "ref_mag_at_worst": 177.125,
+        "worst_channel": 650,
+        "worst_channel_max_ref": 179.625,
+        "median_channel_max_ref": 1.9033203125,
+        "outlier_channel_ratio": 94.37455105182144
+      },
+      {
+        "stage": "block_11",
+        "shape": [
+          1,
+          196,
+          768
+        ],
+        "max_abs_diff": 0.375,
+        "rel_max_diff": 0.001969796454366382,
+        "cosine": 0.9999922513961792,
+        "worst_index": [
+          0,
+          25,
+          650
+        ],
+        "cand_val": -186.5,
+        "ref_val": -186.125,
+        "ref_mag_at_worst": 186.125,
+        "worst_channel": 650,
+        "worst_channel_max_ref": 190.375,
+        "median_channel_max_ref": 2.70703125,
+        "outlier_channel_ratio": 70.32611832611832
+      },
+      {
+        "stage": "post_ln",
+        "shape": [
+          1,
+          196,
+          768
+        ],
+        "max_abs_diff": 0.125,
+        "rel_max_diff": 0.004744958481613286,
+        "cosine": 0.9999792575836182,
+        "worst_index": [
+          0,
+          48,
+          573
+        ],
+        "cand_val": -14.1484375,
+        "ref_val": -14.0234375,
+        "ref_mag_at_worst": 14.0234375,
+        "worst_channel": 573,
+        "worst_channel_max_ref": 26.34375,
+        "median_channel_max_ref": 4.0,
+        "outlier_channel_ratio": 6.5859375
+      }
+    ],
+    "stages_use_cutile_false": [
+      {
+        "stage": "patch_pos_embed",
+        "shape": [
+          1,
+          196,
+          768
+        ],
+        "max_abs_diff": 0.00390625,
+        "rel_max_diff": 0.00041425020712510354,
+        "cosine": 1.0,
+        "worst_index": [
+          0,
+          153,
+          551
+        ],
+        "cand_val": 4.94140625,
+        "ref_val": 4.9453125,
+        "ref_mag_at_worst": 4.9453125,
+        "worst_channel": 551,
+        "worst_channel_max_ref": 5.25,
+        "median_channel_max_ref": 0.8349609375,
+        "outlier_channel_ratio": 6.287719298245614
+      },
+      {
+        "stage": "block_0",
+        "shape": [
+          1,
+          196,
+          768
+        ],
+        "max_abs_diff": 0.0078125,
+        "rel_max_diff": 0.00065359477124183,
+        "cosine": 0.9999994039535522,
+        "worst_index": [
+          0,
+          40,
+          182
+        ],
+        "cand_val": 4.203125,
+        "ref_val": 4.1953125,
+        "ref_mag_at_worst": 4.1953125,
+        "worst_channel": 182,
+        "worst_channel_max_ref": 4.796875,
+        "median_channel_max_ref": 1.060546875,
+        "outlier_channel_ratio": 4.523020257826888
+      },
+      {
+        "stage": "block_1",
+        "shape": [
+          1,
+          196,
+          768
+        ],
+        "max_abs_diff": 0.0078125,
+        "rel_max_diff": 0.000700770847932726,
+        "cosine": 0.9999986290931702,
+        "worst_index": [
+          0,
+          71,
+          404
+        ],
+        "cand_val": 3.0625,
+        "ref_val": 3.0703125,
+        "ref_mag_at_worst": 3.0703125,
+        "worst_channel": 404,
+        "worst_channel_max_ref": 3.58984375,
+        "median_channel_max_ref": 0.767578125,
+        "outlier_channel_ratio": 4.676844783715013
+      },
+      {
+        "stage": "block_2",
+        "shape": [
+          1,
+          196,
+          768
+        ],
+        "max_abs_diff": 0.009765625,
+        "rel_max_diff": 0.0010575296108291032,
+        "cosine": 0.9999982118606567,
+        "worst_index": [
+          0,
+          187,
+          404
+        ],
+        "cand_val": 2.9375,
+        "ref_val": 2.927734375,
+        "ref_mag_at_worst": 2.927734375,
+        "worst_channel": 404,
+        "worst_channel_max_ref": 3.5,
+        "median_channel_max_ref": 0.677734375,
+        "outlier_channel_ratio": 5.164265129682997
+      },
+      {
+        "stage": "block_3",
+        "shape": [
+          1,
+          196,
+          768
+        ],
+        "max_abs_diff": 0.015625,
+        "rel_max_diff": 0.0017985611510791368,
+        "cosine": 0.9999969601631165,
+        "worst_index": [
+          0,
+          25,
+          650
+        ],
+        "cand_val": -3.03515625,
+        "ref_val": -3.05078125,
+        "ref_mag_at_worst": 3.05078125,
+        "worst_channel": 650,
+        "worst_channel_max_ref": 6.546875,
+        "median_channel_max_ref": 0.646484375,
+        "outlier_channel_ratio": 10.126888217522659
+      },
+      {
+        "stage": "block_4",
+        "shape": [
+          1,
+          196,
+          768
+        ],
+        "max_abs_diff": 0.046875,
+        "rel_max_diff": 0.0030425963488843813,
+        "cosine": 0.9999957084655762,
+        "worst_index": [
+          0,
+          86,
+          299
+        ],
+        "cand_val": 10.1953125,
+        "ref_val": 10.1484375,
+        "ref_mag_at_worst": 10.1484375,
+        "worst_channel": 299,
+        "worst_channel_max_ref": 10.1484375,
+        "median_channel_max_ref": 0.64111328125,
+        "outlier_channel_ratio": 15.82939832444783
+      },
+      {
+        "stage": "block_5",
+        "shape": [
+          1,
+          196,
+          768
+        ],
+        "max_abs_diff": 0.4375,
+        "rel_max_diff": 0.003564154786150713,
+        "cosine": 0.9999972581863403,
+        "worst_index": [
+          0,
+          170,
+          650
+        ],
+        "cand_val": -106.5625,
+        "ref_val": -106.125,
+        "ref_mag_at_worst": 106.125,
+        "worst_channel": 650,
+        "worst_channel_max_ref": 122.75,
+        "median_channel_max_ref": 0.7109375,
+        "outlier_channel_ratio": 172.65934065934067
+      },
+      {
+        "stage": "block_6",
+        "shape": [
+          1,
+          196,
+          768
+        ],
+        "max_abs_diff": 0.375,
+        "rel_max_diff": 0.002477291494632535,
+        "cosine": 0.9999979138374329,
+        "worst_index": [
+          0,
+          170,
+          650
+        ],
+        "cand_val": -134.0,
+        "ref_val": -133.625,
+        "ref_mag_at_worst": 133.625,
+        "worst_channel": 650,
+        "worst_channel_max_ref": 151.375,
+        "median_channel_max_ref": 0.837890625,
+        "outlier_channel_ratio": 180.66200466200465
+      },
+      {
+        "stage": "block_7",
+        "shape": [
+          1,
+          196,
+          768
+        ],
+        "max_abs_diff": 0.5,
+        "rel_max_diff": 0.0030372057706909645,
+        "cosine": 0.999997615814209,
+        "worst_index": [
+          0,
+          170,
+          650
+        ],
+        "cand_val": -146.75,
+        "ref_val": -146.25,
+        "ref_mag_at_worst": 146.25,
+        "worst_channel": 650,
+        "worst_channel_max_ref": 164.625,
+        "median_channel_max_ref": 0.955078125,
+        "outlier_channel_ratio": 172.3680981595092
+      },
+      {
+        "stage": "block_8",
+        "shape": [
+          1,
+          196,
+          768
+        ],
+        "max_abs_diff": 0.5,
+        "rel_max_diff": 0.002890173410404624,
+        "cosine": 0.999997079372406,
+        "worst_index": [
+          0,
+          170,
+          650
+        ],
+        "cand_val": -154.625,
+        "ref_val": -154.125,
+        "ref_mag_at_worst": 154.125,
+        "worst_channel": 650,
+        "worst_channel_max_ref": 173.0,
+        "median_channel_max_ref": 1.15234375,
+        "outlier_channel_ratio": 150.12881355932203
+      },
+      {
+        "stage": "block_9",
+        "shape": [
+          1,
+          196,
+          768
+        ],
+        "max_abs_diff": 0.5,
+        "rel_max_diff": 0.002851033499643621,
+        "cosine": 0.9999956488609314,
+        "worst_index": [
+          0,
+          170,
+          650
+        ],
+        "cand_val": -156.875,
+        "ref_val": -156.375,
+        "ref_mag_at_worst": 156.375,
+        "worst_channel": 650,
+        "worst_channel_max_ref": 175.375,
+        "median_channel_max_ref": 1.48828125,
+        "outlier_channel_ratio": 117.83727034120734
+      },
+      {
+        "stage": "block_10",
+        "shape": [
+          1,
+          196,
+          768
+        ],
+        "max_abs_diff": 0.5,
+        "rel_max_diff": 0.0027835768963117608,
+        "cosine": 0.9999927282333374,
+        "worst_index": [
+          0,
+          170,
+          650
+        ],
+        "cand_val": -161.125,
+        "ref_val": -160.625,
+        "ref_mag_at_worst": 160.625,
+        "worst_channel": 650,
+        "worst_channel_max_ref": 179.625,
+        "median_channel_max_ref": 1.9033203125,
+        "outlier_channel_ratio": 94.37455105182144
+      },
+      {
+        "stage": "block_11",
+        "shape": [
+          1,
+          196,
+          768
+        ],
+        "max_abs_diff": 0.5,
+        "rel_max_diff": 0.0026263952724885093,
+        "cosine": 0.9999912977218628,
+        "worst_index": [
+          0,
+          170,
+          650
+        ],
+        "cand_val": -169.625,
+        "ref_val": -169.125,
+        "ref_mag_at_worst": 169.125,
+        "worst_channel": 650,
+        "worst_channel_max_ref": 190.375,
+        "median_channel_max_ref": 2.70703125,
+        "outlier_channel_ratio": 70.32611832611832
+      },
+      {
+        "stage": "post_ln",
+        "shape": [
+          1,
+          196,
+          768
+        ],
+        "max_abs_diff": 0.24609375,
+        "rel_max_diff": 0.009341637010676156,
+        "cosine": 0.9999752044677734,
+        "worst_index": [
+          0,
+          183,
+          510
+        ],
+        "cand_val": 1.3896484375,
+        "ref_val": 1.6357421875,
+        "ref_mag_at_worst": 1.6357421875,
+        "worst_channel": 510,
+        "worst_channel_max_ref": 6.63671875,
+        "median_channel_max_ref": 4.0,
+        "outlier_channel_ratio": 1.6591796875
+      }
+    ]
+  }
+}

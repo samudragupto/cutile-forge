@@ -1,0 +1,498 @@
+{
+  "fp32": {
+    "dtype": "torch.float32",
+    "input_sha256": {
+      "latents": "6bfb4d006fef25d025311da61bde0a1d72cb28e8077242bdfc7184df4c63435a",
+      "timesteps": "cf5cb2f4d37db6ef4456abfbcdc112844e93c25fec167470d3f2e51a57c5d166",
+      "class_labels": "9c16f37399c5ead6c47e0d33ed6ec627132c3d130872217badc2ce4a1198a582"
+    },
+    "stages": [
+      {
+        "stage": "final_sample (ref_fwd vs diffusers)",
+        "shape": [
+          1,
+          8,
+          32,
+          32
+        ],
+        "max_abs_diff": 0.05807378888130188,
+        "rel_max_diff": 0.03609469698120374,
+        "cosine": 0.9970262050628662,
+        "worst_index": [
+          0,
+          6,
+          30,
+          29
+        ],
+        "cand_val": -0.1454058289527893,
+        "ref_val": -0.2034796178340912
+      },
+      {
+        "stage": "pos_embed",
+        "shape": [
+          1,
+          256,
+          1152
+        ],
+        "max_abs_diff": 0.0,
+        "rel_max_diff": 0.0,
+        "cosine": 1.0,
+        "worst_index": [
+          0,
+          0,
+          0
+        ],
+        "cand_val": 0.1396051049232483,
+        "ref_val": 0.1396051049232483
+      },
+      {
+        "stage": "b0.time_proj",
+        "shape": [
+          1,
+          256
+        ],
+        "max_abs_diff": 1.2421714067459106,
+        "rel_max_diff": 1.242186066677642,
+        "cosine": 0.8157192468643188,
+        "worst_index": [
+          0,
+          142
+        ],
+        "cand_val": 0.3659866154193878,
+        "ref_val": -0.8761847615242004
+      },
+      {
+        "stage": "b0.emb",
+        "shape": [
+          1,
+          1152
+        ],
+        "max_abs_diff": 0.032936424016952515,
+        "rel_max_diff": 0.05856021407092424,
+        "cosine": 0.9975470304489136,
+        "worst_index": [
+          0,
+          203
+        ],
+        "cand_val": -0.07271459698677063,
+        "ref_val": -0.039778172969818115
+      },
+      {
+        "stage": "b0.adaln",
+        "shape": [
+          1,
+          6912
+        ],
+        "max_abs_diff": 0.07959157228469849,
+        "rel_max_diff": 0.02195923056480853,
+        "cosine": 0.9999052882194519,
+        "worst_index": [
+          0,
+          5494
+        ],
+        "cand_val": -0.3946879506111145,
+        "ref_val": -0.474279522895813
+      },
+      {
+        "stage": "block_0",
+        "shape": [
+          1,
+          256,
+          1152
+        ],
+        "max_abs_diff": 2.45379638671875,
+        "rel_max_diff": 0.010441785739377152,
+        "cosine": 0.9999402761459351,
+        "worst_index": [
+          0,
+          31,
+          293
+        ],
+        "cand_val": -233.4084014892578,
+        "ref_val": -230.95460510253906
+      },
+      {
+        "stage": "block_1",
+        "shape": [
+          1,
+          256,
+          1152
+        ],
+        "max_abs_diff": 4.92596435546875,
+        "rel_max_diff": 0.013302569208772638,
+        "cosine": 0.9999609589576721,
+        "worst_index": [
+          0,
+          214,
+          293
+        ],
+        "cand_val": -361.0306396484375,
+        "ref_val": -365.95660400390625
+      },
+      {
+        "stage": "block_13",
+        "shape": [
+          1,
+          256,
+          1152
+        ],
+        "max_abs_diff": 14.78961181640625,
+        "rel_max_diff": 0.013990745701959408,
+        "cosine": 0.9998382329940796,
+        "worst_index": [
+          0,
+          103,
+          293
+        ],
+        "cand_val": -968.2538452148438,
+        "ref_val": -953.4642333984375
+      },
+      {
+        "stage": "block_27",
+        "shape": [
+          1,
+          256,
+          1152
+        ],
+        "max_abs_diff": 132.892578125,
+        "rel_max_diff": 0.04715433096704633,
+        "cosine": 0.9992446899414062,
+        "worst_index": [
+          0,
+          144,
+          295
+        ],
+        "cand_val": -2377.005615234375,
+        "ref_val": -2244.113037109375
+      },
+      {
+        "stage": "proj_out_1",
+        "shape": [
+          1,
+          2304
+        ],
+        "max_abs_diff": 0.06874966621398926,
+        "rel_max_diff": 0.03511418042040158,
+        "cosine": 0.9999504089355469,
+        "worst_index": [
+          0,
+          1272
+        ],
+        "cand_val": -0.005448132753372192,
+        "ref_val": 0.06330153346061707
+      },
+      {
+        "stage": "norm_out",
+        "shape": [
+          1,
+          256,
+          1152
+        ],
+        "max_abs_diff": 0.5396347045898438,
+        "rel_max_diff": 0.028599836805726843,
+        "cosine": 0.9992448091506958,
+        "worst_index": [
+          0,
+          95,
+          295
+        ],
+        "cand_val": -14.77524185180664,
+        "ref_val": -14.235607147216797
+      },
+      {
+        "stage": "proj_out_2",
+        "shape": [
+          1,
+          256,
+          32
+        ],
+        "max_abs_diff": 0.05807378888130188,
+        "rel_max_diff": 0.03609469698120374,
+        "cosine": 0.997026264667511,
+        "worst_index": [
+          0,
+          254,
+          14
+        ],
+        "cand_val": -0.1454058289527893,
+        "ref_val": -0.2034796178340912
+      }
+    ]
+  },
+  "fp16": {
+    "dtype": "torch.float16",
+    "input_sha256": {
+      "latents": "eb71a25219ffc75c84e0a61ccb128a8615554ccd74a1de1d5dbb0f36d2ac4033",
+      "timesteps": "cf5cb2f4d37db6ef4456abfbcdc112844e93c25fec167470d3f2e51a57c5d166",
+      "class_labels": "9c16f37399c5ead6c47e0d33ed6ec627132c3d130872217badc2ce4a1198a582"
+    },
+    "stages": [
+      {
+        "stage": "final_sample (ref_fwd vs diffusers)",
+        "shape": [
+          1,
+          8,
+          32,
+          32
+        ],
+        "max_abs_diff": 0.0594482421875,
+        "rel_max_diff": 0.03698359659781288,
+        "cosine": 0.9970182776451111,
+        "worst_index": [
+          0,
+          6,
+          30,
+          29
+        ],
+        "cand_val": -0.14501953125,
+        "ref_val": -0.2044677734375
+      },
+      {
+        "stage": "final_sample (cutile vs diffusers)",
+        "shape": [
+          1,
+          8,
+          32,
+          32
+        ],
+        "max_abs_diff": 0.05908203125,
+        "rel_max_diff": 0.03675577156743621,
+        "cosine": 0.9970155954360962,
+        "worst_index": [
+          0,
+          6,
+          30,
+          29
+        ],
+        "cand_val": -0.1453857421875,
+        "ref_val": -0.2044677734375
+      },
+      {
+        "stage": "final_sample (cutile vs ref_fwd)",
+        "shape": [
+          1,
+          8,
+          32,
+          32
+        ],
+        "max_abs_diff": 0.001953125,
+        "rel_max_diff": 0.001218769043266301,
+        "cosine": 0.9999998807907104,
+        "worst_index": [
+          0,
+          0,
+          28,
+          15
+        ],
+        "cand_val": 0.970703125,
+        "ref_val": 0.97265625
+      },
+      {
+        "stage": "pos_embed",
+        "shape": [
+          1,
+          256,
+          1152
+        ],
+        "max_abs_diff": 0.0078125,
+        "rel_max_diff": 0.0005847953216374269,
+        "cosine": 1.0,
+        "worst_index": [
+          0,
+          0,
+          239
+        ],
+        "cand_val": 8.671875,
+        "ref_val": 8.6640625
+      },
+      {
+        "stage": "b0.time_proj",
+        "shape": [
+          1,
+          256
+        ],
+        "max_abs_diff": 1.241943359375,
+        "rel_max_diff": 1.241943359375,
+        "cosine": 0.8157230615615845,
+        "worst_index": [
+          0,
+          142
+        ],
+        "cand_val": 0.365966796875,
+        "ref_val": -0.8759765625
+      },
+      {
+        "stage": "b0.emb",
+        "shape": [
+          1,
+          1152
+        ],
+        "max_abs_diff": 0.032470703125,
+        "rel_max_diff": 0.05772569444444445,
+        "cosine": 0.997573733329773,
+        "worst_index": [
+          0,
+          203
+        ],
+        "cand_val": -0.0721435546875,
+        "ref_val": -0.0396728515625
+      },
+      {
+        "stage": "b0.adaln",
+        "shape": [
+          1,
+          6912
+        ],
+        "max_abs_diff": 0.0791015625,
+        "rel_max_diff": 0.021821120689655173,
+        "cosine": 0.9999071359634399,
+        "worst_index": [
+          0,
+          5494
+        ],
+        "cand_val": -0.3955078125,
+        "ref_val": -0.474609375
+      },
+      {
+        "stage": "block_0",
+        "shape": [
+          1,
+          256,
+          1152
+        ],
+        "max_abs_diff": 2.5,
+        "rel_max_diff": 0.01063264221158958,
+        "cosine": 0.9999375343322754,
+        "worst_index": [
+          0,
+          213,
+          293
+        ],
+        "cand_val": -234.375,
+        "ref_val": -231.875
+      },
+      {
+        "stage": "block_1",
+        "shape": [
+          1,
+          256,
+          1152
+        ],
+        "max_abs_diff": 5.25,
+        "rel_max_diff": 0.01417004048582996,
+        "cosine": 0.9999592304229736,
+        "worst_index": [
+          0,
+          137,
+          293
+        ],
+        "cand_val": -359.25,
+        "ref_val": -364.5
+      },
+      {
+        "stage": "block_13",
+        "shape": [
+          1,
+          256,
+          1152
+        ],
+        "max_abs_diff": 15.5,
+        "rel_max_diff": 0.01466414380321665,
+        "cosine": 0.99984210729599,
+        "worst_index": [
+          0,
+          103,
+          293
+        ],
+        "cand_val": -969.0,
+        "ref_val": -953.5
+      },
+      {
+        "stage": "block_27",
+        "shape": [
+          1,
+          256,
+          1152
+        ],
+        "max_abs_diff": 138.0,
+        "rel_max_diff": 0.04893617021276596,
+        "cosine": 0.9992562532424927,
+        "worst_index": [
+          0,
+          207,
+          295
+        ],
+        "cand_val": -2274.0,
+        "ref_val": -2136.0
+      },
+      {
+        "stage": "proj_out_1",
+        "shape": [
+          1,
+          2304
+        ],
+        "max_abs_diff": 0.0679931640625,
+        "rel_max_diff": 0.034725685785536156,
+        "cosine": 0.9999517202377319,
+        "worst_index": [
+          0,
+          1272
+        ],
+        "cand_val": -0.004638671875,
+        "ref_val": 0.0633544921875
+      },
+      {
+        "stage": "norm_out",
+        "shape": [
+          1,
+          256,
+          1152
+        ],
+        "max_abs_diff": 0.578125,
+        "rel_max_diff": 0.030629139072847682,
+        "cosine": 0.9992566108703613,
+        "worst_index": [
+          0,
+          207,
+          295
+        ],
+        "cand_val": -14.921875,
+        "ref_val": -14.34375
+      },
+      {
+        "stage": "proj_out_2",
+        "shape": [
+          1,
+          256,
+          32
+        ],
+        "max_abs_diff": 0.0594482421875,
+        "rel_max_diff": 0.03698359659781288,
+        "cosine": 0.9970182180404663,
+        "worst_index": [
+          0,
+          254,
+          14
+        ],
+        "cand_val": -0.14501953125,
+        "ref_val": -0.2044677734375
+      }
+    ]
+  },
+  "diffusers_source": {
+    "dit_config": {
+      "activation_fn": "gelu-approximate",
+      "norm_type": "ada_norm_zero",
+      "in_channels": 4,
+      "out_channels": 8,
+      "patch_size": 2,
+      "num_embeds_ada_norm": 1000
+    },
+    "dit_forward_source": "    def forward(\n        self,\n        hidden_states: torch.Tensor,\n        timestep: torch.LongTensor | None = None,\n        class_labels: torch.LongTensor | None = None,\n        cross_attention_kwargs: dict[str, Any] = None,\n        return_dict: bool = True,\n    ) -> Transformer2DModelOutput | tuple[torch.Tensor]:\n        \"\"\"\n        The [`DiTTransformer2DModel`] forward method.\n\n        Args:\n            hidden_states (`torch.LongTensor` of shape `(batch size, num latent pixels)` if discrete, `torch.FloatTensor` of shape `(batch size, channel, height, width)` if continuous):\n                Input `hidden_states`.\n            timestep ( `torch.LongTensor`, *optional*):\n                Used to indicate denoising step. Optional timestep to be applied as an embedding in `AdaLayerNorm`.\n            class_labels ( `torch.LongTensor` of shape `(batch size, num classes)`, *optional*):\n                Used to indicate class labels conditioning. Optional class labels to be applied as an embedding in\n                `AdaLayerZeroNorm`.\n            cross_attention_kwargs ( `dict[str, Any]`, *optional*):\n                A kwargs dictionary that if specified is passed along to the `AttentionProcessor` as defined under\n                `self.processor` in\n                [diffusers.models.attention_processor](https://github.com/huggingface/diffusers/blob/main/src/diffusers/models/attention_processor.py).\n            return_dict (`bool`, *optional*, defaults to `True`):\n                Whether or not to return a [`~models.unets.unet_2d_condition.UNet2DConditionOutput`] instead of a plain\n                tuple.\n\n        Returns:\n            If `return_dict` is True, an [`~models.transformer_2d.Transformer2DModelOutput`] is returned, otherwise a\n            `tuple` where the first element is the sample tensor.\n        \"\"\"\n        # 1. Input\n        height, width = hidden_states.shape[-2] // self.patch_size, hidden_states.shape[-1] // self.patch_size\n        hidden_states = self.pos_embed(hidden_states)\n\n        # 2. Blocks\n        for block in self.transformer_blocks:\n            if torch.is_grad_enabled() and self.gradient_checkpointing:\n                hidden_states = self._gradient_checkpointing_func(\n                    block,\n                    hidden_states,\n                    None,\n                    None,\n                    None,\n                    timestep,\n                    cross_attention_kwargs,\n                    class_labels,\n                )\n            else:\n                hidden_states = block(\n                    hidden_states,\n                    attention_mask=None,\n                    encoder_hidden_states=None,\n                    encoder_attention_mask=None,\n                    timestep=timestep,\n                    cross_attention_kwargs=cross_attention_kwargs,\n                    class_labels=class_labels,\n                )\n\n        # 3. Output\n        conditioning = self.transformer_blocks[0].norm1.emb(timestep, class_labels, hidden_dtype=hidden_states.dtype)\n        shift, scale = self.proj_out_1(F.silu(conditioning)).chunk(2, dim=1)\n        hidden_states = self.norm_out(hidden_states) * (1 + scale[:, None]) + shift[:, None]\n        hidden_states = self.proj_out_2(hidden_states)\n\n        # unpatchify\n        height = width = int(hidden_states.shape[1] ** 0.5)\n        hidden_states = hidden_states.reshape(\n            shape=(-1, height, width, self.patch_size, self.patch_size, self.out_channels)\n        )\n        hidden_states = torch.einsum(\"nhwpqc->nchpwq\", hidden_states)\n        output = hidden_states.reshape(\n            shape=(-1, self.out_channels, height * self.patch_size, width * self.patch_size)\n        )\n\n        if not return_dict:\n            return (output,)\n\n        return Transformer2DModelOutput(sample=output)\n",
+    "adaln_zero_forward_source": "    def forward(\n        self,\n        x: torch.Tensor,\n        timestep: torch.Tensor | None = None,\n        class_labels: torch.LongTensor | None = None,\n        hidden_dtype: torch.dtype | None = None,\n        emb: torch.Tensor | None = None,\n    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:\n        if self.emb is not None:\n            emb = self.emb(timestep, class_labels, hidden_dtype=hidden_dtype)\n        emb = self.linear(self.silu(emb))\n        shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = emb.chunk(6, dim=1)\n        x = self.norm(x) * (1 + scale_msa[:, None]) + shift_msa[:, None]\n        return x, gate_msa, shift_mlp, scale_mlp, gate_mlp\n",
+    "combined_emb_forward_source": "    def forward(self, timestep, class_labels, hidden_dtype=None) -> torch.Tensor:\n        timesteps_proj = self.time_proj(timestep)\n        timesteps_emb = self.timestep_embedder(timesteps_proj.to(dtype=hidden_dtype))  # (N, D)\n\n        class_labels = self.class_embedder(class_labels)  # (N, D)\n\n        conditioning = timesteps_emb + class_labels  # (N, D)\n\n        return conditioning\n",
+    "timesteps_forward_source": "    def forward(self, timesteps: torch.Tensor) -> torch.Tensor:\n        t_emb = get_timestep_embedding(\n            timesteps,\n            self.num_channels,\n            flip_sin_to_cos=self.flip_sin_to_cos,\n            downscale_freq_shift=self.downscale_freq_shift,\n            scale=self.scale,\n        )\n        return t_emb\n",
+    "geglu_gelu_class": "GELU",
+    "geglu_gelu_source": "    def forward(self, hidden_states) -> torch.Tensor:\n        hidden_states = self.proj(hidden_states)\n        hidden_states = self.gelu(hidden_states)\n        return hidden_states\n"
+  }
+}
