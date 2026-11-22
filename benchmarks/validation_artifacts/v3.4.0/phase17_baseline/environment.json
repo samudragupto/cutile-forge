@@ -1,0 +1,31 @@
+{
+  "hostname": "prashant-lab",
+  "os": "Linux 7.0.0-43-generic",
+  "kernel": "#43~24.04.1-Ubuntu SMP PREEMPT_DYNAMIC Sat Oct 31 06:52:47 UTC 2",
+  "cpu_model": "Intel(R) Core(TM) Ultra 9 285K",
+  "ram_gb": 62.26,
+  "gpu_name": "NVIDIA GeForce RTX 5090",
+  "gpu_count": 1,
+  "compute_capability": "sm_120",
+  "vram_gb": 31.35,
+  "nvidia_driver": "595.58.03",
+  "cuda_runtime": "13.2",
+  "torch_version": "2.15.0+cu132",
+  "cutile_version": "1.8.1",
+  "python_version": "3.12.3",
+  "dependencies": {
+    "numpy": "2.5.5",
+    "transformers": "5.23.0",
+    "tokenizers": "0.23.3",
+    "safetensors": "0.8.0",
+    "huggingface-hub": "2.4.0",
+    "gguf": "0.19.0",
+    "fastapi": "0.165.0",
+    "uvicorn": "0.54.0",
+    "httpx": "0.28.1",
+    "nvidia-ml-py": "not-installed"
+  },
+  "nvml_available": false,
+  "gpu_temp_c": null,
+  "gpu_power_w": null
+}

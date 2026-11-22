@@ -145,6 +145,64 @@ def reduce_max_kernel(
     ct.store(y_ptr, index=(row_block, 0), tile=ct.astype(acc, y_ptr.dtype))
 
 
+@ct.kernel(occupancy=8)
+def reduce_sum_fast_kernel(
+    x_ptr,
+    y_ptr,
+    n_cols: int,
+    tile_m: ct.Constant[int],
+    tile_n: ct.Constant[int],
+) -> None:
+    """High-occupancy unmasked 2D tiled sum reduction when `n_cols % tile_n == 0`."""
+    row_block = ct.bid(0)
+    num_tiles = (n_cols + tile_n - 1) // tile_n
+    acc = ct.zeros((tile_m, 1), dtype=ct.float32)
+
+    for t in range(num_tiles):
+        tile_x = ct.astype(
+            ct.load(
+                x_ptr,
+                index=(row_block, t),
+                shape=(tile_m, tile_n),
+                padding_mode=ct.PaddingMode.ZERO,
+                latency=4,
+            ),
+            ct.float32,
+        )
+        acc = acc + ct.sum(tile_x, axis=1, keepdims=True)
+
+    ct.store(y_ptr, index=(row_block, 0), tile=ct.astype(acc, y_ptr.dtype))
+
+
+@ct.kernel(occupancy=8)
+def reduce_max_fast_kernel(
+    x_ptr,
+    y_ptr,
+    n_cols: int,
+    tile_m: ct.Constant[int],
+    tile_n: ct.Constant[int],
+) -> None:
+    """High-occupancy unmasked 2D tiled max reduction when `n_cols % tile_n == 0`."""
+    row_block = ct.bid(0)
+    num_tiles = (n_cols + tile_n - 1) // tile_n
+    acc = ct.full((tile_m, 1), -3.4e38, dtype=ct.float32)
+
+    for t in range(num_tiles):
+        tile_x = ct.astype(
+            ct.load(
+                x_ptr,
+                index=(row_block, t),
+                shape=(tile_m, tile_n),
+                padding_mode=ct.PaddingMode.NEG_INF,
+                latency=4,
+            ),
+            ct.float32,
+        )
+        acc = ct.maximum(acc, ct.max(tile_x, axis=1, keepdims=True))
+
+    ct.store(y_ptr, index=(row_block, 0), tile=ct.astype(acc, y_ptr.dtype))
+
+
 def _normalize_dim(ndim: int, dim: int) -> int:
     if ndim == 0:
         raise ValueError("Reduction requires tensor with ndim >= 1")
@@ -154,11 +212,16 @@ def _normalize_dim(ndim: int, dim: int) -> int:
     return d
 
 
-def _select_reduction_tiles(rows: int, n_cols: int) -> tuple[int, int]:
-    """Select 2D `(tile_m, tile_n)` keeping ~16–32 KB per CTA and >= 170 CTAs when possible."""
+def _select_reduction_tiles(rows: int, n_cols: int, is_max: bool = False) -> tuple[int, int]:
+    """Select 2D `(tile_m, tile_n)` tuned for RTX 5090 (170 SMs)."""
     tile_n = 1024 if n_cols >= 512 else 256
     if tile_n == 1024:
-        tile_m = 16 if rows >= 4096 else (8 if rows >= 256 else 1)
+        if is_max:
+            tile_m = 4 if rows >= 256 else 1
+        elif 1024 <= rows <= 4096:
+            tile_m = 16
+        else:
+            tile_m = 4 if rows >= 256 else 1
     else:
         tile_m = 32 if rows >= 4096 else (16 if rows >= 256 else (8 if rows >= 32 else 1))
     return tile_m, tile_n
@@ -171,44 +234,44 @@ def _launch_row_reduction(
     kernel_fn: object,
 ) -> torch.Tensor:
     d = _normalize_dim(x.ndim, dim)
-    moved = x.movedim(d, -1).contiguous()
+    moved = x if (d == x.ndim - 1 and x.is_contiguous()) else x.movedim(d, -1).contiguous()
     lead_shape = moved.shape[:-1]
     n_cols = moved.shape[-1]
     x_2d = moved.view(-1, n_cols)
     rows = x_2d.shape[0]
     y_2d = torch.empty((rows, 1), device=x.device, dtype=x.dtype)
+    is_max = kernel_fn is reduce_max_kernel
 
     if rows < 170 and n_cols >= 2048:
         split_k = 8
         tile_m = 4 if rows >= 16 else 1
         tile_n = 512
         part = torch.empty((rows, split_k), device=x.device, dtype=torch.float32)
-        split_fn = (
-            reduce_sum_splitk_kernel if kernel_fn is reduce_sum_kernel else reduce_max_splitk_kernel
-        )
+        split_fn = reduce_max_splitk_kernel if is_max else reduce_sum_splitk_kernel
         ct.launch(
             torch.cuda.current_stream(),
             (ct.cdiv(rows, tile_m), split_k, 1),
             split_fn,
             (x_2d, part, n_cols, split_k, tile_m, tile_n),
         )
-        reduced = (
-            part.sum(dim=1, keepdim=True)
-            if kernel_fn is reduce_sum_kernel
-            else part.max(dim=1, keepdim=True).values
-        )
+        reduced = part.max(dim=1, keepdim=True).values if is_max else part.sum(dim=1, keepdim=True)
         y_2d = reduced.to(x.dtype)
     else:
-        tile_m, tile_n = _select_reduction_tiles(rows, n_cols)
+        tile_m, tile_n = _select_reduction_tiles(rows, n_cols, is_max=is_max)
+        launch_kernel = kernel_fn
+        if n_cols % tile_n == 0:
+            launch_kernel = reduce_max_fast_kernel if is_max else reduce_sum_fast_kernel
         grid = (ct.cdiv(rows, tile_m), 1, 1)
         ct.launch(
             torch.cuda.current_stream(),
             grid,
-            kernel_fn,
+            launch_kernel,
             (x_2d, y_2d, n_cols, tile_m, tile_n),
         )
 
     if keepdim:
+        if d == x.ndim - 1:
+            return y_2d.view(*lead_shape, 1)
         out_shape = list(x.shape)
         out_shape[d] = 1
         out_moved_shape = (*lead_shape, 1)

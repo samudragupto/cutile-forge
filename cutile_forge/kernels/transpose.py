@@ -30,7 +30,7 @@ def transpose_2d_kernel(
         (tm, tn),
     )
     tr = ct.reshape(ct.transpose(tile), (1, tn, tm))
-    ct.store(y_ptr, index=(b_id, pid_n, pid_m), tile=ct.astype(tr, y_ptr.dtype))
+    ct.store(y_ptr, index=(b_id, pid_n, pid_m), tile=tr)
 
 
 def cutile_transpose(

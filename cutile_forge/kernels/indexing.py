@@ -10,7 +10,7 @@ from cutile_forge.kernels.bmm import cutile_bmm
 from cutile_forge.kernels.gemm_dequant import cutile_gemm_fp16
 
 
-@ct.kernel(occupancy=4)
+@ct.kernel(occupancy=8)
 def gather_rows_kernel(
     table_ptr,
     idx_ptr,

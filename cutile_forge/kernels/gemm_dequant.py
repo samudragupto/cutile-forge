@@ -297,6 +297,33 @@ def unpack_int4_weights_torch(
     return (w_int - zeros_exp) * scales_exp
 
 
+@ct.kernel(occupancy=4)
+def splitk_reduce_fp16_kernel(
+    part_ptr,
+    out_ptr,
+    split_k: ct.Constant[int],
+    tm: ct.Constant[int],
+    tn: ct.Constant[int],
+) -> None:
+    """Fused Split-K FP32->FP16 reduction eliminating extra PyTorch sum+cast launches."""
+    pid_m = ct.bid(0)
+    pid_n = ct.bid(1)
+    acc = ct.zeros((tm, tn), dtype=ct.float32)
+    for sk in range(split_k):
+        partial = ct.reshape(
+            ct.load(
+                part_ptr,
+                index=(sk, pid_m, pid_n),
+                shape=(1, tm, tn),
+                padding_mode=ct.PaddingMode.ZERO,
+                latency=3,
+            ),
+            (tm, tn),
+        )
+        acc = acc + partial
+    ct.store(out_ptr, index=(pid_m, pid_n), tile=ct.astype(acc, ct.float16))
+
+
 @ct.kernel(occupancy=2)
 def gemm_fp16_splitk_kernel(
     a_ptr,
@@ -307,7 +334,7 @@ def gemm_fp16_splitk_kernel(
     tn: ct.Constant[int],
     tk: ct.Constant[int],
 ) -> None:
-    """Split-K FP16 GEMM saturating SMs on skinny decode shapes (M <= 16)."""
+    """Split-K FP16 GEMM saturating SMs on skinny/medium shapes."""
     pid_m = ct.bid(0)
     pid_n = ct.bid(1)
     sk_id = ct.bid(2)
@@ -336,24 +363,45 @@ def select_gemm_kernel_path(
     """Select specialized GEMM execution path across skinny, medium, and compute-bound regimes."""
     _ = arch
     if m <= 16 and k >= 512:
-        split_k = 8 if k >= 2048 else 4
+        split_k = 4 if k >= 1024 else 2
         return {
             "regime": "skinny_splitk",
-            "tile_shape": (16, 64, 64),
+            "tile_shape": (16, 128, 64) if n >= 2048 else (16, 64, 64),
             "split_k": split_k,
+            "red_tile": (16, 128) if n >= 2048 else (16, 64),
             "latency": 3,
         }
     if m <= 256:
+        # Saturate 170 SMs on low-M medium matrices via Split-K or 64x64 tiles
+        if m <= 64 and k >= 1024 and (ct.cdiv(m, 64) * ct.cdiv(n, 64)) < 128:
+            return {
+                "regime": "medium_l2",
+                "tile_shape": (64, 64, 64),
+                "split_k": 4,
+                "red_tile": (64, 64),
+                "latency": 3,
+            }
+        use_64x64 = n <= 4096 and (ct.cdiv(m, 64) * ct.cdiv(n, 128)) < 170
         return {
             "regime": "medium_l2",
-            "tile_shape": (64, 128, 64),
+            "tile_shape": (64, 64, 64) if use_64x64 else (64, 128, 64),
             "split_k": 1,
+            "red_tile": (64, 64),
+            "latency": 3,
+        }
+    if m <= 512 and (ct.cdiv(m, 64) * ct.cdiv(n, 64)) >= 256:
+        return {
+            "regime": "large_compute",
+            "tile_shape": (64, 64, 64),
+            "split_k": 1,
+            "red_tile": (64, 64),
             "latency": 3,
         }
     return {
         "regime": "large_compute",
         "tile_shape": (128, 128, 64),
         "split_k": 1,
+        "red_tile": (64, 64),
         "latency": 4,
     }
 
@@ -379,7 +427,9 @@ def cutile_gemm_fp16(
         tm, tn, tk = spec["tile_shape"]
         split_k = int(spec["split_k"])
         if split_k > 1:
+            rtm, rtn = spec["red_tile"]
             part = torch.empty((split_k, m, n), device=a.device, dtype=torch.float32)
+            out = torch.empty((m, n), device=a.device, dtype=torch.float16)
             grid_sk = (ct.cdiv(m, tm), ct.cdiv(n, tn), split_k)
             ct.launch(
                 torch.cuda.current_stream(),
@@ -387,7 +437,14 @@ def cutile_gemm_fp16(
                 gemm_fp16_splitk_kernel,
                 (a_c, b_c, part, split_k, tm, tn, tk),
             )
-            return part.sum(dim=0).to(torch.float16)
+            grid_red = (ct.cdiv(m, rtm), ct.cdiv(n, rtn), 1)
+            ct.launch(
+                torch.cuda.current_stream(),
+                grid_red,
+                splitk_reduce_fp16_kernel,
+                (part, out, split_k, rtm, rtn),
+            )
+            return out
     else:
         tm, tn, tk = tile_shape
 

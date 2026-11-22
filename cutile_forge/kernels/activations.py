@@ -25,7 +25,7 @@ def silu_forward_kernel(
             index=(pid,),
             shape=(tile_n,),
             padding_mode=ct.PaddingMode.ZERO,
-            latency=3,
+            latency=4,
         ),
         ct.float32,
     )
@@ -68,7 +68,7 @@ def silu_backward_kernel(
     ct.store(dx_ptr, index=(pid,), tile=ct.astype(dx, dx_ptr.dtype))
 
 
-@ct.kernel(occupancy=4)
+@ct.kernel(occupancy=8)
 def gelu_forward_kernel(
     x_ptr,
     y_ptr,
@@ -83,7 +83,7 @@ def gelu_forward_kernel(
             index=(pid,),
             shape=(tile_n,),
             padding_mode=ct.PaddingMode.ZERO,
-            latency=3,
+            latency=4,
         ),
         ct.float32,
     )
@@ -208,10 +208,8 @@ def _next_pow2(n: int) -> int:
 
 
 def _pick_tile_1d(numel: int) -> int:
-    if numel >= 65536:
-        return 8192
     if numel >= 16384:
-        return 4096
+        return 2048
     return 1024
 
 

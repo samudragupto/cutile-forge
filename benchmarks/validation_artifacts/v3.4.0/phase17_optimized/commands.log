@@ -1,0 +1,1 @@
+benchmarks/production/bench_phase17_kernels.py --e2e-mistral --output benchmarks/validation_artifacts/v3.4.0/phase17_optimized --compare-baseline benchmarks/validation_artifacts/v3.4.0/phase17_baseline

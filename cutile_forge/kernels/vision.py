@@ -82,7 +82,7 @@ def depthwise_conv2d_kernel(
     )
 
 
-@ct.kernel(occupancy=4)
+@ct.kernel(occupancy=8)
 def max_pool2d_2x2_s2_kernel(x_ptr, y_ptr, th: ct.Constant[int], tw: ct.Constant[int]) -> None:
     """Coalesced zero-loop 2x2 stride-2 MaxPool2D in CuTile."""
     pw = ct.bid(0)
@@ -93,14 +93,14 @@ def max_pool2d_2x2_s2_kernel(x_ptr, y_ptr, th: ct.Constant[int], tw: ct.Constant
         index=(b, ph, pw),
         shape=(1, 2 * th, 2 * tw),
         padding_mode=ct.PaddingMode.NEG_INF,
-        latency=3,
+        latency=4,
     )
     t4 = ct.reshape(t, (th, 2, tw, 2))
     out = ct.max(ct.max(t4, axis=3), axis=1)
     ct.store(y_ptr, index=(b, ph, pw), tile=ct.reshape(out, (1, th, tw)))
 
 
-@ct.kernel(occupancy=4)
+@ct.kernel(occupancy=8)
 def avg_pool2d_2x2_s2_kernel(x_ptr, y_ptr, th: ct.Constant[int], tw: ct.Constant[int]) -> None:
     """Coalesced zero-loop 2x2 stride-2 AvgPool2D in CuTile."""
     pw = ct.bid(0)
@@ -112,7 +112,7 @@ def avg_pool2d_2x2_s2_kernel(x_ptr, y_ptr, th: ct.Constant[int], tw: ct.Constant
             index=(b, ph, pw),
             shape=(1, 2 * th, 2 * tw),
             padding_mode=ct.PaddingMode.ZERO,
-            latency=3,
+            latency=4,
         ),
         ct.float32,
     )
@@ -386,11 +386,15 @@ def cutile_max_pool2d(
     h_out = (h_in - k_h) // s_h + 1
     w_out = (w_in - k_w) // s_w + 1
     nc = n_batch * c_in
-    th, tw = 8, 32
+    is_2x2_s2 = (
+        k_h == 2 and k_w == 2 and s_h == 2 and s_w == 2 and (h_in % 2 == 0) and (w_in % 2 == 0)
+    )
+    th = 16 if (is_2x2_s2 and h_out >= 16) else 8
+    tw = 32
     y_3d = torch.empty((nc, h_out, w_out), device=x.device, dtype=x.dtype)
     grid = (ct.cdiv(w_out, tw), ct.cdiv(h_out, th), nc)
 
-    if k_h == 2 and k_w == 2 and s_h == 2 and s_w == 2 and (h_in % 2 == 0) and (w_in % 2 == 0):
+    if is_2x2_s2:
         ct.launch(
             torch.cuda.current_stream(),
             grid,
@@ -431,11 +435,15 @@ def cutile_avg_pool2d(
     h_out = (h_in - k_h) // s_h + 1
     w_out = (w_in - k_w) // s_w + 1
     nc = n_batch * c_in
-    th, tw = 8, 32
+    is_2x2_s2 = (
+        k_h == 2 and k_w == 2 and s_h == 2 and s_w == 2 and (h_in % 2 == 0) and (w_in % 2 == 0)
+    )
+    th = 16 if (is_2x2_s2 and h_out >= 16) else 8
+    tw = 32
     y_3d = torch.empty((nc, h_out, w_out), device=x.device, dtype=x.dtype)
     grid = (ct.cdiv(w_out, tw), ct.cdiv(h_out, th), nc)
 
-    if k_h == 2 and k_w == 2 and s_h == 2 and s_w == 2 and (h_in % 2 == 0) and (w_in % 2 == 0):
+    if is_2x2_s2:
         ct.launch(
             torch.cuda.current_stream(),
             grid,

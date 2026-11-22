@@ -1,5 +1,16 @@
 # Changelog
 
+## [3.4.0] (2026-11-22) — Phase 17: Operator Kernel Optimization
+
+**Authors:** Arrhat Nag (`@samudragupto`) and Rupesh Nasre
+
+CuTileForge `v3.4.0` audits all micro-operators slower than the PyTorch baseline on RTX 5090 (`sm_120`), optimizes GEMM Split-K, reductions, pooling, and elementwise activations one operator family at a time with unchanged numerical accuracy, and preserves end-to-end `Mistral-7B-v0.1-GPTQ` performance and exact greedy parity (`benchmarks/validation_artifacts/v3.4.0/`):
+
+- **FP16 GEMM Split-K & Fused Epilogue (`cutile_forge/kernels/gemm_dequant.py`)**: Added `splitk_reduce_fp16_kernel` (`occupancy=4`) eliminating the two extra PyTorch `sum(dim=0).to(fp16)` launches and updated `select_gemm_kernel_path` to saturate all 170 SMs on medium/low-M shapes (`64x4096x4096` improved from `0.0672 ms` (`0.28x`) to **`0.0213 ms` (`0.90x`, +68.3%)**; `4x4096x4096` `+9.2%`; `256x4096x14336` `+8.1%`; `512x4096x4096` `+4.6%`).
+- **Unmasked Fast Reductions & Last-Dim Zero-Copy Dispatch (`cutile_forge/kernels/reductions.py`)**: Added high-occupancy unmasked `reduce_sum_fast_kernel` and `reduce_max_fast_kernel` (`occupancy=8, latency=4`) when `n_cols % tile_n == 0` and bypassed redundant `.movedim().contiguous()` when reducing contiguous last dimensions (`reduce_max_4096x4096` improved from `0.0201 ms` (`0.75x`) to **`0.0152 ms` (`1.00x`, +24.6%)**; `reduce_sum_16384x1024` `+6.3%`).
+- **Pooling & Elementwise Activations (`cutile_forge/kernels/vision.py`, `cutile_forge/kernels/activations.py`)**: Updated `max_pool2d_2x2_s2_kernel` and `avg_pool2d_2x2_s2_kernel` to `occupancy=8` with `(16, 32)` tiling (`avg_pool2d` `0.0145 ms -> 0.0134 ms`, `+7.5%`), tuned `silu_forward_kernel`/`gelu_forward_kernel` (`gelu` `+11.0%`, `silu` `+10.9%`), and dropped redundant output `ct.astype` in `transpose_2d_kernel`. Reverted neutral/regressing changes (including `tk=64` prefill for `fused_gemm_dequant` which slowed `Mistral-7B` 512-tok prefill from `75.36 ms` to `77.60 ms`, `gather`/`transpose` `occ=8`, and `conv2d_implicit_gemm` `occ=4`).
+- **End-to-End Real-Checkpoint Verification (`benchmarks/production/bench_phase17_kernels.py`, `tests/test_phase17_kernel_opt.py`)**: Verified `Mistral-7B-v0.1-GPTQ` (`real-checkpoint`) prefill (`75.36 ms -> 72.94 ms` at 512 tok), decode (`170.65 tok/s` at 256 tok), and exact 256-token greedy parity (`sha256 b0ae5156785000aa`), while documenting remaining operators slower than PyTorch (`depthwise_conv2d`, `conv2d_3x3`, `silu`/`gelu`, `reduce_sum`, `max_pool2d`, `gather`) with root causes.
+
 ## [3.3.0] (2026-11-22) — Phase 16: Serving Architecture & Continuous Batching
 
 **Authors:** Arrhat Nag (`@samudragupto`) and Rupesh Nasre
