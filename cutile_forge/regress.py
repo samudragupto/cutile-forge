@@ -20,6 +20,9 @@ import torch.nn.functional as F
 RegressionStatus = Literal["PASS", "FAIL", "NOT NATIVE", "SYNTHETIC-ONLY", "NOT RUN"]
 RegressionTier = Literal["fast", "full"]
 GateComparator = Literal[">=", "<=", ">", "<", "=="]
+GreedyMismatchClass = Literal[
+    "EXACT_LOGIT_TIE", "NUMERIC_NEAR_TIE", "SUBSTANTIVE_DIVERGENCE", "UNCLASSIFIED"
+]
 
 REGRESSION_PROMPTS: tuple[str, ...] = (
     "Explain how GPU Tensor Cores accelerate matrix multiplication.",
@@ -117,6 +120,168 @@ def summarize_failed_gates(gates: list[GateResult]) -> str | None:
 
 
 @dataclass
+class GreedyMismatchDiagnostic:
+    """Diagnostic breakdown for a single greedy sequence mismatch (never alters PASS/FAIL)."""
+
+    prompt_idx: int
+    first_divergence_step: int
+    ref_top1_token_id: int
+    ref_top2_token_id: int
+    cu_top1_token_id: int
+    cu_top2_token_id: int
+    ref_top1_logit: float | None
+    ref_top2_logit: float | None
+    ref_margin: float | None
+    cu_top1_logit: float | None
+    cu_top2_logit: float | None
+    cu_margin: float | None
+    dtype: str
+    ulp_at_logit: float | None
+    ref_margin_ulps: float | None
+    cu_margin_ulps: float | None
+    delta_on_ref_top1: float | None
+    delta_on_cu_top1: float | None
+    inter_runtime_delta_ulps: float | None
+    classification: GreedyMismatchClass
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "prompt_idx": self.prompt_idx,
+            "first_divergence_step": self.first_divergence_step,
+            "ref_top1_token_id": self.ref_top1_token_id,
+            "ref_top2_token_id": self.ref_top2_token_id,
+            "cu_top1_token_id": self.cu_top1_token_id,
+            "cu_top2_token_id": self.cu_top2_token_id,
+            "ref_top1_logit": self.ref_top1_logit,
+            "ref_top2_logit": self.ref_top2_logit,
+            "ref_margin": self.ref_margin,
+            "cu_top1_logit": self.cu_top1_logit,
+            "cu_top2_logit": self.cu_top2_logit,
+            "cu_margin": self.cu_margin,
+            "dtype": self.dtype,
+            "ulp_at_logit": self.ulp_at_logit,
+            "ref_margin_ulps": self.ref_margin_ulps,
+            "cu_margin_ulps": self.cu_margin_ulps,
+            "delta_on_ref_top1": self.delta_on_ref_top1,
+            "delta_on_cu_top1": self.delta_on_cu_top1,
+            "inter_runtime_delta_ulps": self.inter_runtime_delta_ulps,
+            "classification": self.classification,
+        }
+
+
+def classify_greedy_mismatch(
+    prompt_idx: int,
+    first_divergence_step: int,
+    cu_logits: torch.Tensor | None,
+    ref_logits: torch.Tensor | None,
+    dtype: torch.dtype = torch.float16,
+) -> GreedyMismatchDiagnostic:
+    """Classify the first greedy mismatch step using dtype ULP margins (diagnostic only)."""
+    dtype_str = str(dtype).replace("torch.", "")
+    if cu_logits is None or ref_logits is None:
+        return GreedyMismatchDiagnostic(
+            prompt_idx=prompt_idx,
+            first_divergence_step=first_divergence_step,
+            ref_top1_token_id=-1,
+            ref_top2_token_id=-1,
+            cu_top1_token_id=-1,
+            cu_top2_token_id=-1,
+            ref_top1_logit=None,
+            ref_top2_logit=None,
+            ref_margin=None,
+            cu_top1_logit=None,
+            cu_top2_logit=None,
+            cu_margin=None,
+            dtype=dtype_str,
+            ulp_at_logit=None,
+            ref_margin_ulps=None,
+            cu_margin_ulps=None,
+            delta_on_ref_top1=None,
+            delta_on_cu_top1=None,
+            inter_runtime_delta_ulps=None,
+            classification="UNCLASSIFIED",
+        )
+
+    cu_f = cu_logits.detach().reshape(-1).float()
+    ref_f = ref_logits.detach().reshape(-1).float()
+    if (
+        cu_f.numel() < 2
+        or ref_f.numel() < 2
+        or not (torch.isfinite(cu_f).all() and torch.isfinite(ref_f).all())
+    ):
+        return GreedyMismatchDiagnostic(
+            prompt_idx=prompt_idx,
+            first_divergence_step=first_divergence_step,
+            ref_top1_token_id=-1,
+            ref_top2_token_id=-1,
+            cu_top1_token_id=-1,
+            cu_top2_token_id=-1,
+            ref_top1_logit=None,
+            ref_top2_logit=None,
+            ref_margin=None,
+            cu_top1_logit=None,
+            cu_top2_logit=None,
+            cu_margin=None,
+            dtype=dtype_str,
+            ulp_at_logit=None,
+            ref_margin_ulps=None,
+            cu_margin_ulps=None,
+            delta_on_ref_top1=None,
+            delta_on_cu_top1=None,
+            inter_runtime_delta_ulps=None,
+            classification="UNCLASSIFIED",
+        )
+
+    ref_vals, ref_idx = torch.topk(ref_f, k=2)
+    cu_vals, cu_idx = torch.topk(cu_f, k=2)
+    r1_id, r2_id = int(ref_idx[0].item()), int(ref_idx[1].item())
+    c1_id, c2_id = int(cu_idx[0].item()), int(cu_idx[1].item())
+    r1_val, r2_val = float(ref_vals[0].item()), float(ref_vals[1].item())
+    c1_val, c2_val = float(cu_vals[0].item()), float(cu_vals[1].item())
+    ref_margin = r1_val - r2_val
+    cu_margin = c1_val - c2_val
+
+    finfo = torch.finfo(dtype)
+    scale_logit = max(abs(r1_val), abs(c1_val), float(finfo.tiny))
+    ulp = float(finfo.eps) * (2.0 ** math.floor(math.log2(scale_logit)))
+    ref_margin_ulps = ref_margin / ulp
+    cu_margin_ulps = cu_margin / ulp
+    delta_ref_top1 = float(cu_f[r1_id].item() - r1_val)
+    delta_cu_top1 = float(c1_val - ref_f[c1_id].item())
+    inter_delta_ulps = max(abs(delta_ref_top1), abs(delta_cu_top1)) / ulp
+
+    if ref_margin == 0.0 or cu_margin == 0.0:
+        classification: GreedyMismatchClass = "EXACT_LOGIT_TIE"
+    elif min(ref_margin_ulps, cu_margin_ulps) <= 2.0:
+        classification = "NUMERIC_NEAR_TIE"
+    else:
+        classification = "SUBSTANTIVE_DIVERGENCE"
+
+    return GreedyMismatchDiagnostic(
+        prompt_idx=prompt_idx,
+        first_divergence_step=first_divergence_step,
+        ref_top1_token_id=r1_id,
+        ref_top2_token_id=r2_id,
+        cu_top1_token_id=c1_id,
+        cu_top2_token_id=c2_id,
+        ref_top1_logit=r1_val,
+        ref_top2_logit=r2_val,
+        ref_margin=ref_margin,
+        cu_top1_logit=c1_val,
+        cu_top2_logit=c2_val,
+        cu_margin=cu_margin,
+        dtype=dtype_str,
+        ulp_at_logit=ulp,
+        ref_margin_ulps=ref_margin_ulps,
+        cu_margin_ulps=cu_margin_ulps,
+        delta_on_ref_top1=delta_ref_top1,
+        delta_on_cu_top1=delta_cu_top1,
+        inter_runtime_delta_ulps=inter_delta_ulps,
+        classification=classification,
+    )
+
+
+@dataclass
 class RegressionResult:
     category: str
     model: str
@@ -129,10 +294,11 @@ class RegressionResult:
     failing_check: str | None = None
     metrics: dict[str, Any] = field(default_factory=dict)
     gates: list[GateResult] = field(default_factory=list)
+    diagnostics: dict[str, Any] = field(default_factory=dict)
     notes: str = ""
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
             "category": self.category,
             "model": self.model,
             "checkpoint": self.checkpoint,
@@ -146,6 +312,9 @@ class RegressionResult:
             "gates": [g.to_dict() for g in self.gates],
             "notes": self.notes,
         }
+        if self.diagnostics:
+            payload["diagnostics"] = self.diagnostics
+        return payload
 
 
 @dataclass
@@ -588,15 +757,19 @@ def _eval_qwen25(num_prompts: int, greedy_tokens: int) -> RegressionResult:
     exact_prompts = 0
     tok_matches = 0
     tok_total = 0
-    for p_text in REGRESSION_PROMPTS[:num_prompts]:
+    mismatch_diags: list[dict[str, Any]] = []
+    for p_idx, p_text in enumerate(REGRESSION_PROMPTS[:num_prompts]):
         p_ids = tok.encode(p_text, add_special_tokens=False)
         cur = list(p_ids)
+        step_logits_cpu: list[torch.Tensor] = []
         with torch.no_grad():
             for _ in range(greedy_tokens):
                 out_l = ex.forward(
                     weights, input_ids=torch.tensor([cur], device="cuda", dtype=torch.long)
                 )
-                cur.append(int(out_l[0, -1].argmax().item()))
+                step_l = out_l[0, -1]
+                step_logits_cpu.append(step_l.detach().cpu())
+                cur.append(int(step_l.argmax().item()))
             ref_full = hf_m(torch.tensor([cur], device="cuda", dtype=torch.long)).logits[0]
             ref_preds = ref_full[len(p_ids) - 1 : -1].argmax(dim=-1).tolist()
         gen = cur[len(p_ids) :]
@@ -605,6 +778,20 @@ def _eval_qwen25(num_prompts: int, greedy_tokens: int) -> RegressionResult:
         tok_total += len(gen)
         if gen == ref_preds:
             exact_prompts += 1
+        else:
+            div_step = next(
+                i for i, (a, b) in enumerate(zip(gen, ref_preds, strict=True)) if a != b
+            )
+            mismatch_diags.append(
+                classify_greedy_mismatch(
+                    prompt_idx=p_idx,
+                    first_divergence_step=div_step,
+                    cu_logits=step_logits_cpu[div_step],
+                    ref_logits=ref_full[len(p_ids) - 1 + div_step],
+                    dtype=torch.float16,
+                ).to_dict()
+            )
+        del step_logits_cpu
 
     del hf_m, weights, ex
     _cleanup_gpu()
@@ -626,6 +813,7 @@ def _eval_qwen25(num_prompts: int, greedy_tokens: int) -> RegressionResult:
         native_execution=True,
         failing_check=failing,
         gates=gates,
+        diagnostics={"greedy_mismatches": mismatch_diags},
         metrics={
             "logit_cos_sim": round(cos, 6),
             "max_abs_diff": round(max_diff, 4),
@@ -777,7 +965,9 @@ def _eval_mistral_native(num_prompts: int, greedy_tokens: int) -> RegressionResu
     tok_matches = 0
     tok_total = 0
     dec_rates: list[float] = []
-    for p_text in REGRESSION_PROMPTS[:num_prompts]:
+    mismatch_diags: list[dict[str, Any]] = []
+    lm_head_t = model.weights.lm_head.t().contiguous()
+    for p_idx, p_text in enumerate(REGRESSION_PROMPTS[:num_prompts]):
         p_ids = [1] + tok.encode(p_text, add_special_tokens=False)
         gen, stats = rt.generate(p_ids, max_new_tokens=greedy_tokens, sync_interval=32)
         dec_rates.append(float(stats["decode_tok_s"]))
@@ -790,6 +980,41 @@ def _eval_mistral_native(num_prompts: int, greedy_tokens: int) -> RegressionResu
         tok_total += len(gen)
         if gen == ref_preds:
             exact_prompts += 1
+        else:
+            div_step = next(
+                i for i, (a, b) in enumerate(zip(gen, ref_preds, strict=True)) if a != b
+            )
+            with torch.no_grad():
+                rt.reset()
+                if div_step == 0:
+                    p_t = torch.tensor([p_ids], device="cuda", dtype=torch.long)
+                    h_d = cutile_embedding_lookup(p_t.view(-1), model.weights.embed_tokens).view(
+                        len(p_ids), model.config.hidden_size
+                    )
+                    for idx in range(model.config.num_hidden_layers):
+                        h_d = rt._forward_layer_native(
+                            idx, h_d, pos_offset=0, seq_len=len(p_ids), batch_size=1
+                        )
+                    h_step = h_d[-1:].contiguous()
+                else:
+                    rt.prefill(torch.tensor([p_ids], device="cuda", dtype=torch.long))
+                    for s in range(div_step):
+                        rt.decode_step(
+                            torch.tensor([[gen[s]]], device="cuda", dtype=torch.long),
+                            pos=len(p_ids) + s,
+                        )
+                    h_step = rt._get_or_create_workspace(1).hidden
+                hn_step = cutile_rmsnorm(h_step, model.weights.norm, eps=model.config.rms_norm_eps)
+                cu_div_logits = cutile_gemm_fp16(hn_step, lm_head_t)[0]
+            mismatch_diags.append(
+                classify_greedy_mismatch(
+                    prompt_idx=p_idx,
+                    first_divergence_step=div_step,
+                    cu_logits=cu_div_logits,
+                    ref_logits=ref_full[len(p_ids) - 1 + div_step],
+                    dtype=torch.float16,
+                ).to_dict()
+            )
 
     del rt, model, weights
     _cleanup_gpu()
@@ -810,6 +1035,7 @@ def _eval_mistral_native(num_prompts: int, greedy_tokens: int) -> RegressionResu
         native_execution=True,
         failing_check=failing,
         gates=gates,
+        diagnostics={"greedy_mismatches": mismatch_diags},
         metrics={
             "logit_cos_sim": round(cos, 6),
             "max_abs_diff": round(max_diff, 4),
@@ -880,14 +1106,17 @@ def _eval_gptq_streaming_model(
     tok_matches = 0
     tok_total = 0
     dec_rates: list[float] = []
-    for p_text in REGRESSION_PROMPTS[:num_prompts]:
+    mismatch_diags: list[dict[str, Any]] = []
+    for p_idx, p_text in enumerate(REGRESSION_PROMPTS[:num_prompts]):
         p_ids = [1] + tok.encode(p_text, add_special_tokens=False)
         kv.reset()
+        step_logits_cpu: list[torch.Tensor] = []
         with torch.no_grad():
             p_t = torch.tensor([p_ids], device="cuda", dtype=torch.long)
             out0 = model.forward(
                 p_t, kv_cache=kv, pos_offset=0, backend="cutile", last_token_only=True
             )
+            step_logits_cpu.append(out0[0, -1].detach().cpu())
             cur = int(out0[0, -1].argmax().item())
             gen = [cur]
             pos = len(p_ids)
@@ -898,6 +1127,7 @@ def _eval_gptq_streaming_model(
                 step_logits = model.forward(
                     step_t, kv_cache=kv, pos_offset=pos, backend="cutile", last_token_only=True
                 )
+                step_logits_cpu.append(step_logits[0, -1].detach().cpu())
                 cur = int(step_logits[0, -1].argmax().item())
                 gen.append(cur)
                 pos += 1
@@ -913,6 +1143,20 @@ def _eval_gptq_streaming_model(
         tok_total += len(gen)
         if gen == ref_preds:
             exact_prompts += 1
+        else:
+            div_step = next(
+                i for i, (a, b) in enumerate(zip(gen, ref_preds, strict=True)) if a != b
+            )
+            mismatch_diags.append(
+                classify_greedy_mismatch(
+                    prompt_idx=p_idx,
+                    first_divergence_step=div_step,
+                    cu_logits=step_logits_cpu[div_step],
+                    ref_logits=ref_full[len(p_ids) - 1 + div_step],
+                    dtype=torch.float16,
+                ).to_dict()
+            )
+        del step_logits_cpu
 
     del kv, model, weights
     _cleanup_gpu()
@@ -934,6 +1178,7 @@ def _eval_gptq_streaming_model(
         native_execution=True,
         failing_check=failing,
         gates=gates,
+        diagnostics={"greedy_mismatches": mismatch_diags},
         metrics={
             "logit_cos_sim": round(cos, 6),
             "max_abs_diff": round(max_diff, 4),
