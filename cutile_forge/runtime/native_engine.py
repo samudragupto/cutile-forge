@@ -209,7 +209,11 @@ class NativeModelRuntime:
         if self._all_layers_on_gpu:
             self._packed_layers = [self._pack_layer(lw) for lw in self.model.weights.layers]
 
+        self.max_batch_size = max(1, max_batch_size)
+        self._slot_cpu_kv: dict[int, list[tuple[torch.Tensor, torch.Tensor] | None]] = {}
         self._workspaces: dict[int, _DecodeGraphWorkspace] = {}
+        self._last_slot_bucket: int = -1
+        self._last_active_slots: tuple[int, ...] = ()
 
     def _pack_layer(self, lw: MistralLayerWeights) -> _PackedNativeLayer:
         qp = _prep_perm_i32(lw.q_proj.perm, self.device)
@@ -268,6 +272,16 @@ class NativeModelRuntime:
     def reset(self) -> None:
         self.kv_cache.reset()
         self._cpu_kv = [None] * self.config.num_hidden_layers
+        self._slot_cpu_kv.clear()
+        self._last_slot_bucket = -1
+        self._last_active_slots = ()
+
+    def clear_slot(self, slot_idx: int) -> None:
+        """Clear host KV state for a finished/cancelled request slot."""
+        self._slot_cpu_kv.pop(slot_idx, None)
+        if slot_idx in self._last_active_slots:
+            self._last_slot_bucket = -1
+            self._last_active_slots = ()
 
     def _layer_on_device(self, idx: int) -> MistralLayerWeights:
         lw = self.model.weights.layers[idx]
@@ -571,6 +585,8 @@ class NativeModelRuntime:
         pos_offset: int,
         seq_len: int,
         batch_size: int = 1,
+        slot_indices: list[int] | None = None,
+        slot_tensor: torch.Tensor | None = None,
     ) -> torch.Tensor:
         cfg = self.config
         lw = self._layer_on_device(idx)
@@ -579,17 +595,6 @@ class NativeModelRuntime:
             from cutile_forge.engine.model import _pytorch_rmsnorm, _quant_linear_pytorch
 
             assert self._cpu_layers is not None
-            prev_kv = self._cpu_kv[idx]
-            k_prev = (
-                prev_kv[0][:, :, :pos_offset, :]
-                if (prev_kv is not None and pos_offset > 0)
-                else None
-            )
-            v_prev = (
-                prev_kv[1][:, :, :pos_offset, :]
-                if (prev_kv is not None and pos_offset > 0)
-                else None
-            )
             xn = _pytorch_rmsnorm(x_2d, lw.input_layernorm, eps=cfg.rms_norm_eps)
             q = (
                 _quant_linear_pytorch(xn, lw.q_proj)
@@ -631,24 +636,71 @@ class NativeModelRuntime:
                 ),
                 dim=-1,
             ).to(torch.float16)
-            kf = k if k_prev is None else torch.cat([k_prev, k], dim=2)
-            vf = v if v_prev is None else torch.cat([v_prev, v], dim=2)
-            self._cpu_kv[idx] = (kf, vf)
-            kr = kf.repeat_interleave(cfg.gqa_ratio, dim=1)
-            vr = vf.repeat_interleave(cfg.gqa_ratio, dim=1)
-            s_kv = int(kf.shape[2])
             sw = int(cfg.sliding_window or 0)
-            if sw > 0 or (seq_len > 1 and s_kv > seq_len):
-                q_p = torch.arange(seq_len, device=q.device).view(seq_len, 1) + (s_kv - seq_len)
-                k_p = torch.arange(s_kv, device=q.device).view(1, s_kv)
-                c_mask = k_p <= q_p
-                if sw > 0:
-                    c_mask = c_mask & (k_p > q_p - sw)
-                att = torch.nn.functional.scaled_dot_product_attention(q, kr, vr, attn_mask=c_mask)
+            if slot_indices is not None:
+                att_chunks: list[torch.Tensor] = []
+                for bi, sid in enumerate(slot_indices):
+                    s_list = self._slot_cpu_kv.setdefault(sid, [None] * cfg.num_hidden_layers)
+                    prev_s = s_list[idx]
+                    k_b = k[bi : bi + 1]
+                    v_b = v[bi : bi + 1]
+                    if prev_s is not None and pos_offset > 0:
+                        kf = torch.cat([prev_s[0][:, :, :pos_offset, :], k_b], dim=2)
+                        vf = torch.cat([prev_s[1][:, :, :pos_offset, :], v_b], dim=2)
+                    else:
+                        kf, vf = k_b, v_b
+                    s_list[idx] = (kf, vf)
+                    kr = kf.repeat_interleave(cfg.gqa_ratio, dim=1)
+                    vr = vf.repeat_interleave(cfg.gqa_ratio, dim=1)
+                    s_kv = int(kf.shape[2])
+                    if sw > 0 or (seq_len > 1 and s_kv > seq_len):
+                        q_p = torch.arange(seq_len, device=q.device).view(seq_len, 1) + (
+                            s_kv - seq_len
+                        )
+                        k_p = torch.arange(s_kv, device=q.device).view(1, s_kv)
+                        c_mask = k_p <= q_p
+                        if sw > 0:
+                            c_mask = c_mask & (k_p > q_p - sw)
+                        att_b = torch.nn.functional.scaled_dot_product_attention(
+                            q[bi : bi + 1], kr, vr, attn_mask=c_mask
+                        )
+                    else:
+                        att_b = torch.nn.functional.scaled_dot_product_attention(
+                            q[bi : bi + 1], kr, vr, is_causal=(seq_len > 1)
+                        )
+                    att_chunks.append(att_b)
+                att = torch.cat(att_chunks, dim=0)
             else:
-                att = torch.nn.functional.scaled_dot_product_attention(
-                    q, kr, vr, is_causal=(seq_len > 1)
+                prev_kv = self._cpu_kv[idx]
+                k_prev = (
+                    prev_kv[0][:, :, :pos_offset, :]
+                    if (prev_kv is not None and pos_offset > 0)
+                    else None
                 )
+                v_prev = (
+                    prev_kv[1][:, :, :pos_offset, :]
+                    if (prev_kv is not None and pos_offset > 0)
+                    else None
+                )
+                kf = k if k_prev is None else torch.cat([k_prev, k], dim=2)
+                vf = v if v_prev is None else torch.cat([v_prev, v], dim=2)
+                self._cpu_kv[idx] = (kf, vf)
+                kr = kf.repeat_interleave(cfg.gqa_ratio, dim=1)
+                vr = vf.repeat_interleave(cfg.gqa_ratio, dim=1)
+                s_kv = int(kf.shape[2])
+                if sw > 0 or (seq_len > 1 and s_kv > seq_len):
+                    q_p = torch.arange(seq_len, device=q.device).view(seq_len, 1) + (s_kv - seq_len)
+                    k_p = torch.arange(s_kv, device=q.device).view(1, s_kv)
+                    c_mask = k_p <= q_p
+                    if sw > 0:
+                        c_mask = c_mask & (k_p > q_p - sw)
+                    att = torch.nn.functional.scaled_dot_product_attention(
+                        q, kr, vr, attn_mask=c_mask
+                    )
+                else:
+                    att = torch.nn.functional.scaled_dot_product_attention(
+                        q, kr, vr, is_causal=(seq_len > 1)
+                    )
             att_2d = att.transpose(1, 2).contiguous().view(batch_size * seq_len, cfg.hidden_size)
             op = _quant_linear_pytorch(att_2d, lw.o_proj)
             rm = (x_2d.float() + op.float()).to(torch.float16)
@@ -693,7 +745,30 @@ class NativeModelRuntime:
         q = apply_rope(q, self._cos, self._sin, position_offset=pos_offset)
         k = apply_rope(k, self._cos, self._sin, position_offset=pos_offset)
 
-        k_full, v_full = self.kv_cache.append_and_get(idx, k, v, start_pos=pos_offset)
+        if slot_indices is not None:
+            end_p = pos_offset + seq_len
+            if end_p > self.kv_cache.max_seq_len:
+                raise RuntimeError(
+                    f"KV sequence length {end_p} exceeds max_seq_len={self.kv_cache.max_seq_len}"
+                )
+            slot_t = (
+                slot_tensor
+                if slot_tensor is not None
+                else torch.tensor(slot_indices, device=self.device, dtype=torch.long)
+            )
+            self.kv_cache.k_pools[idx][slot_t, :, pos_offset:end_p, :] = k.to(
+                self.kv_cache.storage_dtype
+            )
+            self.kv_cache.v_pools[idx][slot_t, :, pos_offset:end_p, :] = v.to(
+                self.kv_cache.storage_dtype
+            )
+            if pos_offset == 0:
+                k_full, v_full = k, v
+            else:
+                k_full = self.kv_cache.k_pools[idx][slot_t, :, :end_p, :].to(torch.float16)
+                v_full = self.kv_cache.v_pools[idx][slot_t, :, :end_p, :].to(torch.float16)
+        else:
+            k_full, v_full = self.kv_cache.append_and_get(idx, k, v, start_pos=pos_offset)
         attn_out = fused_attention_gqa(
             q,
             k_full,
@@ -966,6 +1041,126 @@ class NativeModelRuntime:
             "ms_per_token": round(t_decode / gen_n, 2),
         }
 
+    @staticmethod
+    def _batch_bucket_for(needed_slots: int) -> int:
+        for b in (1, 2, 4, 8, 16, 32, 64):
+            if needed_slots <= b:
+                return b
+        return _next_pow2(needed_slots)
+
+    @torch.inference_mode()
+    def prefill_into_slots(
+        self,
+        slot_indices: list[int],
+        input_ids: torch.Tensor,
+    ) -> torch.Tensor:
+        """Prefill `(B_group, S)` into specific KV cache slots without resetting active slots."""
+        if not slot_indices:
+            return torch.empty((0, 1), dtype=torch.long, device=self.device)
+        ids = input_ids.to(self.device)
+        if ids.ndim == 1:
+            ids = ids.unsqueeze(0)
+        bsz, seq_len = int(ids.shape[0]), int(ids.shape[1])
+        if bsz != len(slot_indices):
+            raise ValueError(f"slot_indices length {len(slot_indices)} != batch size {bsz}")
+        needed_cap = max(slot_indices) + 1
+        if needed_cap > self.kv_cache.max_batch_size:
+            self.kv_cache.ensure_batch_capacity(needed_cap)
+
+        slot_t = torch.tensor(slot_indices, device=self.device, dtype=torch.long)
+        h = cutile_embedding_lookup(ids.reshape(bsz * seq_len), self._embed_w).view(
+            bsz * seq_len, self.config.hidden_size
+        )
+        for idx in range(self.config.num_hidden_layers):
+            h = self._forward_layer_native(
+                idx,
+                h,
+                pos_offset=0,
+                seq_len=seq_len,
+                batch_size=bsz,
+                slot_indices=slot_indices,
+                slot_tensor=slot_t,
+            )
+        h_last = h.view(bsz, seq_len, self.config.hidden_size)[:, -1, :].contiguous()
+        _, next_tok = cutile_lm_head_fused(
+            h_last, self._norm_w, self._lm_head_w, eps=self.config.rms_norm_eps, top_k=1
+        )
+        return next_tok.view(bsz, 1)
+
+    @torch.inference_mode()
+    def decode_slots_step(
+        self,
+        active_slots: list[int],
+        token_ids: list[int],
+        positions: list[int],
+        sync_inputs: bool = True,
+    ) -> list[int]:
+        """Run one decode step across ragged per-slot `(token_id, pos)` pairs."""
+        if not active_slots:
+            return []
+        if not (len(active_slots) == len(token_ids) == len(positions)):
+            raise ValueError("active_slots, token_ids, and positions must have matching lengths")
+
+        if self.use_cuda and self._all_layers_on_gpu:
+            b_cap = self._batch_bucket_for(max(active_slots) + 1)
+            ws = self._get_or_create_workspace(b_cap)
+            max_pos = max(positions)
+            bucket_len = self._select_bucket(max_pos)
+
+            slots_key = tuple(active_slots)
+            need_sync = (
+                sync_inputs
+                or b_cap != self._last_slot_bucket
+                or slots_key != self._last_active_slots
+            )
+            if need_sync:
+                tok_vals = [1] * b_cap
+                pos_vals = [0] * b_cap
+                for sid, tid, pos in zip(active_slots, token_ids, positions, strict=True):
+                    tok_vals[sid] = int(tid)
+                    pos_vals[sid] = int(pos)
+                ws.token_id[:, 0].copy_(
+                    torch.tensor(tok_vals, dtype=torch.int32, device=self.device)
+                )
+                ws.pos_buf.copy_(torch.tensor(pos_vals, dtype=torch.int32, device=self.device))
+            ws.step_buf.fill_(0)
+
+            ran_graph = False
+            if self.use_cuda_graph:
+                try:
+                    graph = self._capture_full_step_graph(ws, bucket_len)
+                    graph.replay()
+                    ran_graph = True
+                except RuntimeError:
+                    self.use_cuda_graph = False
+                    self.graph_fallback_count += 1
+            if not ran_graph:
+                self._execute_decode_step_in_workspace(ws, bucket_len)
+
+            self._last_slot_bucket = b_cap
+            self._last_active_slots = slots_key
+            out_cpu = ws.token_id[:b_cap, 0].cpu().tolist()
+            return [int(out_cpu[sid]) for sid in active_slots]
+
+        out_tokens: list[int] = []
+        for sid, tid, pos in zip(active_slots, token_ids, positions, strict=True):
+            t_in = torch.tensor([tid], dtype=torch.long, device=self.device)
+            h = cutile_embedding_lookup(t_in, self._embed_w).view(1, self.config.hidden_size)
+            for idx in range(self.config.num_hidden_layers):
+                h = self._forward_layer_native(
+                    idx,
+                    h,
+                    pos_offset=int(pos),
+                    seq_len=1,
+                    batch_size=1,
+                    slot_indices=[sid],
+                )
+            _, nxt = cutile_lm_head_fused(
+                h, self._norm_w, self._lm_head_w, eps=self.config.rms_norm_eps, top_k=1
+            )
+            out_tokens.append(int(nxt.item()))
+        return out_tokens
+
     @torch.inference_mode()
     def generate_batch(
         self,
@@ -973,7 +1168,7 @@ class NativeModelRuntime:
         max_new_tokens: int = 32,
         sync_interval: int = 32,
     ) -> tuple[list[list[int]], dict[str, Any]]:
-        """Batch-bucketed continuous batching on `NativeModelRuntime` (zero forbidden ATen ops)."""
+        """Length-grouped continuous batching on `NativeModelRuntime` (zero padding contamination)."""
         bsz = len(prompt_ids_list)
         if bsz == 0:
             return [], {"batch_size": 0, "total_decode_tok_s": 0.0}
@@ -989,32 +1184,51 @@ class NativeModelRuntime:
                 "prefill_ms": st["prefill_ms"],
             }
 
-        max_len = max(len(p) for p in prompt_ids_list)
-        padded = [[1] * (max_len - len(p)) + list(p) for p in prompt_ids_list]
-        batch_t = torch.tensor(padded, dtype=torch.long, device=self.device)
+        self.reset()
+        b_cap = (
+            self._batch_bucket_for(bsz)
+            if (self.use_cuda and self.use_cuda_graph and self._all_layers_on_gpu)
+            else bsz
+        )
+        self.kv_cache.ensure_batch_capacity(max(bsz, b_cap))
+
+        by_len: dict[int, list[int]] = {}
+        for slot_id, prompt in enumerate(prompt_ids_list):
+            by_len.setdefault(len(prompt), []).append(slot_id)
 
         t0 = time.perf_counter()
-        next_toks = self.prefill(batch_t)
+        first_toks = [0] * bsz
+        for _, slot_group in by_len.items():
+            grp_t = torch.tensor(
+                [prompt_ids_list[s] for s in slot_group], dtype=torch.long, device=self.device
+            )
+            nxt = self.prefill_into_slots(slot_group, grp_t)
+            for sid, tok_val in zip(
+                slot_group, nxt.view(len(slot_group)).cpu().tolist(), strict=True
+            ):
+                first_toks[sid] = int(tok_val)
         if self.use_cuda:
             torch.cuda.synchronize()
         t_prefill = (time.perf_counter() - t0) * 1000.0
 
-        first_col = next_toks.view(bsz).cpu().tolist()
-        outputs: list[list[int]] = [[int(first_col[b])] for b in range(bsz)]
-        cur_pos = max_len
+        outputs: list[list[int]] = [[first_toks[b]] for b in range(bsz)]
+        positions = [len(p) for p in prompt_ids_list]
         rem_tokens = max(0, max_new_tokens - 1)
 
         if self.use_cuda_graph and self._all_layers_on_gpu and rem_tokens > 0:
-            ws = self._get_or_create_workspace(bsz)
-            end_pos = cur_pos + rem_tokens
+            ws = self._get_or_create_workspace(b_cap)
+            max_start_pos = max(positions)
+            end_pos = max_start_pos + rem_tokens
             for b in self.context_buckets:
-                if cur_pos < b:
+                if max_start_pos < b:
                     _ = self._capture_full_step_graph(ws, b)
                 if b >= end_pos:
                     break
 
-            ws.token_id.copy_(next_toks.view(bsz, 1).to(torch.int32))
-            ws.pos_buf.fill_(cur_pos)
+            tok_init = [first_toks[b] if b < bsz else 1 for b in range(b_cap)]
+            pos_init = [positions[b] if b < bsz else 0 for b in range(b_cap)]
+            ws.token_id[:, 0].copy_(torch.tensor(tok_init, dtype=torch.int32, device=self.device))
+            ws.pos_buf.copy_(torch.tensor(pos_init, dtype=torch.int32, device=self.device))
             ws.step_buf.fill_(0)
             if self.use_cuda:
                 torch.cuda.synchronize()
@@ -1022,15 +1236,16 @@ class NativeModelRuntime:
             eff_sync = max(1, sync_interval)
             t_dec0 = time.perf_counter()
             steps_done = 0
+            cur_max_pos = max_start_pos
             while steps_done < rem_tokens:
-                bucket_len = self._select_bucket(cur_pos)
+                bucket_len = self._select_bucket(cur_max_pos)
                 graph = ws.graphs_by_bucket[bucket_len]
-                chunk = min(eff_sync, rem_tokens - steps_done, max(1, bucket_len - cur_pos))
+                chunk = min(eff_sync, rem_tokens - steps_done, max(1, bucket_len - cur_max_pos))
                 for _ in range(chunk):
                     graph.replay()
-                cur_pos += chunk
+                cur_max_pos += chunk
                 steps_done += chunk
-                self.kv_cache.seq_lens = [cur_pos] * self.config.num_hidden_layers
+                self.kv_cache.seq_lens = [cur_max_pos] * self.config.num_hidden_layers
                 chunk_mat = ws.history_buf[steps_done - chunk : steps_done, :bsz].cpu().tolist()
                 for row in chunk_mat:
                     for b in range(bsz):
@@ -1040,12 +1255,13 @@ class NativeModelRuntime:
             t_decode = (time.perf_counter() - t_dec0) * 1000.0
         else:
             t_dec0 = time.perf_counter()
+            active = list(range(bsz))
+            cur_toks = list(first_toks)
             for _ in range(rem_tokens):
-                next_toks = self.decode_step(next_toks, pos=cur_pos, use_graph=False)
-                cur_pos += 1
-                col = next_toks.view(bsz).cpu().tolist()
+                cur_toks = self.decode_slots_step(active, cur_toks, positions)
                 for b in range(bsz):
-                    outputs[b].append(int(col[b]))
+                    outputs[b].append(cur_toks[b])
+                    positions[b] += 1
             if self.use_cuda:
                 torch.cuda.synchronize()
             t_decode = (time.perf_counter() - t_dec0) * 1000.0

@@ -1,0 +1,15 @@
+[Phase 16 Baseline | IN-PROCESS | C= 1] agg=88.97 tok/s [87.76..89.14] | TTFT p50=36.60ms | ITL p50=10.93ms | batch=1
+[Phase 16 Baseline | IN-PROCESS | C= 4] agg=335.89 tok/s [335.12..337.47] | TTFT p50=67.81ms | ITL p50=10.95ms | batch=4
+[Phase 16 Baseline | IN-PROCESS | C=16] agg=1337.87 tok/s [1331.79..1360.21] | TTFT p50=105.91ms | ITL p50=10.39ms | batch=16
+[Phase 16 Baseline | IN-PROCESS | C=64] agg=1617.84 tok/s [1610.35..1619.93] | TTFT p50=329.67ms | ITL p50=34.89ms | batch=64
+[Phase 16 Baseline] HTTP server booted in 25540.5 ms
+[Phase 16 Baseline | http_nonstream | C= 1] agg=86.34 tok/s (97.0% of in-proc) [86.12..87.64] | TTFT p50/p99=741.2/743.1ms | ITL p50/p99=11.6/11.6ms | qwait=8.18ms | batch=1.00
+[Phase 16 Baseline | http_nonstream | C= 4] agg=324.87 tok/s (96.7% of in-proc) [323.76..326.10] | TTFT p50/p99=787.4/790.2ms | ITL p50/p99=12.3/12.3ms | qwait=8.96ms | batch=4.00
+[Phase 16 Baseline | http_nonstream | C=16] agg=1298.83 tok/s (97.1% of in-proc) [476.84..1303.66] | TTFT p50/p99=785.9/2145.4ms | ITL p50/p99=12.3/33.5ms | qwait=87.09ms | batch=13.33
+[Phase 16 Baseline | http_nonstream | C=64] agg=1062.63 tok/s (65.7% of in-proc) [1052.21..1077.26] | TTFT p50/p99=2332.8/3877.8ms | ITL p50/p99=36.5/60.6ms | qwait=1601.74ms | batch=12.80
+[Phase 16 Baseline | http_stream    | C= 1] agg=84.01 tok/s (94.4% of in-proc) [83.61..85.90] | TTFT p50/p99=37.4/38.5ms | ITL p50/p99=12.6/15.1ms | qwait=0.00ms | batch=1.00
+[Phase 16 Baseline | http_stream    | C= 4] agg=84.82 tok/s (25.2% of in-proc) [84.72..85.26] | TTFT p50/p99=1162.2/2303.9ms | ITL p50/p99=12.6/15.5ms | qwait=0.00ms | batch=1.00
+[Phase 16 Baseline | http_stream    | C=16] agg=95.75 tok/s (7.2% of in-proc) [85.22..145.50] | TTFT p50/p99=4550.9/10943.1ms | ITL p50/p99=7.8/15.4ms | qwait=0.00ms | batch=1.00
+[Phase 16 Baseline | http_stream    | C=64] agg=145.39 tok/s (9.0% of in-proc) [145.34..145.42] | TTFT p50/p99=13885.8/27737.8ms | ITL p50/p99=6.7/6.9ms | qwait=0.00ms | batch=1.00
+[Phase 16 Baseline | ISOLATION C=4 mixed-len] matches=1/4 [False, True, False, False]
+[Phase 16 Baseline | DISCONNECT] inflight_after=0, disconnects_delta=0

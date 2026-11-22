@@ -10,6 +10,7 @@ import resource
 import time
 import uuid
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -18,6 +19,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from cutile_forge import __version__
+from cutile_forge.server.scheduler import ContinuousBatchScheduler
 
 logger = logging.getLogger(__name__)
 
@@ -184,14 +186,13 @@ def create_app(
     engine: Any,
     tokenizer: Any | None = None,
     model_id: str = "mistral-7b-4bit",
-    max_batch_size: int = 16,
-    batch_wait_ms: float = 8.0,
+    max_batch_size: int = 64,
+    batch_wait_ms: float = 2.0,
     api_key: str | None = None,
     max_concurrent_requests: int = 64,
-    max_prompt_tokens: int = 4096,
+    max_prompt_tokens: int = 2048,
 ) -> FastAPI:
     """Create FastAPI app exposing `/health`, `/metrics`, `/v1/models`, and `/v1/chat/completions`."""
-    app = FastAPI(title="CuTileForge OpenAI Server", version=__version__)
     telemetry: dict[str, Any] = {
         "requests_total": 0,
         "requests_inflight": 0,
@@ -205,23 +206,51 @@ def create_app(
         "batch_size_max": 0,
         "queue_wait_ms_sum": 0.0,
         "queue_wait_ms_max": 0.0,
+        "active_kv_slots": 0,
+        "free_kv_slots": int(max_batch_size),
         "prefix_cache_hits": 0,
         "prefix_cache_misses": 0,
         "peak_vram_allocated_mb": 0.0,
         "peak_vram_reserved_mb": 0.0,
         "host_rss_mb": 0.0,
     }
-    gpu_executor = concurrent.futures.ThreadPoolExecutor(
-        max_workers=1, thread_name_prefix="cutile-gpu"
-    )
-    batcher = DynamicBatcher(
-        engine,
-        max_batch_size=max_batch_size,
-        batch_wait_ms=batch_wait_ms,
-        telemetry=telemetry,
-        gpu_executor=gpu_executor,
-    )
-    batch_lock = batcher._gpu_lock
+    native_rt = getattr(engine, "runtime", None)
+    scheduler: ContinuousBatchScheduler | None = None
+    gpu_executor: concurrent.futures.ThreadPoolExecutor | None = None
+    batcher: DynamicBatcher | None = None
+    batch_lock: asyncio.Lock | None = None
+
+    if native_rt is not None and hasattr(native_rt, "prefill_into_slots"):
+        scheduler = ContinuousBatchScheduler(
+            native_rt,
+            max_batch_size=max_batch_size,
+            batch_wait_ms=batch_wait_ms,
+            telemetry=telemetry,
+        )
+    else:
+        gpu_executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="cutile-gpu"
+        )
+        batcher = DynamicBatcher(
+            engine,
+            max_batch_size=max_batch_size,
+            batch_wait_ms=batch_wait_ms,
+            telemetry=telemetry,
+            gpu_executor=gpu_executor,
+        )
+        batch_lock = batcher._gpu_lock
+
+    @asynccontextmanager
+    async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        try:
+            yield
+        finally:
+            if scheduler is not None:
+                scheduler.close()
+            if gpu_executor is not None:
+                gpu_executor.shutdown(wait=False)
+
+    app = FastAPI(title="CuTileForge OpenAI Server", version=__version__, lifespan=_lifespan)
     # Isolated per-tenant seen prefix hash sets so Tenant B never observes Tenant A's cached prefixes
     tenant_prefixes: dict[str, set[tuple[int, ...]]] = {}
 
@@ -251,6 +280,9 @@ def create_app(
 
     @app.get("/metrics")
     async def metrics() -> dict[str, Any]:
+        if scheduler is not None:
+            telemetry["active_kv_slots"] = scheduler.active_count
+            telemetry["free_kv_slots"] = scheduler.free_count
         rc = getattr(engine, "radix_cache", None)
         if rc is not None:
             telemetry["prefix_cache_hits"] = int(getattr(rc, "hits", 0))
@@ -322,15 +354,102 @@ def create_app(
                 detail=f"Prompt length {prompt_len} exceeds max_prompt_tokens={max_prompt_tokens}",
             )
 
-        _check_tenant_prefix_isolation(tenant, [int(x) for x in prompt_ids[0].tolist()])
+        p_tok_list = [int(x) for x in prompt_ids[0].tolist()]
+        if scheduler is not None:
+            rt_max_seq = int(getattr(scheduler.runtime, "max_seq_len", 2048))
+            if prompt_len + req.max_tokens > rt_max_seq:
+                _record_error(400)
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"prompt_tokens ({prompt_len}) + max_tokens ({req.max_tokens}) "
+                        f"exceeds max_seq_len={rt_max_seq}"
+                    ),
+                )
+
+        _check_tenant_prefix_isolation(tenant, p_tok_list)
         telemetry["requests_total"] += 1
         telemetry["requests_inflight"] += 1
         req_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
         created = int(time.time())
 
+        if req.stream and scheduler is not None:
+            slot_req = scheduler.enqueue(p_tok_list, max_tokens=req.max_tokens, stream=True)
+            assert slot_req.queue is not None
+
+            async def continuous_event_stream() -> AsyncIterator[str]:
+                assert slot_req.queue is not None
+                completed = False
+                disconnect_recorded = False
+
+                def _mark_disconnect() -> None:
+                    nonlocal disconnect_recorded
+                    if not disconnect_recorded:
+                        disconnect_recorded = True
+                        slot_req.cancel_event.set()
+                        telemetry["client_disconnects_total"] += 1
+
+                try:
+                    while True:
+                        if await request.is_disconnected():
+                            _mark_disconnect()
+                            return
+                        try:
+                            item = await asyncio.wait_for(slot_req.queue.get(), timeout=0.05)
+                        except TimeoutError:
+                            continue
+                        if item is None:
+                            completed = True
+                            break
+                        if isinstance(item, Exception):
+                            raise item
+                        telemetry["tokens_generated_total"] += 1
+                        chunk_text = _decode_tokens([item])
+                        payload = {
+                            "id": req_id,
+                            "object": "chat.completion.chunk",
+                            "created": created,
+                            "model": req.model,
+                            "choices": [
+                                {
+                                    "index": 0,
+                                    "delta": {"content": chunk_text},
+                                    "finish_reason": None,
+                                }
+                            ],
+                        }
+                        yield f"data: {json.dumps(payload)}\n\n"
+                        await asyncio.sleep(0)
+                    done_payload = {
+                        "id": req_id,
+                        "object": "chat.completion.chunk",
+                        "created": created,
+                        "model": req.model,
+                        "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+                    }
+                    yield f"data: {json.dumps(done_payload)}\n\n"
+                    yield "data: [DONE]\n\n"
+                    telemetry["requests_succeeded"] += 1
+                except asyncio.CancelledError:
+                    if not completed:
+                        _mark_disconnect()
+                    raise
+                except Exception as exc:
+                    _record_error(500)
+                    logger.exception("Streaming generation failure for %s: %s", req_id, exc)
+                finally:
+                    if not completed:
+                        _mark_disconnect()
+                    telemetry["requests_inflight"] = max(0, telemetry["requests_inflight"] - 1)
+
+            return StreamingResponse(continuous_event_stream(), media_type="text/event-stream")
+
         if req.stream:
+            assert batch_lock is not None and gpu_executor is not None
 
             async def event_stream() -> AsyncIterator[str]:
+                completed = False
+                disconnect_recorded = False
                 try:
                     async with batch_lock:
                         loop = asyncio.get_running_loop()
@@ -346,9 +465,12 @@ def create_app(
                         while True:
                             tok_id = await loop.run_in_executor(gpu_executor, next, it, None)
                             if tok_id is None:
+                                completed = True
                                 break
                             if await request.is_disconnected():
-                                telemetry["client_disconnects_total"] += 1
+                                if not disconnect_recorded:
+                                    disconnect_recorded = True
+                                    telemetry["client_disconnects_total"] += 1
                                 return
                             telemetry["tokens_generated_total"] += 1
                             chunk_text = _decode_tokens([tok_id])
@@ -377,22 +499,36 @@ def create_app(
                         yield f"data: {json.dumps(done_payload)}\n\n"
                         yield "data: [DONE]\n\n"
                         telemetry["requests_succeeded"] += 1
+                except asyncio.CancelledError:
+                    if not completed and not disconnect_recorded:
+                        disconnect_recorded = True
+                        telemetry["client_disconnects_total"] += 1
+                    raise
                 except Exception as exc:
                     _record_error(500)
                     logger.exception("Streaming generation failure for %s: %s", req_id, exc)
                 finally:
+                    if not completed and not disconnect_recorded:
+                        disconnect_recorded = True
+                        telemetry["client_disconnects_total"] += 1
                     telemetry["requests_inflight"] = max(0, telemetry["requests_inflight"] - 1)
 
             return StreamingResponse(event_stream(), media_type="text/event-stream")
 
         try:
-            out_ids = await batcher.submit(
-                prompt_ids,
-                max_tokens=req.max_tokens,
-                temperature=req.temperature,
-                top_k=req.top_k,
-                top_p=req.top_p,
-            )
+            if scheduler is not None:
+                slot_req = scheduler.enqueue(p_tok_list, max_tokens=req.max_tokens, stream=False)
+                assert slot_req.future is not None
+                out_ids = await slot_req.future
+            else:
+                assert batcher is not None
+                out_ids = await batcher.submit(
+                    prompt_ids,
+                    max_tokens=req.max_tokens,
+                    temperature=req.temperature,
+                    top_k=req.top_k,
+                    top_p=req.top_p,
+                )
             telemetry["tokens_generated_total"] += len(out_ids)
             telemetry["requests_succeeded"] += 1
         except HTTPException as exc:

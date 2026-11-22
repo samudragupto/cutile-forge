@@ -1,5 +1,16 @@
 # Changelog
 
+## [3.3.0] (2026-11-22) — Phase 16: Serving Architecture & Continuous Batching
+
+**Authors:** Arrhat Nag (`@samudragupto`) and Rupesh Nasre
+
+CuTileForge `v3.3.0` unifies streaming SSE and non-streaming HTTP inference atop slot-isolated continuous batching (`ContinuousBatchScheduler`), eliminates mixed-length request cross-contamination, and verifies 3-run reproducibility across `C = 1 / 4 / 16 / 64` on `Mistral-7B-v0.1-GPTQ`:
+
+- **Unified Continuous Batch Scheduler (`cutile_forge/server/scheduler.py`, `cutile_forge/server/app.py`, `cutile_forge/cli.py`)**: Replaced the `stream=True` serialization lock (`batch=1.0`, `7.16%` of in-process at `C=16`, `27,738 ms` TTFT p99 at `C=64`) with an event-driven `ContinuousBatchScheduler` unifying SSE streaming and non-streaming `asyncio.Future` delivery over densely packed KV slots (`--max-batch-size 64`, `--batch-wait-ms 2.0`, `timeout_keep_alive=60`, FastAPI lifespan shutdown, and CUDA Graph bucket pre-capture).
+- **Per-Slot Ragged Continuous Decode & Length-Grouped Prefill (`cutile_forge/runtime/native_engine.py`, `tests/test_phase16_serving_repro.py`)**: Added `prefill_into_slots`, `decode_slots_step` (with steady-state GPU-resident `token_id`/`pos_buf` reuse), and length-grouped `generate_batch` (eliminating left-padding contamination so concurrent mixed-length `C=4` (`4/4`) and `C=16` (`16/16`) greedy outputs match standalone `C=1` `100%`).
+- **Mid-Stream Disconnect Cancellation & Zero KV Leaks (`cutile_forge/server/app.py`)**: Cooperatively aborts cancelled SSE streams (`cancel_event`), immediately releases KV slots (`active_kv_slots=0`, `requests_inflight=0`, `disconnects_delta=1`), and exposes live slot occupancy on `/metrics`.
+- **Measured 3-Run HTTP Serving Validation (`benchmarks/production/bench_phase16_serving.py`, `v3.3.0/phase16_optimized/`)**: Lifted `Mistral-7B-v0.1-GPTQ` SSE streaming from `84.8 / 95.8 / 145.4 tok/s` to **`568.90 / 1,904.93 / 2,697.14 tok/s`** at `C=4/16/64` (`97.0% / 89.3% / 91.0%` of in-process, `CV <= 1.03%`), dropped streaming TTFT p99 to **`21.1 / 74.4 / 189.0 / 314.1 ms`** and ITL p99 to **`6.2 / 6.2 / 6.0 / 21.6 ms`**, and lifted non-streaming `C=1/4/16/64` to **`97.9% / 97.0% / 90.6% / 84.99%` (`164.22 / 568.83 / 1,931.66 / 2,519.59 tok/s`, `CV <= 0.27%`)**.
+
 ## [3.2.0] (2026-11-22) — Phase 15: Correctness Closure & 8-Model Regression Collection
 
 **Authors:** Arrhat Nag (`@samudragupto`) and Rupesh Nasre

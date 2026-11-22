@@ -86,8 +86,9 @@ def main() -> None:
     serve_p.add_argument("--target", default="sm_120")
     serve_p.add_argument("--api-key", default=None)
     serve_p.add_argument("--max-concurrent", type=int, default=64)
-    serve_p.add_argument("--max-batch-size", type=int, default=16)
-    serve_p.add_argument("--max-prompt-tokens", type=int, default=4096)
+    serve_p.add_argument("--max-batch-size", type=int, default=64)
+    serve_p.add_argument("--batch-wait-ms", type=float, default=2.0)
+    serve_p.add_argument("--max-prompt-tokens", type=int, default=2048)
     serve_p.add_argument("--native-runtime", action="store_true")
 
     bench_p = sub.add_parser("bench", help="Run CuTileForge benchmark suite")
@@ -176,14 +177,37 @@ def main() -> None:
             model = Mistral7B.from_random(ModelConfig(num_hidden_layers=4), device="cuda")
 
         if args.native_runtime:
+            import torch
+
             from cutile_forge.runtime import NativeModelRuntime
 
+            req_seq = max(512, args.max_prompt_tokens + 256)
+            if torch.cuda.is_available():
+                free_b, _ = torch.cuda.mem_get_info()
+                bytes_per_slot_tok = (
+                    model.config.num_hidden_layers
+                    * model.config.num_key_value_heads
+                    * model.config.head_dim
+                    * 4
+                )
+                max_fit_seq = int(
+                    (free_b * 0.78) // max(1, args.max_batch_size * bytes_per_slot_tok)
+                )
+                if max_fit_seq >= 512:
+                    req_seq = min(req_seq, max_fit_seq)
             rt = NativeModelRuntime(
                 model,
-                max_seq_len=max(2048, args.max_prompt_tokens + 256),
+                max_seq_len=req_seq,
                 use_cuda_graph=True,
-                max_batch_size=min(16, args.max_batch_size),
+                max_batch_size=args.max_batch_size,
             )
+            # Pre-capture batch buckets up to args.max_batch_size for first context bucket
+            if rt.use_cuda_graph and rt._all_layers_on_gpu:
+                first_ctx = rt.context_buckets[0]
+                for b_cap in (1, 4, 8, 16, 32, 64):
+                    if b_cap <= args.max_batch_size:
+                        ws = rt._get_or_create_workspace(b_cap)
+                        _ = rt._capture_full_step_graph(ws, first_ctx)
             engine: Any = _NativeServingAdapter(rt, target=args.target)
         else:
             engine = InferenceEngine(model, target=args.target)
@@ -192,11 +216,12 @@ def main() -> None:
             tokenizer=tok,
             model_id=args.model.name,
             max_batch_size=args.max_batch_size,
+            batch_wait_ms=args.batch_wait_ms,
             api_key=args.api_key,
             max_concurrent_requests=args.max_concurrent,
             max_prompt_tokens=args.max_prompt_tokens,
         )
-        uvicorn.run(app, host=args.host, port=args.port)
+        uvicorn.run(app, host=args.host, port=args.port, timeout_keep_alive=60)
     elif args.command == "bench":
         import importlib
 

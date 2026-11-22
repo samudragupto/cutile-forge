@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cutile-forge"
-version = "3.2.0"
+version = "3.3.0"
 description = "General-purpose Tile-Fusion Graph compiler, async GPU runtime, training/vision ecosystem, and 7B-70B inference engine on NVIDIA CuTile"
 readme = "README.md"
 license = { text = "MIT" }

@@ -107,23 +107,40 @@ def test_http_streaming_coalesces_concurrent_requests() -> None:
 
 def test_http_stream_disconnect_releases_kv_slots_and_counts_disconnect() -> None:
     """Abandoning an SSE stream mid-generation must increment disconnect count and free KV slots."""
+    import socket
+    import threading
+    import time
+
+    import uvicorn
+
     rt = _build_small_native_runtime(max_batch_size=8)
     adapter = _NativeServingAdapter(rt)
     app = create_app(adapter, max_batch_size=8, batch_wait_ms=4.0)
 
+    sock = socket.socket()
+    sock.bind(("127.0.0.1", 0))
+    port = sock.getsockname()[1]
+    sock.close()
+
+    srv = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+    th = threading.Thread(target=srv.run, daemon=True)
+    th.start()
+    while not srv.started:
+        time.sleep(0.02)
+
     async def _run() -> dict[str, object]:
-        transport = httpx.ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        async with httpx.AsyncClient() as client:
             async with client.stream(
                 "POST",
-                "/v1/chat/completions",
+                f"http://127.0.0.1:{port}/v1/chat/completions",
                 json={
                     "model": "tiny",
                     "messages": [{"role": "user", "content": "long stream prompt"}],
-                    "max_tokens": 32,
+                    "max_tokens": 64,
                     "temperature": 0.0,
                     "stream": True,
                 },
+                timeout=30.0,
             ) as resp:
                 assert resp.status_code == 200
                 seen = 0
@@ -133,11 +150,17 @@ def test_http_stream_disconnect_releases_kv_slots_and_counts_disconnect() -> Non
                         if seen >= 2:
                             break
             await asyncio.sleep(0.2)
-            return (await client.get("/metrics")).json()
+            return (await client.get(f"http://127.0.0.1:{port}/metrics")).json()
 
-    metrics = asyncio.run(_run())
+    try:
+        metrics = asyncio.run(_run())
+    finally:
+        srv.should_exit = True
+        th.join(timeout=3.0)
+
     assert (
         int(metrics.get("client_disconnects_total", 0)) >= 1
     ), f"Disconnect not recorded: {metrics}"
     assert int(metrics.get("requests_inflight", -1)) == 0
     assert int(metrics.get("active_kv_slots", -1)) == 0
+    assert int(metrics.get("tokens_generated_total", 64)) < 64
