@@ -234,6 +234,21 @@ def build_compatibility_matrix(
         "Representative localhost 127.0.0.1 OpenAI HTTP/SSE continuous-batching soak & serving cell.",
     )
 
+    repro_sum = _find_record(serv_recs, stage="reproducibility_summary_3runs") or {}
+    c64_nonstream = repro_sum.get("metrics", {}).get("http_nonstream_c64", {})
+    c64_pct = float(c64_nonstream.get("vs_inproc_pct_med", 0.0))
+    c64_tok = c64_nonstream.get("agg_tok_s_med", "N/A")
+    add_cell(
+        "mistral",
+        "safetensors",
+        "gptq_int4_desc_act",
+        "http",
+        "PASS" if c64_pct >= 85.0 else "FAIL",
+        "benchmarks/validation_artifacts/v3.3.0/phase16_optimized/manifest.json",
+        f"http_nonstream_c64={c64_tok} tok/s ({c64_pct}% of in-process vs >=85%)",
+        "Phase 16 3-run HTTP non-streaming C=64 throughput gate; 84.99% < 85% is FAIL (single run0 85.02% does not override 3-run median).",
+    )
+
     add_cell(
         "mistral",
         "safetensors",

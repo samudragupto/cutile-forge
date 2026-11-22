@@ -49,6 +49,7 @@ Source: [`docs/EXTERNAL_ENGINE_COMPARISON.md`](EXTERNAL_ENGINE_COMPARISON.md).
 
 - **`UnifiedModelExecutor` has no persistent KV-cache or CUDA Graph decode loop:** For unquantized FP16 small decoders (`Qwen/Qwen2.5-0.5B`), `UnifiedModelExecutor` recomputes full sequences on each decode token (`92.7 tok/s`), losing substantially to `SGLang`, `vLLM`, and even eager `HF Transformers`.
 - **`Mistral-7B-v0.1-GPTQ` vs `SGLang`:** On single and batched decode (`C=1/4/16`), `SGLang` achieves higher throughput and lower ITL than `NativeModelRuntime` (`v3.6.0/phase20_external_engines/manifest.json`). CuTileForge's advantage on this checkpoint is native `desc_act=True` GPTQ support (where `vLLM==0.34.0` raises a `VllmConfig` `ValidationError`) and lower static VRAM footprint (`~8.6 GB` allocated vs `~18.5 GB` static allocation).
+- **Phase 16 `http_nonstream` `C=64` Throughput Gate (`FAIL`):** Under strict Rule 1 (`>= 85%` of in-process batched throughput), the 3-run median for non-streaming HTTP at `C=64` (`2,519.59 tok/s`, `84.99%` of in-process, `v3.3.0/phase16_optimized/manifest.json`) is **`FAIL`**; the single run-0 measurement (`85.02%`) does not override the 3-run median. Streaming SSE `C=64` passes at `90.98%` (`2,697.14 tok/s`).
 
 ---
 

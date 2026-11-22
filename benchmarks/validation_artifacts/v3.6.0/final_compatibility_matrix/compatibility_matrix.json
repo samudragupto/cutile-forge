@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0.0",
   "release_version": "3.6.0",
-  "generated_utc": "2026-11-22T09:51:17.490851+00:00",
+  "generated_utc": "2026-11-22T15:09:57.017619+00:00",
   "axes": {
     "architectures": [
       "mistral",
@@ -47,12 +47,12 @@
     ]
   },
   "status_counts": {
-    "FAIL": 7,
+    "FAIL": 8,
     "NOT RUN": 3,
     "PASS": 15,
     "UNSUPPORTED": 4
   },
-  "total_cells": 29,
+  "total_cells": 30,
   "cells": [
     {
       "architecture": "mistral",
@@ -88,10 +88,20 @@
       "architecture": "mistral",
       "checkpoint_format": "safetensors",
       "quantization_type": "gptq_int4_desc_act",
+      "execution_path": "http",
+      "status": "FAIL",
+      "evidence_artifact": "benchmarks/validation_artifacts/v3.3.0/phase16_optimized/manifest.json",
+      "measured_metric": "http_nonstream_c64=2519.59 tok/s (84.99% of in-process vs >=85%)",
+      "justification": "Phase 16 3-run HTTP non-streaming C=64 throughput gate; 84.99% < 85% is FAIL (single run0 85.02% does not override 3-run median)."
+    },
+    {
+      "architecture": "mistral",
+      "checkpoint_format": "safetensors",
+      "quantization_type": "gptq_int4_desc_act",
       "execution_path": "speculative",
       "status": "PASS",
       "evidence_artifact": "benchmarks/validation_artifacts/v3.6.0/final_compatibility_matrix/compatibility_matrix.json",
-      "measured_metric": "{\"exact_greedy_match\": true, \"tokens\": 32, \"total_drafted\": 28, \"accepted_tokens\": 25, \"acceptance_rate\": 0.8929, \"decode_tok_s\": 354.17}",
+      "measured_metric": "{\"exact_greedy_match\": true, \"tokens\": 32, \"total_drafted\": 28, \"accepted_tokens\": 25, \"acceptance_rate\": 0.8929, \"decode_tok_s\": 367.74}",
       "justification": "Representative N-gram prompt lookup + NativePagedKVCache.truncate() speculative rollback cell."
     },
     {
