@@ -34,7 +34,11 @@ from cutile_forge.kernels.gemm_dequant import (
 )
 from cutile_forge.kernels.gemm_dequant_silu import fused_gemm_dequant_silu
 from cutile_forge.kernels.layernorm_residual import fused_rmsnorm_residual
-from cutile_forge.kernels.moe_fused import fused_moe_int4_gemm, fused_topk_gating
+from cutile_forge.kernels.moe_fused import (
+    cutile_moe_router_topk,
+    fused_moe_int4_gemm,
+    fused_topk_gating,
+)
 from cutile_forge.kernels.rmsnorm import cutile_rmsnorm
 from cutile_forge.kernels.rope import apply_rope, precompute_rope_freqs
 
@@ -84,8 +88,11 @@ class MoEFFNBlock:
         expert_scales: torch.Tensor,
         expert_zeros: torch.Tensor,
     ) -> torch.Tensor:
-        logits = torch.matmul(x, router_weight.t())
-        probs, indices = fused_topk_gating(logits, top_k=self.top_k)
+        if x.is_cuda and x.dtype == torch.float16:
+            probs, indices = cutile_moe_router_topk(x, router_weight, top_k=self.top_k)
+        else:
+            logits = torch.matmul(x, router_weight.t())
+            probs, indices = fused_topk_gating(logits, top_k=self.top_k)
         return fused_moe_int4_gemm(
             x,
             expert_qweights,

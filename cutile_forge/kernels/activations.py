@@ -92,6 +92,57 @@ def gelu_forward_kernel(
     ct.store(y_ptr, index=(pid,), tile=ct.astype(out, y_ptr.dtype))
 
 
+@ct.kernel(occupancy=8)
+def quick_gelu_forward_kernel(
+    x_ptr,
+    y_ptr,
+    tile_n: ct.Constant[int],
+) -> None:
+    """Elementwise QuickGELU (`x * sigmoid(1.702 * x)`) forward in CuTile."""
+    pid = ct.bid(0)
+    x = ct.astype(
+        ct.load(
+            x_ptr,
+            index=(pid,),
+            shape=(tile_n,),
+            padding_mode=ct.PaddingMode.ZERO,
+            latency=4,
+        ),
+        ct.float32,
+    )
+    out = x / (1.0 + ct.exp(-1.702 * x))
+    ct.store(y_ptr, index=(pid,), tile=ct.astype(out, y_ptr.dtype))
+
+
+@ct.kernel(occupancy=8)
+def gelu_erf_forward_kernel(
+    x_ptr,
+    y_ptr,
+    tile_n: ct.Constant[int],
+) -> None:
+    """Exact erf-based GELU (`0.5 * x * (1 + erf(x / sqrt(2)))`) forward in CuTile."""
+    pid = ct.bid(0)
+    x = ct.astype(
+        ct.load(
+            x_ptr,
+            index=(pid,),
+            shape=(tile_n,),
+            padding_mode=ct.PaddingMode.ZERO,
+            latency=4,
+        ),
+        ct.float32,
+    )
+    z = ct.where(x >= 0.0, x, -x) * 0.7071067811865476
+    t = 1.0 / (1.0 + 0.3275911 * z)
+    poly = (
+        (((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592
+    ) * t
+    erf_abs = 1.0 - poly * ct.exp(-z * z)
+    erf_x = ct.where(x >= 0.0, erf_abs, -erf_abs)
+    out = 0.5 * x * (1.0 + erf_x)
+    ct.store(y_ptr, index=(pid,), tile=ct.astype(out, y_ptr.dtype))
+
+
 @ct.kernel(occupancy=4)
 def gelu_backward_kernel(
     dy_ptr,
@@ -253,6 +304,31 @@ def cutile_gelu(x: torch.Tensor) -> torch.Tensor:
         gelu_forward_kernel,
         (x_1d, y_1d, math.sqrt(2.0 / math.pi), tile_n),
     )
+    return y_1d.view(x.shape)
+
+
+def cutile_quick_gelu(x: torch.Tensor) -> torch.Tensor:
+    """Compute QuickGELU activation (`x * sigmoid(1.702 * x)`) via CuTile."""
+    if not x.is_cuda or x.dtype not in (torch.float16, torch.bfloat16, torch.float32):
+        xf = x.float()
+        return (xf * torch.sigmoid(1.702 * xf)).to(x.dtype)
+    x_1d = x.view(-1) if x.is_contiguous() else x.contiguous().view(-1)
+    y_1d = torch.empty_like(x_1d)
+    tile_n = _pick_tile_1d(x_1d.numel())
+    grid = (ct.cdiv(x_1d.numel(), tile_n), 1, 1)
+    ct.launch(torch.cuda.current_stream(), grid, quick_gelu_forward_kernel, (x_1d, y_1d, tile_n))
+    return y_1d.view(x.shape)
+
+
+def cutile_gelu_erf(x: torch.Tensor) -> torch.Tensor:
+    """Compute exact erf-based GELU (`approximate='none'`) via CuTile."""
+    if not x.is_cuda or x.dtype not in (torch.float16, torch.bfloat16, torch.float32):
+        return F.gelu(x.float(), approximate="none").to(x.dtype)
+    x_1d = x.view(-1) if x.is_contiguous() else x.contiguous().view(-1)
+    y_1d = torch.empty_like(x_1d)
+    tile_n = _pick_tile_1d(x_1d.numel())
+    grid = (ct.cdiv(x_1d.numel(), tile_n), 1, 1)
+    ct.launch(torch.cuda.current_stream(), grid, gelu_erf_forward_kernel, (x_1d, y_1d, tile_n))
     return y_1d.view(x.shape)
 
 

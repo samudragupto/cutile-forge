@@ -547,6 +547,9 @@ def fused_attention_gqa(
 
     bq = 16 if s_q <= 16 else 64
     bk = 64
+    d_pad = 1
+    while d_pad < d_head:
+        d_pad *= 2
 
     q_flat = q.contiguous().view(bsz * h_q, s_q, d_head)
     k_flat = k.contiguous().view(bsz * h_kv, s_kv, d_head)
@@ -571,7 +574,7 @@ def fused_attention_gqa(
             gqa_ratio,
             bq,
             bk,
-            d_head,
+            d_pad,
             1 if causal else 0,
         ),
     )

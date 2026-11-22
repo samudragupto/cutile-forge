@@ -18,11 +18,18 @@ import torch.nn.functional as F
 from cutile_forge.forge.fusion_graph import DataTensor, FusionGraph, OpType, TileNode
 from cutile_forge.forge.pass_manager import PassReport, default_pass_manager
 from cutile_forge.kernels import (
+    apply_rope,
+    cutile_conv2d,
+    cutile_gather,
     cutile_gelu,
+    cutile_gelu_erf,
     cutile_gemm_fp16,
     cutile_layernorm,
+    cutile_moe_router_topk,
+    cutile_quick_gelu,
     cutile_rmsnorm,
     cutile_silu,
+    fused_attention_gqa,
 )
 
 Modality = Literal["text", "vision", "audio", "multimodal", "diffusion"]
@@ -1092,7 +1099,7 @@ class UnifiedModelExecutor:
     def _layer_norm(
         self,
         x: torch.Tensor,
-        w: torch.Tensor,
+        w: torch.Tensor | None,
         b: torch.Tensor | None,
         eps: float,
         use_cutile: bool,
@@ -1100,8 +1107,23 @@ class UnifiedModelExecutor:
         if use_cutile and x.is_cuda and x.dtype == torch.float16:
             return cutile_layernorm(x, w, bias=b, eps=eps)
         return F.layer_norm(
-            x.float(), (x.shape[-1],), w.float(), b.float() if b is not None else None, eps
+            x.float(),
+            (x.shape[-1],),
+            w.float() if w is not None else None,
+            b.float() if b is not None else None,
+            eps,
         ).to(x.dtype)
+
+    def _embed_tokens(
+        self, ids: torch.Tensor, table: torch.Tensor, use_cutile: bool
+    ) -> torch.Tensor:
+        if (
+            use_cutile
+            and table.is_cuda
+            and table.dtype in (torch.float16, torch.bfloat16, torch.float32)
+        ):
+            return cutile_gather(table, ids)
+        return F.embedding(ids, table)
 
     def _linear(
         self, x: torch.Tensor, w: torch.Tensor, bias: torch.Tensor | None, use_cutile: bool
@@ -1124,17 +1146,61 @@ class UnifiedModelExecutor:
         return out.view(*shape_prefix, w.shape[-1])
 
     def _act(self, x: torch.Tensor, kind: str, use_cutile: bool) -> torch.Tensor:
+        if use_cutile and x.is_cuda and x.dtype in (torch.float16, torch.bfloat16, torch.float32):
+            if kind == "quick_gelu":
+                return cutile_quick_gelu(x)
+            if kind == "gelu_erf":
+                return cutile_gelu_erf(x)
+            return cutile_gelu(x) if kind == "gelu" else cutile_silu(x)
         if kind == "quick_gelu":
             return (x.float() * torch.sigmoid(1.702 * x.float())).to(x.dtype)
         if kind == "gelu_erf":
             return F.gelu(x.float(), approximate="none").to(x.dtype)
-        if use_cutile and x.is_cuda and x.dtype in (torch.float16, torch.bfloat16, torch.float32):
-            return cutile_gelu(x) if kind == "gelu" else cutile_silu(x)
         return (
             F.gelu(x.float(), approximate="tanh").to(x.dtype)
             if kind == "gelu"
             else F.silu(x.float()).to(x.dtype)
         )
+
+    def _patch_embed_tokens(
+        self,
+        pixel_values: torch.Tensor,
+        patch_w: torch.Tensor,
+        patch_b: torch.Tensor | None,
+        patch_size: int,
+        use_cutile: bool,
+    ) -> torch.Tensor:
+        bsz, c_in, h_in, w_in = pixel_values.shape
+        if (
+            use_cutile
+            and pixel_values.is_cuda
+            and pixel_values.dtype == torch.float16
+            and h_in % patch_size == 0
+            and w_in % patch_size == 0
+        ):
+            gh, gw = h_in // patch_size, w_in // patch_size
+            c_out = patch_w.shape[0]
+            k_dim = c_in * patch_size * patch_size
+            x_patches = (
+                pixel_values.view(bsz, c_in, gh, patch_size, gw, patch_size)
+                .permute(0, 2, 4, 1, 3, 5)
+                .reshape(bsz * gh * gw, k_dim)
+                .contiguous()
+            )
+            w_t = patch_w.view(c_out, k_dim).t().contiguous()
+            out = cutile_gemm_fp16(x_patches, w_t)
+            if patch_b is not None:
+                out = out + patch_b
+            return out.view(bsz, gh * gw, c_out)
+
+        patches = F.conv2d(
+            pixel_values.float(),
+            patch_w.float(),
+            bias=patch_b.float() if patch_b is not None else None,
+            stride=patch_size,
+            padding=0,
+        )
+        return patches.flatten(2).transpose(1, 2).to(pixel_values.dtype)
 
     def _run_vision_embed(
         self,
@@ -1144,14 +1210,9 @@ class UnifiedModelExecutor:
         use_cutile: bool = True,
     ) -> torch.Tensor:
         bsz = pixel_values.shape[0]
-        patches = F.conv2d(
-            pixel_values.float(),
-            vw["patch_w"].float(),
-            bias=vw["patch_b"].float() if vw.get("patch_b") is not None else None,
-            stride=vs.patch_size,
-            padding=0,
+        tokens = self._patch_embed_tokens(
+            pixel_values, vw["patch_w"], vw.get("patch_b"), vs.patch_size, use_cutile
         )
-        tokens = patches.flatten(2).transpose(1, 2).to(pixel_values.dtype)
         if vs.use_cls_token and "cls_token" in vw:
             cls = vw["cls_token"].expand(bsz, -1, -1)
             tokens = torch.cat([cls, tokens], dim=1)
@@ -1169,22 +1230,41 @@ class UnifiedModelExecutor:
         aw: dict[str, Any],
         use_cutile: bool = True,
     ) -> torch.Tensor:
-        c1 = F.conv1d(
-            mel_features.float(),
-            aw["conv1_w"].float(),
-            bias=aw["conv1_b"].float(),
-            stride=1,
-            padding=1,
-        ).to(mel_features.dtype)
-        a1 = self._act(c1.transpose(1, 2).contiguous(), "gelu", use_cutile).transpose(1, 2)
-        c2 = F.conv1d(
-            a1.float(),
-            aw["conv2_w"].float(),
-            bias=aw["conv2_b"].float(),
-            stride=2,
-            padding=1,
-        ).to(mel_features.dtype)
-        a2 = self._act(c2.transpose(1, 2).contiguous(), "gelu", use_cutile)
+        _ = ast
+        if use_cutile and mel_features.is_cuda and mel_features.dtype == torch.float16:
+            c1 = cutile_conv2d(
+                mel_features.unsqueeze(2),
+                aw["conv1_w"].unsqueeze(2),
+                bias=aw["conv1_b"],
+                stride=(1, 1),
+                padding=(0, 1),
+            ).squeeze(2)
+            a1 = self._act(c1.transpose(1, 2).contiguous(), "gelu", use_cutile).transpose(1, 2)
+            c2 = cutile_conv2d(
+                a1.unsqueeze(2),
+                aw["conv2_w"].unsqueeze(2),
+                bias=aw["conv2_b"],
+                stride=(1, 2),
+                padding=(0, 1),
+            ).squeeze(2)
+            a2 = self._act(c2.transpose(1, 2).contiguous(), "gelu", use_cutile)
+        else:
+            c1 = F.conv1d(
+                mel_features.float(),
+                aw["conv1_w"].float(),
+                bias=aw["conv1_b"].float(),
+                stride=1,
+                padding=1,
+            ).to(mel_features.dtype)
+            a1 = self._act(c1.transpose(1, 2).contiguous(), "gelu", use_cutile).transpose(1, 2)
+            c2 = F.conv1d(
+                a1.float(),
+                aw["conv2_w"].float(),
+                bias=aw["conv2_b"].float(),
+                stride=2,
+                padding=1,
+            ).to(mel_features.dtype)
+            a2 = self._act(c2.transpose(1, 2).contiguous(), "gelu", use_cutile)
         seq_len = a2.shape[1]
         return a2 + aw["pos_embed"][:seq_len, :].unsqueeze(0)
 
@@ -1214,7 +1294,9 @@ class UnifiedModelExecutor:
         )
         cond = self._linear(t_h, cond_weights["t_fc2_w"], cond_weights["t_fc2_b"], use_cutile)
         if class_labels is not None and "class_embed" in cond_weights:
-            cond = cond + F.embedding(class_labels.long(), cond_weights["class_embed"])
+            cond = cond + self._embed_tokens(
+                class_labels.long(), cond_weights["class_embed"], use_cutile
+            )
         return cond
 
     def _run_dit_block(
@@ -1237,20 +1319,25 @@ class UnifiedModelExecutor:
         mod = self._linear(t_act, bw["adaln_w"], bw["adaln_b"], use_cutile).unsqueeze(1)
         shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = mod.chunk(6, dim=-1)
 
-        ln1 = F.layer_norm(x.float(), (d,), eps=blk.layer_norm_eps).to(x.dtype)
+        ln1 = self._layer_norm(x, None, None, blk.layer_norm_eps, use_cutile)
         h1 = ln1 * (1.0 + scale_msa) + shift_msa
         qkv = self._linear(h1, bw["wqkv"], bw["bqkv"], use_cutile)
         q, k, v = qkv.view(bsz, seq_len, 3, blk.num_attention_heads, blk.head_dim).unbind(dim=2)
-        attn = F.scaled_dot_product_attention(
-            q.transpose(1, 2).float(),
-            k.transpose(1, 2).float(),
-            v.transpose(1, 2).float(),
-            is_causal=False,
-        ).to(x.dtype)
+        if use_cutile and x.is_cuda and x.dtype == torch.float16:
+            attn = fused_attention_gqa(
+                q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2), causal=False
+            )
+        else:
+            attn = F.scaled_dot_product_attention(
+                q.transpose(1, 2).float(),
+                k.transpose(1, 2).float(),
+                v.transpose(1, 2).float(),
+                is_causal=False,
+            ).to(x.dtype)
         attn_out = attn.transpose(1, 2).contiguous().view(bsz, seq_len, d)
         x = x + gate_msa * self._linear(attn_out, bw["wo"], bw["bo"], use_cutile)
 
-        ln2 = F.layer_norm(x.float(), (d,), eps=blk.layer_norm_eps).to(x.dtype)
+        ln2 = self._layer_norm(x, None, None, blk.layer_norm_eps, use_cutile)
         h2 = ln2 * (1.0 + scale_mlp) + shift_mlp
         mlp_h = self._act(
             self._linear(h2, bw["fc1_w"], bw["fc1_b"], use_cutile), "gelu", use_cutile
@@ -1271,9 +1358,12 @@ class UnifiedModelExecutor:
         q = q.transpose(1, 2)
         k = k.transpose(1, 2)
         v = v.transpose(1, 2)
-        attn = F.scaled_dot_product_attention(q.float(), k.float(), v.float(), is_causal=False).to(
-            x.dtype
-        )
+        if use_cutile and x.is_cuda and x.dtype == torch.float16:
+            attn = fused_attention_gqa(q, k, v, causal=False)
+        else:
+            attn = F.scaled_dot_product_attention(
+                q.float(), k.float(), v.float(), is_causal=False
+            ).to(x.dtype)
         attn_out = attn.transpose(1, 2).contiguous().view(bsz, seq_len, d)
         x = x + self._linear(attn_out, bw["wo"], bw["bo"], use_cutile)
 
@@ -1313,6 +1403,17 @@ class UnifiedModelExecutor:
             device=h.device,
             dtype=h.dtype,
         )
+        if use_cutile and h.is_cuda and h.dtype == torch.float16:
+            q4 = apply_rope(q4, cos, sin)
+            k4 = apply_rope(k4, cos, sin)
+            attn_out = fused_attention_gqa(
+                q4, k4, v4, causal=True, sliding_window=sliding_window or 0
+            )
+            attn_flat = (
+                attn_out.transpose(1, 2).contiguous().view(bsz, seq_len, num_heads * head_dim)
+            )
+            return self._linear(attn_flat, bw["wo"], None, use_cutile)
+
         rotary_style = str(self.graph.metadata.get("rotary_style", "interleaved"))
         q4 = _apply_rope_torch(q4, cos, sin, rotary_style=rotary_style)
         k4 = _apply_rope_torch(k4, cos, sin, rotary_style=rotary_style)
@@ -1350,7 +1451,7 @@ class UnifiedModelExecutor:
         if isinstance(g.input_stage, TextEmbeddingStage):
             if input_ids is None:
                 raise ValueError("input_ids required for text model")
-            hidden = F.embedding(input_ids, weights["embed_tokens"])
+            hidden = self._embed_tokens(input_ids, weights["embed_tokens"], use_cutile)
         elif isinstance(g.input_stage, VisionPatchEmbedStage):
             if pixel_values is None:
                 raise ValueError("pixel_values required for vision model")
@@ -1368,14 +1469,16 @@ class UnifiedModelExecutor:
             if pixel_values is None:
                 raise ValueError("pixel_values (latents) required for diffusion model")
             dw = weights["diffusion_embed"]
-            patches = F.conv2d(
-                pixel_values.float(),
-                dw["patch_w"].float(),
-                bias=dw["patch_b"].float(),
-                stride=g.input_stage.patch_size,
-                padding=0,
+            hidden = (
+                self._patch_embed_tokens(
+                    pixel_values,
+                    dw["patch_w"],
+                    dw.get("patch_b"),
+                    g.input_stage.patch_size,
+                    use_cutile,
+                )
+                + dw["pos_embed"]
             )
-            hidden = patches.flatten(2).transpose(1, 2).to(pixel_values.dtype) + dw["pos_embed"]
             ts = (
                 timesteps
                 if timesteps is not None
@@ -1421,7 +1524,7 @@ class UnifiedModelExecutor:
                 proj["fc2_b"],
                 use_cutile,
             )
-            txt_h = F.embedding(input_ids, weights["embed_tokens"])
+            txt_h = self._embed_tokens(input_ids, weights["embed_tokens"], use_cutile)
             img_tok_id = proj.get("image_token_index")
             if img_tok_id is not None and bool((input_ids == int(img_tok_id)).any()):
                 img_mask = input_ids == int(img_tok_id)
@@ -1500,9 +1603,14 @@ class UnifiedModelExecutor:
                 h_moe = self._rms_norm(hidden, bw["post_norm_w"], blk.rms_norm_eps, use_cutile)
                 bsz_m, seq_m, d_m = h_moe.shape
                 h_flat = h_moe.view(-1, d_m)
-                router_logits = torch.matmul(h_flat.float(), bw["router"].float())
-                topk_vals, topk_idx = torch.topk(router_logits, k=blk.top_k_experts, dim=-1)
-                topk_w = torch.softmax(topk_vals, dim=-1).to(h_moe.dtype)
+                if use_cutile and h_flat.is_cuda and h_flat.dtype == torch.float16:
+                    topk_w, topk_idx = cutile_moe_router_topk(
+                        h_flat, bw["router"].t().contiguous(), top_k=blk.top_k_experts
+                    )
+                else:
+                    router_logits = torch.matmul(h_flat.float(), bw["router"].float())
+                    topk_vals, topk_idx = torch.topk(router_logits, k=blk.top_k_experts, dim=-1)
+                    topk_w = torch.softmax(topk_vals, dim=-1).to(h_moe.dtype)
 
                 moe_acc = torch.zeros_like(h_flat, dtype=torch.float32)
                 ep_parts = max(1, blk.ep_partitions)
@@ -1597,6 +1705,8 @@ class UnifiedModelExecutor:
                 pooled = hidden.mean(dim=1)
             else:
                 return hidden
+            if "cls_w" not in weights:
+                return pooled
             return self._linear(pooled, weights["cls_w"], weights.get("cls_b"), use_cutile)
 
         if isinstance(g.output_stage, EncoderOutputStage):
@@ -1611,16 +1721,13 @@ class UnifiedModelExecutor:
         if isinstance(g.output_stage, DiffusionOutputStage):
             if t_cond is None:
                 raise ValueError("DiffusionOutputStage requires timestep conditioning")
-            d_out = g.output_stage.hidden_size
             t_act = self._act(t_cond, "silu", use_cutile)
             shift_out, scale_out = (
                 self._linear(t_act, weights["adaln_out_w"], weights["adaln_out_b"], use_cutile)
                 .unsqueeze(1)
                 .chunk(2, dim=-1)
             )
-            ln_out = F.layer_norm(hidden.float(), (d_out,), eps=g.output_stage.layer_norm_eps).to(
-                hidden.dtype
-            )
+            ln_out = self._layer_norm(hidden, None, None, g.output_stage.layer_norm_eps, use_cutile)
             h_mod = ln_out * (1.0 + scale_out) + shift_out
             patches_out = self._linear(
                 h_mod, weights["proj_out_w"], weights["proj_out_b"], use_cutile

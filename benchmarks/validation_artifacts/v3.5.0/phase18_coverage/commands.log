@@ -1,0 +1,1 @@
+benchmarks/production/bench_phase18_coverage.py --regress-json benchmarks/validation_artifacts/v3.5.0/phase18_regression/regress_full.json --output benchmarks/validation_artifacts/v3.5.0/phase18_coverage

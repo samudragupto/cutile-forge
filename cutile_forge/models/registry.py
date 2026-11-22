@@ -322,12 +322,24 @@ def get_model_spec(name: str) -> ModelSpec:
     )
 
 
+def _normalize_hf_rope_config(config: dict[str, Any]) -> dict[str, Any]:
+    out = dict(config)
+    rp = out.get("rope_parameters")
+    if isinstance(rp, dict):
+        if out.get("rope_theta") is None and rp.get("rope_theta") is not None:
+            out["rope_theta"] = rp["rope_theta"]
+        if out.get("rope_scaling") is None and rp.get("rope_type") not in (None, "default"):
+            out["rope_scaling"] = dict(rp)
+    return out
+
+
 def _resolve_registry_key(config: dict[str, Any], name: str | None = None) -> str:
     if name is not None:
         return get_model_spec(name).key
-    model_type = str(config.get("model_type", "mistral")).strip().lower().replace("-", "_")
+    norm_cfg = _normalize_hf_rope_config(config)
+    model_type = str(norm_cfg.get("model_type", "mistral")).strip().lower().replace("-", "_")
     if model_type == "llama":
-        if config.get("rope_scaling") or float(config.get("rope_theta", 10000.0)) >= 100000.0:
+        if norm_cfg.get("rope_scaling") or float(norm_cfg.get("rope_theta") or 10000.0) >= 100000.0:
             return "llama3"
         return "llama"
     if model_type in MODEL_REGISTRY:
@@ -340,9 +352,13 @@ def _resolve_registry_key(config: dict[str, Any], name: str | None = None) -> st
 
 def from_hf_config(config: dict[str, Any], name: str | None = None) -> UnifiedModelGraph:
     """Construct a `UnifiedModelGraph` from a HuggingFace-style config dict."""
-    key = _resolve_registry_key(config, name=name)
+    norm_cfg = _normalize_hf_rope_config(config)
+    key = _resolve_registry_key(norm_cfg, name=name)
     spec = MODEL_REGISTRY[key]
-    merged: dict[str, Any] = {**spec.default_config, **config}
+    merged: dict[str, Any] = {**spec.default_config}
+    for k_c, v_c in norm_cfg.items():
+        if v_c is not None:
+            merged[k_c] = v_c
 
     if spec.modality == "vision":
         d = int(merged["hidden_size"])
@@ -362,6 +378,12 @@ def from_hf_config(config: dict[str, Any], name: str | None = None) -> UnifiedMo
             pre_layer_norm=pre_ln,
             layer_norm_eps=eps,
         )
+        raw_act = str(merged.get("hidden_act", "gelu")).lower()
+        vis_act: Literal["gelu", "silu", "quick_gelu", "gelu_erf"] = (
+            "quick_gelu"
+            if raw_act == "quick_gelu"
+            else ("gelu_erf" if (key == "vit" and raw_act == "gelu") else "gelu")
+        )
         blocks: list[BlockStage] = [
             ViTEncoderBlock(
                 hidden_size=d,
@@ -369,6 +391,7 @@ def from_hf_config(config: dict[str, Any], name: str | None = None) -> UnifiedMo
                 num_attention_heads=n_heads,
                 head_dim=head_dim,
                 layer_norm_eps=eps,
+                activation=vis_act,
             )
             for _ in range(n_layers)
         ]

@@ -1,0 +1,179 @@
+{
+  "tier": "full",
+  "commit": "f56f5db82c8010956c4936cb0f631b8c4b17a54d",
+  "hardware_id": "NVIDIA GeForce RTX 5090 (sm_120)",
+  "contended": false,
+  "timestamp_utc": "2026-11-22T09:20:45.421350+00:00",
+  "results": [
+    {
+      "category": "Dense decoder",
+      "model": "Mistral-7B",
+      "checkpoint": "/home/arrhat/models/mistral_7b_4bit",
+      "reference_impl": "Mistral7B(backend='pytorch', GPTQ-32L)",
+      "layers_evaluated": 32,
+      "status": "FAIL",
+      "weight_source": "real-checkpoint",
+      "native_execution": true,
+      "failing_check": "cos=1.000000,greedy=4/5",
+      "metrics": {
+        "logit_cos_sim": 1.0,
+        "max_abs_diff": 0.0244,
+        "ppl_cutile": 5.1475,
+        "ppl_ref": 5.1473,
+        "ppl_tokens": 512,
+        "greedy_exact_matches": 4,
+        "greedy_total_prompts": 5,
+        "greedy_tokens_per_prompt": 256,
+        "greedy_tok_match_pct": 99.84,
+        "decode_med_tok_s": 169.96,
+        "decode_min_tok_s": 167.13,
+        "decode_max_tok_s": 170.14
+      },
+      "notes": "NativeModelRuntime zero-ATen CUDA Graph decode + SWA=4096"
+    },
+    {
+      "category": "Small decoder",
+      "model": "Qwen2.5-0.5B",
+      "checkpoint": "Qwen/Qwen2.5-0.5B",
+      "reference_impl": "transformers==5.23.0 (AutoModelForCausalLM)",
+      "layers_evaluated": 24,
+      "status": "FAIL",
+      "weight_source": "real-checkpoint",
+      "native_execution": true,
+      "failing_check": "cos=True,ppl=True,greedy=False",
+      "metrics": {
+        "logit_cos_sim": 0.999997,
+        "max_abs_diff": 0.0366,
+        "ppl_cutile": 12.9381,
+        "ppl_ref": 12.9413,
+        "ppl_tokens": 492,
+        "greedy_exact_matches": 4,
+        "greedy_total_prompts": 5,
+        "greedy_tokens_per_prompt": 256,
+        "greedy_tok_match_pct": 99.92,
+        "prefill_512_med_ms": 10.66
+      },
+      "notes": "UnifiedModelExecutor executes native CuTile FlashAttention + RoPE + GEMM + RMSNorm + SiLU"
+    },
+    {
+      "category": "MoE",
+      "model": "Mixtral-8x7B",
+      "checkpoint": "/var/tmp/arrhat_models/mixtral_8x7b_4bit",
+      "reference_impl": "Mistral7B(backend='pytorch', 32L)",
+      "layers_evaluated": 32,
+      "status": "FAIL",
+      "weight_source": "real-checkpoint",
+      "native_execution": true,
+      "failing_check": "cos=0.999994,greedy=0/5",
+      "metrics": {
+        "logit_cos_sim": 0.999994,
+        "max_abs_diff": 0.0547,
+        "ppl_cutile": 4.3437,
+        "ppl_ref": 4.3447,
+        "ppl_tokens": 512,
+        "greedy_exact_matches": 0,
+        "greedy_total_prompts": 5,
+        "greedy_tokens_per_prompt": 256,
+        "greedy_tok_match_pct": 99.22,
+        "decode_med_tok_s": 43.69,
+        "decode_min_tok_s": 43.01,
+        "decode_max_tok_s": 44.32
+      },
+      "notes": "32L HBM GPTQ + native CuTile cutile_moe_router_topk"
+    },
+    {
+      "category": "Vision",
+      "model": "SigLIP ViT-B/16",
+      "checkpoint": "google/siglip-base-patch16-224",
+      "reference_impl": "transformers==5.23.0 (SiglipVisionModel)",
+      "layers_evaluated": 12,
+      "status": "FAIL",
+      "weight_source": "real-checkpoint",
+      "native_execution": true,
+      "failing_check": "emb_cos=0.999979,max_diff=0.1250",
+      "metrics": {
+        "emb_cos_sim": 0.999979,
+        "max_abs_diff": 0.125
+      },
+      "notes": "UnifiedModelExecutor executes native CuTile patch GEMM, LayerNorm, bidirectional FlashAttention, GELU"
+    },
+    {
+      "category": "Audio",
+      "model": "Whisper-Tiny",
+      "checkpoint": "openai/whisper-tiny",
+      "reference_impl": "transformers==5.23.0 (WhisperModel.encoder)",
+      "layers_evaluated": 4,
+      "status": "FAIL",
+      "weight_source": "real-checkpoint",
+      "native_execution": true,
+      "failing_check": "emb_cos=0.999991,max_diff=0.5234",
+      "metrics": {
+        "emb_cos_sim": 0.999991,
+        "max_abs_diff": 0.52344
+      },
+      "notes": "UnifiedModelExecutor executes native CuTile Conv1d(via cutile_conv2d), LayerNorm, bidirectional FlashAttention, GELU"
+    },
+    {
+      "category": "Multimodal",
+      "model": "LLaVA-1.5",
+      "checkpoint": "llava-hf/llava-1.5-7b-hf",
+      "reference_impl": "transformers==5.23.0 (LlavaForConditionalGeneration)",
+      "layers_evaluated": 55,
+      "status": "PASS",
+      "weight_source": "real-checkpoint",
+      "native_execution": true,
+      "failing_check": null,
+      "metrics": {
+        "logit_cos_sim": 1.0,
+        "max_abs_diff": 0.0156,
+        "greedy_exact_matches": 1,
+        "greedy_total_prompts": 1,
+        "greedy_tokens_per_prompt": 16,
+        "greedy_tok_match_pct": 100.0
+      },
+      "notes": "UnifiedModelExecutor executes native CuTile CLIP ViT + QuickGELU + 2L GELU proj + 32L Llama attention/MLP"
+    },
+    {
+      "category": "Diffusion",
+      "model": "DiT-XL/2",
+      "checkpoint": "facebook/DiT-XL-2-256",
+      "reference_impl": "diffusers==0.43.0 (DiTTransformer2DModel)",
+      "layers_evaluated": 28,
+      "status": "FAIL",
+      "weight_source": "real-checkpoint",
+      "native_execution": true,
+      "failing_check": "cos=0.997016,max_diff=0.0591",
+      "metrics": {
+        "output_cos_sim": 0.997016,
+        "max_abs_diff": 0.05908
+      },
+      "notes": "User-approved DiT-XL/2-256; UnifiedModelExecutor executes native CuTile LayerNorm, patch GEMM, d=72 FlashAttention"
+    },
+    {
+      "category": "Large decoder",
+      "model": "Llama-2-70B",
+      "checkpoint": "/var/tmp/arrhat_models/llama_70b_4bit",
+      "reference_impl": "Mistral7B(backend='pytorch', 80L)",
+      "layers_evaluated": 80,
+      "status": "FAIL",
+      "weight_source": "real-checkpoint",
+      "native_execution": true,
+      "failing_check": "cos=0.999998,greedy=4/5",
+      "metrics": {
+        "logit_cos_sim": 0.999998,
+        "max_abs_diff": 0.0254,
+        "ppl_cutile": 4.8154,
+        "ppl_ref": 4.8143,
+        "ppl_tokens": 512,
+        "greedy_exact_matches": 4,
+        "greedy_total_prompts": 5,
+        "greedy_tokens_per_prompt": 256,
+        "greedy_tok_match_pct": 99.92,
+        "decode_med_tok_s": 3.88,
+        "decode_min_tok_s": 3.88,
+        "decode_max_tok_s": 3.89
+      },
+      "notes": "80L GPTQ Stage -1 PCIe streaming (55 HBM + 25 DDR5)"
+    }
+  ]
+}

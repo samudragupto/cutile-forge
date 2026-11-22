@@ -43,7 +43,34 @@ def layernorm_kernel(
     normed = diff * inv_std
 
     out = normed * ct.reshape(w, (1, d_pad)) + ct.reshape(b, (1, d_pad))
-    ct.store(y_ptr, index=(row, 0), tile=ct.astype(out, ct.float16))
+    ct.store(y_ptr, index=(row, 0), tile=ct.astype(out, y_ptr.dtype))
+
+
+@ct.kernel(occupancy=2)
+def layernorm_noaffine_kernel(
+    x_ptr,
+    y_ptr,
+    eps: float,
+    inv_d: float,
+    d_model: int,
+    d_pad: ct.Constant[int],
+) -> None:
+    """Row-wise LayerNorm without affine weight/bias (e.g. DiT AdaLN-Zero base norm)."""
+    row = ct.bid(0)
+    x = ct.astype(
+        ct.load(x_ptr, index=(row, 0), shape=(1, d_pad), padding_mode=ct.PaddingMode.ZERO),
+        ct.float32,
+    )
+    col_idx = ct.reshape(ct.arange(d_pad, dtype=ct.int32), (1, d_pad))
+    valid = col_idx < d_model
+    x_valid = ct.where(valid, x, 0.0)
+
+    mean = ct.sum(x_valid, axis=1, keepdims=True) * inv_d
+    diff = ct.where(valid, x_valid - mean, 0.0)
+    var = ct.sum(diff * diff, axis=1, keepdims=True) * inv_d
+    inv_std = ct.rsqrt(var + eps)
+    normed = diff * inv_std
+    ct.store(y_ptr, index=(row, 0), tile=ct.astype(normed, y_ptr.dtype))
 
 
 def _next_pow2(n: int) -> int:
@@ -55,28 +82,51 @@ def _next_pow2(n: int) -> int:
 
 def cutile_layernorm(
     x: torch.Tensor,
-    weight: torch.Tensor,
+    weight: torch.Tensor | None = None,
     bias: torch.Tensor | None = None,
     eps: float = 1e-5,
 ) -> torch.Tensor:
-    """Compute LayerNorm over the last dimension using CuTile."""
+    """Compute LayerNorm over the last dimension using CuTile (weight/bias optional)."""
     orig_shape = x.shape
     d_model = orig_shape[-1]
+    if not x.is_cuda or x.dtype not in (torch.float16, torch.bfloat16, torch.float32):
+        return torch.nn.functional.layer_norm(
+            x.float(),
+            (d_model,),
+            weight=weight.float() if weight is not None else None,
+            bias=bias.float() if bias is not None else None,
+            eps=eps,
+        ).to(x.dtype)
+
     x_2d = x.contiguous().view(-1, d_model)
     rows = x_2d.shape[0]
     d_pad = _next_pow2(d_model)
+    y_2d = torch.empty_like(x_2d)
 
+    if weight is None and bias is None:
+        ct.launch(
+            torch.cuda.current_stream(),
+            (rows, 1, 1),
+            layernorm_noaffine_kernel,
+            (x_2d, y_2d, float(eps), 1.0 / d_model, int(d_model), d_pad),
+        )
+        return y_2d.view(orig_shape)
+
+    w_tensor = (
+        weight.contiguous()
+        if weight is not None
+        else torch.ones(d_model, device=x.device, dtype=x.dtype)
+    )
     b_tensor = (
         bias.contiguous()
         if bias is not None
         else torch.zeros(d_model, device=x.device, dtype=x.dtype)
     )
-    y_2d = torch.empty_like(x_2d)
 
     ct.launch(
         torch.cuda.current_stream(),
         (rows, 1, 1),
         layernorm_kernel,
-        (x_2d, weight.contiguous(), b_tensor, y_2d, float(eps), 1.0 / d_model, int(d_model), d_pad),
+        (x_2d, w_tensor, b_tensor, y_2d, float(eps), 1.0 / d_model, int(d_model), d_pad),
     )
     return y_2d.view(orig_shape)

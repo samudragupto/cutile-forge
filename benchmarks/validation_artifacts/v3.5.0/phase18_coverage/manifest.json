@@ -1,0 +1,178 @@
+{
+  "schema_version": "1.0.0",
+  "run_id": "phase18-model-coverage",
+  "cutile_forge_version": "3.5.0",
+  "git_commit": "f56f5db82c8010956c4936cb0f631b8c4b17a54d",
+  "dirty_worktree": true,
+  "dirty_diff_sha256": "34d49a8f0e11ddd2ee2973958f99e32195e857d7a3c65927a311e5ccd69517bb",
+  "utc_start": "2026-11-22T09:29:30.734425+00:00",
+  "utc_end": "2026-11-22T09:29:38.697947+00:00",
+  "environment": {
+    "hostname": "prashant-lab",
+    "os": "Linux 7.0.0-43-generic",
+    "kernel": "#43~24.04.1-Ubuntu SMP PREEMPT_DYNAMIC Sat Oct 31 06:52:47 UTC 2",
+    "cpu_model": "Intel(R) Core(TM) Ultra 9 285K",
+    "ram_gb": 62.26,
+    "gpu_name": "NVIDIA GeForce RTX 5090",
+    "gpu_count": 1,
+    "compute_capability": "sm_120",
+    "vram_gb": 31.35,
+    "nvidia_driver": "595.58.03",
+    "cuda_runtime": "13.2",
+    "torch_version": "2.15.0+cu132",
+    "cutile_version": "1.8.1",
+    "python_version": "3.12.3",
+    "dependencies": {
+      "numpy": "2.5.5",
+      "transformers": "5.23.0",
+      "tokenizers": "0.23.3",
+      "safetensors": "0.8.0",
+      "huggingface-hub": "2.4.0",
+      "gguf": "0.19.0",
+      "fastapi": "0.165.0",
+      "uvicorn": "0.54.0",
+      "httpx": "0.28.1",
+      "nvidia-ml-py": "not-installed"
+    },
+    "nvml_available": false,
+    "gpu_temp_c": null,
+    "gpu_power_w": null
+  },
+  "env_vars": {
+    "CUTILE_ARCH": "sm_120",
+    "HF_HOME": "/var/tmp/arrhat_models/hf_cache"
+  },
+  "command": "benchmarks/production/bench_phase18_coverage.py --regress-json benchmarks/validation_artifacts/v3.5.0/phase18_regression/regress_full.json --output benchmarks/validation_artifacts/v3.5.0/phase18_coverage",
+  "cwd": "/home/arrhat/cutile-forge",
+  "checkpoint": {
+    "model_id": "phase18-13-family-coverage",
+    "local_path": "unsloth/Llama-3.2-1B-Instruct",
+    "revision": null,
+    "files": [],
+    "total_bytes": 0,
+    "sha256_manifest": {}
+  },
+  "quant_config": {
+    "quant_format": "fp16_and_gptq_int4",
+    "group_size": null,
+    "desc_act": null,
+    "kv_dtype": "fp16",
+    "mixed_precision": {},
+    "disk_format": null,
+    "kernel_format": null
+  },
+  "prompt_ids_or_checksum": "e790b9f012365c2232d3102c703fa108dd4d93db583a7241ecb8e7d4ac34f6dc",
+  "workload": {
+    "batch_size": 1,
+    "concurrency": 1,
+    "prompt_len": 64,
+    "output_len": 32,
+    "temperature": 0.0,
+    "seed": 42,
+    "warmup_iters": 0,
+    "measured_iters": 1,
+    "sync_method": "torch.cuda.synchronize"
+  },
+  "contention_before": {
+    "timestamp_utc": "2026-11-22T09:29:30.836709+00:00",
+    "contended": false,
+    "compute_apps": [],
+    "query_error": null
+  },
+  "contention_after": {
+    "timestamp_utc": "2026-11-22T09:29:38.697954+00:00",
+    "contended": false,
+    "compute_apps": [
+      {
+        "pid": "1056419",
+        "used_memory": "690 MiB"
+      }
+    ],
+    "query_error": null
+  },
+  "execution_mode": "real-checkpoint",
+  "reproduction_status": "MEASURED",
+  "notes": "",
+  "records": [
+    {
+      "stage": "new_real_checkpoint",
+      "family": "llama3",
+      "checkpoint": "unsloth/Llama-3.2-1B-Instruct",
+      "reference": "transformers==5.23.0",
+      "layers": 16,
+      "status": "PASS",
+      "native_execution": true,
+      "forbidden_aten_calls": 0,
+      "weight_source": "real-checkpoint",
+      "metrics": {
+        "min_logit_cos_sim": 0.999996,
+        "max_abs_diff": 0.03125,
+        "greedy_exact_prompts": "5/5",
+        "greedy_tok_match_pct": 100.0
+      },
+      "notes": "16L scaled Llama-3 RoPE all-layer native CuTile execution"
+    },
+    {
+      "stage": "new_real_checkpoint",
+      "family": "vit",
+      "checkpoint": "google/vit-base-patch16-224",
+      "reference": "transformers==5.23.0",
+      "layers": 12,
+      "status": "PASS",
+      "native_execution": true,
+      "forbidden_aten_calls": 0,
+      "weight_source": "real-checkpoint",
+      "metrics": {
+        "cls_logit_cos_sim": 1.0,
+        "max_abs_diff": 0.00391
+      },
+      "notes": "12L ViT-B/16 native patch GEMM, LayerNorm, bidirectional FlashAttention, exact erf-GELU"
+    },
+    {
+      "stage": "new_real_checkpoint",
+      "family": "clip_vision",
+      "checkpoint": "openai/clip-vit-base-patch32",
+      "reference": "transformers==5.23.0",
+      "layers": 12,
+      "status": "PASS",
+      "native_execution": true,
+      "forbidden_aten_calls": 0,
+      "weight_source": "real-checkpoint",
+      "metrics": {
+        "pooler_cos_sim": 0.999989,
+        "max_abs_diff": 0.03711
+      },
+      "notes": "12L CLIP-ViT-B/32 native patch GEMM, pre/post LayerNorm, QuickGELU, FlashAttention"
+    },
+    {
+      "stage": "synthetic_only",
+      "family": "qwen2_moe",
+      "checkpoint": "synthetic-weights",
+      "reference": "UnifiedModelExecutor(use_cutile=False)",
+      "layers": 2,
+      "status": "SYNTHETIC-ONLY",
+      "native_execution": true,
+      "forbidden_aten_calls": 0,
+      "weight_source": "synthetic-weights",
+      "metrics": {
+        "forbidden_aten_calls": 0
+      },
+      "notes": "No <16 GB ungated FP16 checkpoint fits side-by-side in 32 GB VRAM for reference comparison"
+    },
+    {
+      "stage": "synthetic_only",
+      "family": "deepseek_moe",
+      "checkpoint": "synthetic-weights",
+      "reference": "UnifiedModelExecutor(use_cutile=False)",
+      "layers": 2,
+      "status": "SYNTHETIC-ONLY",
+      "native_execution": true,
+      "forbidden_aten_calls": 0,
+      "weight_source": "synthetic-weights",
+      "metrics": {
+        "forbidden_aten_calls": 0
+      },
+      "notes": "No <16 GB ungated FP16 checkpoint fits side-by-side in 32 GB VRAM for reference comparison"
+    }
+  ]
+}

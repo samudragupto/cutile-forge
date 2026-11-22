@@ -1,0 +1,217 @@
+{
+  "git_commit": "f56f5db82c8010956c4936cb0f631b8c4b17a54d",
+  "contended": false,
+  "matrix": [
+    {
+      "family": "clip_vision",
+      "modality": "vision",
+      "checkpoint": "openai/clip-vit-base-patch32",
+      "weight_source": "real-checkpoint",
+      "native_execution": true,
+      "status": "PASS",
+      "key_metrics": {
+        "pooler_cos_sim": 0.999989,
+        "max_abs_diff": 0.03711
+      },
+      "notes": "12L CLIP-ViT-B/32 native patch GEMM, pre/post LayerNorm, QuickGELU, FlashAttention"
+    },
+    {
+      "family": "deepseek_moe",
+      "modality": "text",
+      "checkpoint": "synthetic-weights",
+      "weight_source": "synthetic-weights",
+      "native_execution": true,
+      "status": "SYNTHETIC-ONLY",
+      "key_metrics": {
+        "forbidden_aten_calls": 0
+      },
+      "notes": "No <16 GB ungated FP16 checkpoint fits side-by-side in 32 GB VRAM for reference comparison"
+    },
+    {
+      "family": "dit",
+      "modality": "diffusion",
+      "checkpoint": "facebook/DiT-XL-2-256",
+      "weight_source": "real-checkpoint",
+      "native_execution": true,
+      "status": "FAIL",
+      "key_metrics": {
+        "output_cos_sim": 0.997016,
+        "max_abs_diff": 0.05908
+      },
+      "notes": "User-approved DiT-XL/2-256; UnifiedModelExecutor executes native CuTile LayerNorm, patch GEMM, d=72 FlashAttention"
+    },
+    {
+      "family": "llama",
+      "modality": "text",
+      "checkpoint": "/var/tmp/arrhat_models/llama_70b_4bit",
+      "weight_source": "real-checkpoint",
+      "native_execution": true,
+      "status": "FAIL",
+      "key_metrics": {
+        "logit_cos_sim": 0.999998,
+        "max_abs_diff": 0.0254,
+        "ppl_cutile": 4.8154,
+        "ppl_ref": 4.8143,
+        "ppl_tokens": 512,
+        "greedy_exact_matches": 4,
+        "greedy_total_prompts": 5,
+        "greedy_tokens_per_prompt": 256,
+        "greedy_tok_match_pct": 99.92,
+        "decode_med_tok_s": 3.88,
+        "decode_min_tok_s": 3.88,
+        "decode_max_tok_s": 3.89
+      },
+      "notes": "80L GPTQ Stage -1 PCIe streaming (55 HBM + 25 DDR5)"
+    },
+    {
+      "family": "llama3",
+      "modality": "text",
+      "checkpoint": "unsloth/Llama-3.2-1B-Instruct",
+      "weight_source": "real-checkpoint",
+      "native_execution": true,
+      "status": "PASS",
+      "key_metrics": {
+        "min_logit_cos_sim": 0.999996,
+        "max_abs_diff": 0.03125,
+        "greedy_exact_prompts": "5/5",
+        "greedy_tok_match_pct": 100.0
+      },
+      "notes": "16L scaled Llama-3 RoPE all-layer native CuTile execution"
+    },
+    {
+      "family": "llava",
+      "modality": "multimodal",
+      "checkpoint": "llava-hf/llava-1.5-7b-hf",
+      "weight_source": "real-checkpoint",
+      "native_execution": true,
+      "status": "PASS",
+      "key_metrics": {
+        "logit_cos_sim": 1.0,
+        "max_abs_diff": 0.0156,
+        "greedy_exact_matches": 1,
+        "greedy_total_prompts": 1,
+        "greedy_tokens_per_prompt": 16,
+        "greedy_tok_match_pct": 100.0
+      },
+      "notes": "UnifiedModelExecutor executes native CuTile CLIP ViT + QuickGELU + 2L GELU proj + 32L Llama attention/MLP"
+    },
+    {
+      "family": "mistral",
+      "modality": "text",
+      "checkpoint": "/home/arrhat/models/mistral_7b_4bit",
+      "weight_source": "real-checkpoint",
+      "native_execution": true,
+      "status": "FAIL",
+      "key_metrics": {
+        "logit_cos_sim": 1.0,
+        "max_abs_diff": 0.0244,
+        "ppl_cutile": 5.1475,
+        "ppl_ref": 5.1473,
+        "ppl_tokens": 512,
+        "greedy_exact_matches": 4,
+        "greedy_total_prompts": 5,
+        "greedy_tokens_per_prompt": 256,
+        "greedy_tok_match_pct": 99.84,
+        "decode_med_tok_s": 169.96,
+        "decode_min_tok_s": 167.13,
+        "decode_max_tok_s": 170.14
+      },
+      "notes": "NativeModelRuntime zero-ATen CUDA Graph decode + SWA=4096"
+    },
+    {
+      "family": "mixtral",
+      "modality": "text",
+      "checkpoint": "/var/tmp/arrhat_models/mixtral_8x7b_4bit",
+      "weight_source": "real-checkpoint",
+      "native_execution": true,
+      "status": "FAIL",
+      "key_metrics": {
+        "logit_cos_sim": 0.999994,
+        "max_abs_diff": 0.0547,
+        "ppl_cutile": 4.3437,
+        "ppl_ref": 4.3447,
+        "ppl_tokens": 512,
+        "greedy_exact_matches": 0,
+        "greedy_total_prompts": 5,
+        "greedy_tokens_per_prompt": 256,
+        "greedy_tok_match_pct": 99.22,
+        "decode_med_tok_s": 43.69,
+        "decode_min_tok_s": 43.01,
+        "decode_max_tok_s": 44.32
+      },
+      "notes": "32L HBM GPTQ + native CuTile cutile_moe_router_topk"
+    },
+    {
+      "family": "qwen2",
+      "modality": "text",
+      "checkpoint": "Qwen/Qwen2.5-0.5B",
+      "weight_source": "real-checkpoint",
+      "native_execution": true,
+      "status": "FAIL",
+      "key_metrics": {
+        "logit_cos_sim": 0.999997,
+        "max_abs_diff": 0.0366,
+        "ppl_cutile": 12.9381,
+        "ppl_ref": 12.9413,
+        "ppl_tokens": 492,
+        "greedy_exact_matches": 4,
+        "greedy_total_prompts": 5,
+        "greedy_tokens_per_prompt": 256,
+        "greedy_tok_match_pct": 99.92,
+        "prefill_512_med_ms": 10.66
+      },
+      "notes": "UnifiedModelExecutor executes native CuTile FlashAttention + RoPE + GEMM + RMSNorm + SiLU"
+    },
+    {
+      "family": "qwen2_moe",
+      "modality": "text",
+      "checkpoint": "synthetic-weights",
+      "weight_source": "synthetic-weights",
+      "native_execution": true,
+      "status": "SYNTHETIC-ONLY",
+      "key_metrics": {
+        "forbidden_aten_calls": 0
+      },
+      "notes": "No <16 GB ungated FP16 checkpoint fits side-by-side in 32 GB VRAM for reference comparison"
+    },
+    {
+      "family": "siglip_vision",
+      "modality": "vision",
+      "checkpoint": "google/siglip-base-patch16-224",
+      "weight_source": "real-checkpoint",
+      "native_execution": true,
+      "status": "FAIL",
+      "key_metrics": {
+        "emb_cos_sim": 0.999979,
+        "max_abs_diff": 0.125
+      },
+      "notes": "UnifiedModelExecutor executes native CuTile patch GEMM, LayerNorm, bidirectional FlashAttention, GELU"
+    },
+    {
+      "family": "vit",
+      "modality": "vision",
+      "checkpoint": "google/vit-base-patch16-224",
+      "weight_source": "real-checkpoint",
+      "native_execution": true,
+      "status": "PASS",
+      "key_metrics": {
+        "cls_logit_cos_sim": 1.0,
+        "max_abs_diff": 0.00391
+      },
+      "notes": "12L ViT-B/16 native patch GEMM, LayerNorm, bidirectional FlashAttention, exact erf-GELU"
+    },
+    {
+      "family": "whisper_encoder",
+      "modality": "audio",
+      "checkpoint": "openai/whisper-tiny",
+      "weight_source": "real-checkpoint",
+      "native_execution": true,
+      "status": "FAIL",
+      "key_metrics": {
+        "emb_cos_sim": 0.999991,
+        "max_abs_diff": 0.52344
+      },
+      "notes": "UnifiedModelExecutor executes native CuTile Conv1d(via cutile_conv2d), LayerNorm, bidirectional FlashAttention, GELU"
+    }
+  ]
+}

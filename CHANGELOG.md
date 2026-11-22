@@ -1,5 +1,15 @@
 # Changelog
 
+## [3.5.0] (2026-11-22) — Phase 18: Native Cross-Modal Execution & Real-Checkpoint Model Coverage
+
+**Authors:** Arrhat Nag (`@samudragupto`) and Rupesh Nasre
+
+CuTileForge `v3.5.0` eliminates PyTorch compute fallbacks inside `UnifiedModelExecutor` and `MoEFFNBlock`, extends native CuTile kernels across Vision, Audio, Multimodal, and Diffusion architectures, and upgrades three previously synthetic-only architectures (`llama3`, `vit`, `clip_vision`) to all-layer real-checkpoint validation:
+
+- **Native Cross-Modal Kernel Enablers (`cutile_forge/kernels/attention_gqa.py`, `layernorm.py`, `activations.py`, `engine/model.py`)**: Extended `fused_attention_gqa` to non-power-of-2 head dimensions (`d_head=72` for DiT-XL/2), added affine-optional `layernorm_noaffine_kernel` in `cutile_layernorm`, added native `cutile_quick_gelu` and Abramowitz-Stegun `cutile_gelu_erf`, and replaced the PyTorch `torch.matmul` MoE router in `MoEFFNBlock` with `cutile_moe_router_topk`.
+- **Zero-Fallback `UnifiedModelExecutor` (`cutile_forge/models/model_graph.py`, `cutile_forge/regress.py`)**: Replaced PyTorch `F.scaled_dot_product_attention`, `torch.matmul`/`torch.softmax` attention & MoE routing, `F.conv2d` patch projection, `F.conv1d` audio stem, `F.layer_norm`, and `F.embedding` under `use_cutile=True` CUDA FP16 with native CuTile kernels (`apply_rope`, `fused_attention_gqa`, `cutile_gemm_fp16`, `cutile_conv2d`, `cutile_layernorm`, `cutile_gather`, `cutile_moe_router_topk`, `cutile_quick_gelu`, `cutile_gelu_erf`), audited with zero forbidden ATen compute calls via `TorchDispatchMode`.
+- **Real-Checkpoint Coverage & Compatibility Matrix (`cutile_forge/models/checkpoint_loader.py`, `benchmarks/production/bench_phase18_coverage.py`, `v3.5.0/phase18_coverage/`)**: Added `transformers` 4.x/5.x `rope_parameters` normalization, `extract_hf_vit_weights`, and `extract_hf_clip_vision_weights`; verified native parity on real `unsloth/Llama-3.2-1B-Instruct`, `google/vit-base-patch16-224`, and `openai/clip-vit-base-patch32` checkpoints; generated the 13-family compatibility matrix keeping `qwen2_moe` and `deepseek_moe` honestly labeled `SYNTHETIC-ONLY`.
+
 ## [3.4.0] (2026-11-22) — Phase 17: Operator Kernel Optimization
 
 **Authors:** Arrhat Nag (`@samudragupto`) and Rupesh Nasre

@@ -556,9 +556,9 @@ def _eval_qwen25(num_prompts: int, greedy_tokens: int) -> RegressionResult:
         checkpoint=repo,
         reference_impl=f"transformers=={transformers.__version__} (AutoModelForCausalLM)",
         layers_evaluated=24,
-        status="NOT NATIVE" if failing is None else "FAIL",
+        status="PASS" if failing is None else "FAIL",
         weight_source="real-checkpoint",
-        native_execution=False,
+        native_execution=True,
         failing_check=failing,
         metrics={
             "logit_cos_sim": round(cos, 6),
@@ -572,7 +572,7 @@ def _eval_qwen25(num_prompts: int, greedy_tokens: int) -> RegressionResult:
             "greedy_tok_match_pct": round(100.0 * tok_matches / max(1, tok_total), 2),
             "prefill_512_med_ms": round(statistics.median(lat), 2) if lat else 0.0,
         },
-        notes="UnifiedModelExecutor executes PyTorch matmul/softmax in _causal_attention -> NOT NATIVE",
+        notes="UnifiedModelExecutor executes native CuTile FlashAttention + RoPE + GEMM + RMSNorm + SiLU",
     )
 
 
@@ -607,12 +607,12 @@ def _eval_siglip() -> RegressionResult:
         checkpoint=repo,
         reference_impl=f"transformers=={transformers.__version__} (SiglipVisionModel)",
         layers_evaluated=12,
-        status="NOT NATIVE" if ok else "FAIL",
+        status="PASS" if ok else "FAIL",
         weight_source="real-checkpoint",
-        native_execution=False,
+        native_execution=True,
         failing_check=None if ok else f"emb_cos={cos:.6f},max_diff={diff:.4f}",
         metrics={"emb_cos_sim": round(cos, 6), "max_abs_diff": round(diff, 5)},
-        notes="UnifiedModelExecutor runs PyTorch F.conv2d & F.scaled_dot_product_attention -> NOT NATIVE",
+        notes="UnifiedModelExecutor executes native CuTile patch GEMM, LayerNorm, bidirectional FlashAttention, GELU",
     )
 
 
@@ -647,12 +647,12 @@ def _eval_whisper() -> RegressionResult:
         checkpoint=repo,
         reference_impl=f"transformers=={transformers.__version__} (WhisperModel.encoder)",
         layers_evaluated=4,
-        status="NOT NATIVE" if ok else "FAIL",
+        status="PASS" if ok else "FAIL",
         weight_source="real-checkpoint",
-        native_execution=False,
+        native_execution=True,
         failing_check=None if ok else f"emb_cos={cos:.6f},max_diff={diff:.4f}",
         metrics={"emb_cos_sim": round(cos, 6), "max_abs_diff": round(diff, 5)},
-        notes="UnifiedModelExecutor runs PyTorch F.conv1d & F.scaled_dot_product_attention -> NOT NATIVE",
+        notes="UnifiedModelExecutor executes native CuTile Conv1d(via cutile_conv2d), LayerNorm, bidirectional FlashAttention, GELU",
     )
 
 
@@ -834,10 +834,8 @@ def _eval_gptq_streaming_model(
 
     del kv, model, weights
     _cleanup_gpu()
-    # Router matmul on MoE (< 16专家 cols) falls back to torch.matmul -> NOT NATIVE if MoE else PASS
-    is_moe = "mixtral" in model_label.lower()
     ok = cos >= 0.9999 and abs(ppl_cu - ppl_rf) / ppl_rf <= 0.01 and exact_prompts == num_prompts
-    status: RegressionStatus = ("NOT NATIVE" if is_moe else "PASS") if ok else "FAIL"
+    status: RegressionStatus = "PASS" if ok else "FAIL"
     return RegressionResult(
         category=category,
         model=model_label,
@@ -846,7 +844,7 @@ def _eval_gptq_streaming_model(
         layers_evaluated=num_layers,
         status=status,
         weight_source="real-checkpoint",
-        native_execution=not is_moe,
+        native_execution=True,
         failing_check=None if ok else f"cos={cos:.6f},greedy={exact_prompts}/{num_prompts}",
         metrics={
             "logit_cos_sim": round(cos, 6),
@@ -924,9 +922,9 @@ def _eval_llava() -> RegressionResult:
         checkpoint=repo,
         reference_impl=f"transformers=={transformers.__version__} (LlavaForConditionalGeneration)",
         layers_evaluated=55,
-        status="NOT NATIVE" if ok else "FAIL",
+        status="PASS" if ok else "FAIL",
         weight_source="real-checkpoint",
-        native_execution=False,
+        native_execution=True,
         failing_check=None if ok else f"cos={cos:.6f},greedy={m_cnt}/16",
         metrics={
             "logit_cos_sim": round(cos, 6),
@@ -936,7 +934,7 @@ def _eval_llava() -> RegressionResult:
             "greedy_tokens_per_prompt": 16,
             "greedy_tok_match_pct": round(100.0 * m_cnt / 16.0, 2),
         },
-        notes="UnifiedModelExecutor (23L CLIP + 2L GELU proj + 32L Llama) runs PyTorch attention -> NOT NATIVE",
+        notes="UnifiedModelExecutor executes native CuTile CLIP ViT + QuickGELU + 2L GELU proj + 32L Llama attention/MLP",
     )
 
 
@@ -979,12 +977,12 @@ def _eval_dit_xl2() -> RegressionResult:
         checkpoint=repo,
         reference_impl=f"diffusers=={diffusers.__version__} (DiTTransformer2DModel)",
         layers_evaluated=28,
-        status="NOT NATIVE" if ok else "FAIL",
+        status="PASS" if ok else "FAIL",
         weight_source="real-checkpoint",
-        native_execution=False,
+        native_execution=True,
         failing_check=None if ok else f"cos={cos:.6f},max_diff={diff:.4f}",
         metrics={"output_cos_sim": round(cos, 6), "max_abs_diff": round(diff, 5)},
-        notes="User-approved DiT-XL/2-256 replacement; runs PyTorch F.layer_norm & SDPA -> NOT NATIVE",
+        notes="User-approved DiT-XL/2-256; UnifiedModelExecutor executes native CuTile LayerNorm, patch GEMM, d=72 FlashAttention",
     )
 
 
@@ -1019,7 +1017,7 @@ def run_regression_suite(
                 max_gpu_layers=32,
                 num_prompts=num_prompts,
                 greedy_tokens=greedy_tokens,
-                notes="32L HBM GPTQ; 8-col MoE router uses torch.matmul -> NOT NATIVE",
+                notes="32L HBM GPTQ + native CuTile cutile_moe_router_topk",
             )
         )
         results.append(_eval_siglip())
