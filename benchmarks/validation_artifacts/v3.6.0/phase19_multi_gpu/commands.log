@@ -1,0 +1,1 @@
+benchmarks/production/bench_multi_gpu_validation.py --output-dir benchmarks/validation_artifacts/v3.6.0/phase19_multi_gpu

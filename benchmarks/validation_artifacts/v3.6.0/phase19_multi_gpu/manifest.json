@@ -1,0 +1,210 @@
+{
+  "schema_version": "1.0.0",
+  "run_id": "phase14d_multi_gpu",
+  "cutile_forge_version": "3.5.0",
+  "git_commit": "368ceed51550bda38f100abca7286b4ba467a618",
+  "dirty_worktree": true,
+  "dirty_diff_sha256": "b16f98e0d4e6fb61cc67b86c8d2143d9aabf0ce1168e25d1b905b9ac03bf8367",
+  "utc_start": "2026-11-22T09:46:12.213795+00:00",
+  "utc_end": "2026-11-22T09:46:12.800084+00:00",
+  "environment": {
+    "hostname": "prashant-lab",
+    "os": "Linux 7.0.0-43-generic",
+    "kernel": "#43~24.04.1-Ubuntu SMP PREEMPT_DYNAMIC Sat Oct 31 06:52:47 UTC 2",
+    "cpu_model": "Intel(R) Core(TM) Ultra 9 285K",
+    "ram_gb": 62.26,
+    "gpu_name": "NVIDIA GeForce RTX 5090",
+    "gpu_count": 1,
+    "compute_capability": "sm_120",
+    "vram_gb": 31.35,
+    "nvidia_driver": "595.58.03",
+    "cuda_runtime": "13.2",
+    "torch_version": "2.15.0+cu132",
+    "cutile_version": "1.8.1",
+    "python_version": "3.12.3",
+    "dependencies": {
+      "numpy": "2.5.5",
+      "transformers": "5.23.0",
+      "tokenizers": "0.23.3",
+      "safetensors": "0.8.0",
+      "huggingface-hub": "2.4.0",
+      "gguf": "0.19.0",
+      "fastapi": "0.165.0",
+      "uvicorn": "0.54.0",
+      "httpx": "0.28.1",
+      "nvidia-ml-py": "not-installed"
+    },
+    "nvml_available": false,
+    "gpu_temp_c": null,
+    "gpu_power_w": null
+  },
+  "env_vars": {
+    "CUTILE_ARCH": "sm_120",
+    "HF_HOME": "/var/tmp/arrhat_models/hf_cache"
+  },
+  "command": "benchmarks/production/bench_multi_gpu_validation.py --output-dir benchmarks/validation_artifacts/v3.6.0/phase19_multi_gpu",
+  "cwd": "/home/arrhat/cutile-forge",
+  "checkpoint": {
+    "model_id": "synthetic-distributed",
+    "local_path": "/dev/null",
+    "revision": null,
+    "files": [],
+    "total_bytes": 0,
+    "sha256_manifest": {}
+  },
+  "quant_config": {
+    "quant_format": "fp16",
+    "group_size": null,
+    "desc_act": null,
+    "kv_dtype": "fp16",
+    "mixed_precision": {},
+    "disk_format": null,
+    "kernel_format": null
+  },
+  "prompt_ids_or_checksum": "d1ece076985404740e1771bda2e2edb0d55a3a9bacbd62f554703962503ae5d7",
+  "workload": {
+    "batch_size": 16,
+    "concurrency": 1,
+    "prompt_len": 64,
+    "output_len": 0,
+    "temperature": 0.0,
+    "seed": 42,
+    "warmup_iters": 0,
+    "measured_iters": 1,
+    "sync_method": "torch.cuda.synchronize"
+  },
+  "contention_before": {
+    "timestamp_utc": "2026-11-22T09:46:12.238578+00:00",
+    "contended": false,
+    "compute_apps": [],
+    "query_error": null
+  },
+  "contention_after": {
+    "timestamp_utc": "2026-11-22T09:46:12.800091+00:00",
+    "contended": false,
+    "compute_apps": [
+      {
+        "pid": "1060478",
+        "used_memory": "2002 MiB"
+      }
+    ],
+    "query_error": null
+  },
+  "execution_mode": "simulated",
+  "reproduction_status": "SIMULATED",
+  "notes": "nvidia-smi -L: ['GPU 0: NVIDIA GeForce RTX 5090 (UUID: GPU-53a9e748-720f-ea14-df4c-530895df0f88)']; torch.cuda.device_count=1; detected_devices=['NVIDIA GeForce RTX 5090']",
+  "records": [
+    {
+      "component": "TensorParallelSwiGLUMLP (TP=2)",
+      "parallelism": "TP=2",
+      "status": "SIMULATED",
+      "physical_gpus": 1,
+      "max_abs_diff_vs_single": 0.0009765625,
+      "loopback_comm_bytes": 524288,
+      "simulated_ms": 0.42,
+      "notes": "Single-GPU loopback mathematical equivalence only; NOT physical scaling"
+    },
+    {
+      "component": "TensorParallelSwiGLUMLP (TP=4)",
+      "parallelism": "TP=4",
+      "status": "SIMULATED",
+      "physical_gpus": 1,
+      "max_abs_diff_vs_single": 0.0009765625,
+      "loopback_comm_bytes": 1572864,
+      "simulated_ms": 0.6134,
+      "notes": "Single-GPU loopback mathematical equivalence only; NOT physical scaling"
+    },
+    {
+      "component": "TensorParallelGQAAttention (TP=2)",
+      "parallelism": "TP=2",
+      "status": "SIMULATED",
+      "physical_gpus": 1,
+      "max_abs_diff_vs_single": 0.001953125,
+      "loopback_comm_bytes": 4194304,
+      "simulated_ms": 0.3416,
+      "notes": "Single-GPU loopback mathematical equivalence only"
+    },
+    {
+      "component": "TensorParallelGQAAttention (TP=4)",
+      "parallelism": "TP=4",
+      "status": "SIMULATED",
+      "physical_gpus": 1,
+      "max_abs_diff_vs_single": 0.001953125,
+      "loopback_comm_bytes": 12582912,
+      "simulated_ms": 0.6922,
+      "notes": "Single-GPU loopback mathematical equivalence only"
+    },
+    {
+      "component": "PipelineParallelEngine (PP=2)",
+      "parallelism": "PP=2",
+      "status": "SIMULATED",
+      "physical_gpus": 1,
+      "max_abs_diff_vs_single": 0.0,
+      "loopback_comm_bytes": 1048576,
+      "simulated_ms": 3.2663,
+      "notes": "Single-GPU loopback mathematical equivalence only"
+    },
+    {
+      "component": "ExpertParallelMoE (EP=2)",
+      "parallelism": "EP=2",
+      "status": "SIMULATED",
+      "physical_gpus": 1,
+      "max_abs_diff_vs_single": 0.0,
+      "loopback_comm_bytes": 524288,
+      "notes": "Single-GPU loopback mathematical equivalence only"
+    },
+    {
+      "component": "DistributedPagedKVCache (PP=2,TP=2)",
+      "parallelism": "PP=2,TP=2 KV",
+      "status": "SIMULATED",
+      "physical_gpus": 1,
+      "max_abs_diff_vs_single": 0.0,
+      "notes": "Shard partitioning verified on 1 GPU; physical P2P migration PENDING_HARDWARE"
+    },
+    {
+      "component": "Physical Multi-GPU TP=2",
+      "parallelism": "TP=2",
+      "status": "PENDING_HARDWARE",
+      "physical_gpus": 1,
+      "notes": "Workstation has 1 physical GPU (RTX 5090). Loopback transport was NOT used for physical timing. Physical multi-GPU scaling remains unvalidated."
+    },
+    {
+      "component": "Physical Multi-GPU TP=4",
+      "parallelism": "TP=4",
+      "status": "PENDING_HARDWARE",
+      "physical_gpus": 1,
+      "notes": "Workstation has 1 physical GPU (RTX 5090). Loopback transport was NOT used for physical timing. Physical multi-GPU scaling remains unvalidated."
+    },
+    {
+      "component": "Physical Multi-GPU PP=2",
+      "parallelism": "PP=2",
+      "status": "PENDING_HARDWARE",
+      "physical_gpus": 1,
+      "notes": "Workstation has 1 physical GPU (RTX 5090). Loopback transport was NOT used for physical timing. Physical multi-GPU scaling remains unvalidated."
+    },
+    {
+      "component": "Physical Multi-GPU EP=2",
+      "parallelism": "EP=2",
+      "status": "PENDING_HARDWARE",
+      "physical_gpus": 1,
+      "notes": "Workstation has 1 physical GPU (RTX 5090). Loopback transport was NOT used for physical timing. Physical multi-GPU scaling remains unvalidated."
+    },
+    {
+      "component": "Physical Multi-GPU DistributedPagedKVCache Physical Migration",
+      "parallelism": "DistributedPagedKVCache Physical Migration",
+      "status": "PENDING_HARDWARE",
+      "physical_gpus": 1,
+      "notes": "Workstation has 1 physical GPU (RTX 5090). Loopback transport was NOT used for physical timing. Physical multi-GPU scaling remains unvalidated."
+    },
+    {
+      "component": "Hardware Probe",
+      "parallelism": "N/A",
+      "status": "PENDING_HARDWARE",
+      "physical_gpus": 1,
+      "nvidia_smi_L": [
+        "GPU 0: NVIDIA GeForce RTX 5090 (UUID: GPU-53a9e748-720f-ea14-df4c-530895df0f88)"
+      ],
+      "notes": "Physical multi-GPU validation requires >= 2 physical GPUs."
+    }
+  ]
+}

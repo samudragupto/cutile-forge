@@ -1,0 +1,44 @@
+{
+  "schema_version": "1.0.0",
+  "release_version": "3.6.0",
+  "hardware_reference": "NVIDIA GeForce RTX 5090 (sm_120, 32 GB GDDR7)",
+  "independent_reproduction_status": "PENDING_INDEPENDENT_RUN",
+  "note": "Counts as independently reproduced only when executed by a person other than the agent on a clean environment.",
+  "commands": [
+    "sh benchmarks/repro_kit/run_repro.sh /home/arrhat/models/mistral_7b_4bit"
+  ],
+  "expected_ranges": {
+    "mistral_7b_gptq_decode_tok_s": {
+      "median": 169.96,
+      "acceptable_range": [155.0, 180.0],
+      "provenance": "real-checkpoint",
+      "source_artifact": "benchmarks/validation_artifacts/v3.5.0/phase18_regression/regress_full.json"
+    },
+    "mistral_7b_gptq_perplexity_512tok": {
+      "measured": 5.1475,
+      "reference": 5.1473,
+      "max_rel_diff_pct": 0.5,
+      "provenance": "real-checkpoint",
+      "source_artifact": "benchmarks/validation_artifacts/v3.5.0/phase18_regression/regress_full.json"
+    },
+    "mistral_7b_http_c64_agg_tok_s": {
+      "nonstream_med": 2520.38,
+      "stream_med": 2722.35,
+      "acceptable_range": [2100.0, 3000.0],
+      "provenance": "real-checkpoint",
+      "source_artifact": "benchmarks/validation_artifacts/v3.3.0/phase16_optimized/manifest.json"
+    },
+    "qwen25_05b_prefill_512_ms": {
+      "median": 10.66,
+      "acceptable_range": [7.5, 16.0],
+      "provenance": "real-checkpoint",
+      "source_artifact": "benchmarks/validation_artifacts/v3.5.0/phase18_regression/regress_full.json"
+    },
+    "llava15_multimodal_parity": {
+      "logit_cos_sim_min": 0.9999,
+      "greedy_16tok_exact": true,
+      "provenance": "real-checkpoint",
+      "source_artifact": "benchmarks/validation_artifacts/v3.5.0/phase18_regression/regress_full.json"
+    }
+  }
+}

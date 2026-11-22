@@ -1,13 +1,24 @@
-# Independent & Clean-Room Validation Guide (`CuTileForge`)
+# Independent & Clean-Room Validation Guide (`CuTileForge v3.6.0`)
 
-This guide allows a second operator or a fresh machine to reproduce the **Phase 14 Production Validation & Hardware Scaling** artifacts without relying on an editable local checkout.
+This guide allows a second operator or a fresh machine to reproduce CuTileForge `v3.6.0` validation artifacts from a pinned environment without relying on an editable checkout.
 
 ## Distinction of Claims
 
-- **Clean-room reproducibility:** Fresh clone of the pushed release commit in an isolated temporary directory, installed from the built wheel (`.whl`), running unit tests + real-checkpoint generation + baseline comparison on the same host.
-- **Independent reproduction (`INDEPENDENTLY_REPRODUCED`):** The exact same validation command executed by a **second operator** or on a **second physical machine**, emitting its own signed/checksummed `manifest.json` + `samples.jsonl`. Any hardware target not physically executed in the current session is labeled `PENDING_HARDWARE` or `PENDING_INDEPENDENT_REPRODUCTION`.
+- **Clean-room self-check:** Fresh clone / wheel install in an isolated directory run by the authoring workflow (`v3.1.0/phase14a_clean_room`).
+- **Independent reproduction (`PENDING_INDEPENDENT_RUN`):** Execution of the pinned reproduction kit below by a **person other than the agent**. Until an external operator runs it and submits the output manifest, independent reproduction remains `PENDING_INDEPENDENT_RUN`.
 
-## Target Profiles
+## Pinned Reproduction Kit (`benchmarks/repro_kit/`)
+
+- Pinned environment: [`benchmarks/repro_kit/requirements-lock.txt`](../benchmarks/repro_kit/requirements-lock.txt)
+- Single-command POSIX `sh` runner: [`benchmarks/repro_kit/run_repro.sh`](../benchmarks/repro_kit/run_repro.sh)
+- Reference acceptance ranges: [`benchmarks/repro_kit/expected_ranges.json`](../benchmarks/repro_kit/expected_ranges.json)
+
+```sh
+export HF_HOME=/var/tmp/arrhat_models/hf_cache
+sh benchmarks/repro_kit/run_repro.sh /path/to/mistral_7b_4bit /var/tmp/arrhat_models/repro_kit_venv
+```
+
+## Target Hardware Profiles
 
 ### 1. NVIDIA RTX 5090 Workstation (`sm_120`, 32 GB GDDR7)
 
@@ -20,38 +31,24 @@ sh scripts/reproduce_validation.sh \
   --bench-set full
 ```
 
-### 2. Lenovo LOQ 15APH8 RTX 4060 Laptop (`sm_89`, 8 GB GDDR6)
+### 2. NVIDIA RTX 4060 Laptop (`sm_89`, 8 GB GDDR6) — `UNVALIDATED`
 
-On Windows 11 + WSL2 Ubuntu (or native Linux with compatible checkpoint on SSD):
+Not yet executed on real laptop hardware; run:
 
 ```sh
-export HF_HOME="${HF_HOME:-$HOME/.cache/huggingface}"
-sh scripts/reproduce_validation.sh \
-  --profile laptop4060 \
-  --model-dir /mnt/d/models/mistral_7b_4bit \
-  --output-root ./repro_laptop4060 \
-  --bench-set quick
+sh scripts/run_laptop_4060.sh /mnt/d/models/mistral_7b_4bit ./repro_laptop4060 quick
 ```
 
-Note: Because 8 GB VRAM cannot hold all 32 quantized layers + large 32K KV pools simultaneously, Stage -1 PCIe weight streaming (`gpu_vram_gb=8.0`) bounds active memory while reporting honest degraded decode latency at long contexts.
+### 3. Physical Multi-GPU Cluster (`>= 2` GPUs) — `BLOCKED: hardware` on 1-GPU workstation
 
-### 3. CPU-Only CI Verification (`ubuntu-latest`)
+See [`docs/MULTI_GPU_RUNBOOK.md`](MULTI_GPU_RUNBOOK.md):
+
+```sh
+sh scripts/run_multi_gpu_validation.sh benchmarks/validation_artifacts/v3.6.0/phase19_multi_gpu_physical
+```
+
+### 4. CPU-Only CI Verification (`ubuntu-latest`)
 
 ```sh
 CUDA_VISIBLE_DEVICES="" sh scripts/reproduce_validation.sh --profile cpu_ci
 ```
-
-## Clean-Room Wheel Install Verification
-
-```sh
-cd /var/tmp/arrhat_models
-git clone https://github.com/samudragupto/cutile-forge.git clean_room_repo
-cd clean_room_repo
-git checkout v3.1.0
-python3 -m venv /var/tmp/arrhat_models/clean_room_venv
-. /var/tmp/arrhat_models/clean_room_venv/bin/activate
-pip install /path/to/cutile_forge-3.1.0-py3-none-any.whl
-python3 -c "import cutile_forge; print(cutile_forge.__file__)"
-```
-
-Verify that `cutile_forge.__file__` resolves inside `/var/tmp/arrhat_models/clean_room_venv/lib/python*/site-packages/cutile_forge/__init__.py` and **not** the cloned working tree.

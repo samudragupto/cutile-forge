@@ -1,51 +1,35 @@
-# External Engine Comparison (`CuTileForge v3.1.0`)
+# External Engine Comparison (`CuTileForge v3.6.0`)
 
-> Measured in isolated environments on the same RTX 5090 (`sm_120`, CUDA 13.2) host. HuggingFace `transformers` is recorded only as an eager reference and is NOT treated as a substitute for `vLLM`, `SGLang`, or `TensorRT-LLM`.
+> Measured on `2026-11-22` in isolated environments on the same `NVIDIA GeForce RTX 5090 (sm_120, CUDA 13.2)` host (`benchmarks/validation_artifacts/v3.6.0/phase20_external_engines/manifest.json`, `5` measured iterations after `2` warmup runs, `OUT_TOKENS=64`, `temperature=0.0`). HuggingFace `transformers` is recorded only as an eager reference and is **NOT** treated as a substitute for `vLLM`, `SGLang`, or `TensorRT-LLM`.
 
-| Engine/version | Model/format | Concurrency | Hardware | TTFT | ITL p50/p99 | Throughput | Peak VRAM | Status |
-|---|---|---:|---|---:|---|---:|---:|---|
-| CuTileForge v3.1.0 (Native) | Mistral-7B-v0.1-GPTQ (`GPTQ 4-bit (desc_act=True)`) | 1 | RTX 5090 (`sm_120`) | 16.74 ms | 5.8/5.81 ms | 167.48 tok/s | 8570.0 MB | `MEASURED` |
-| CuTileForge v3.1.0 (Native) | Mistral-7B-v0.1-GPTQ (`GPTQ 4-bit (desc_act=True)`) | 4 | RTX 5090 (`sm_120`) | 0.0 ms | 6.461/6.463 ms | 619.12 tok/s | 8592.5 MB | `MEASURED` |
-| CuTileForge v3.1.0 (Native) | Mistral-7B-v0.1-GPTQ (`GPTQ 4-bit (desc_act=True)`) | 16 | RTX 5090 (`sm_120`) | 0.0 ms | 6.925/6.928 ms | 2310.52 tok/s | 8678.9 MB | `MEASURED` |
-| HF Transformers 5.23.0 (Eager) | Qwen/Qwen2.5-0.5B (`FP16`) | 1 | RTX 5090 (`sm_120`) | 7.74 ms | 6.284/6.325 ms | 159.13 tok/s | 984.1 MB | `MEASURED` |
-| CuTileForge UnifiedModelExecutor | Qwen/Qwen2.5-0.5B (`FP16 (no KV-cache/CUDA-graph)`) | 1 | RTX 5090 (`sm_120`) | 11.05 ms | 10.788/11.251 ms | 92.7 tok/s | 1963.6 MB | `DEGRADED` |
-| vLLM 0.34.0 | Mistral-7B-v0.1-GPTQ (`GPTQ 4-bit (desc_act=True)`) | 1 | RTX 5090 (`sm_120`) | — | —/— | — | — | `UNSUPPORTED` |
-| vLLM 0.34.0 | Qwen/Qwen2.5-0.5B (`FP16`) | 1 | RTX 5090 (`sm_120`) | 3.5 ms | 1.397/1.397 ms | 699.55 tok/s | 16918.0 MB | `MEASURED` |
-| vLLM 0.34.0 | Qwen/Qwen2.5-0.5B (`FP16`) | 4 | RTX 5090 (`sm_120`) | 1.57 ms | 1.57/1.57 ms | 2547.65 tok/s | 16918.0 MB | `MEASURED` |
-| vLLM 0.34.0 | Qwen/Qwen2.5-0.5B (`FP16`) | 16 | RTX 5090 (`sm_120`) | 1.65 ms | 1.651/1.651 ms | 9693.69 tok/s | 16918.0 MB | `MEASURED` |
-| SGLang 0.5.23 | Qwen/Qwen2.5-0.5B (`FP16`) | 1 | RTX 5090 (`sm_120`) | 4.79 ms | 1.187/1.187 ms | 804.45 tok/s | 18422.0 MB | `MEASURED` |
-| SGLang 0.5.23 | Qwen/Qwen2.5-0.5B (`FP16`) | 4 | RTX 5090 (`sm_120`) | 1.4 ms | 1.403/1.403 ms | 2851.46 tok/s | 18442.0 MB | `MEASURED` |
-| SGLang 0.5.23 | Qwen/Qwen2.5-0.5B (`FP16`) | 16 | RTX 5090 (`sm_120`) | 1.49 ms | 1.494/1.494 ms | 10712.17 tok/s | 18442.0 MB | `MEASURED` |
-| SGLang 0.5.23 | Mistral-7B-v0.1-GPTQ (`GPTQ 4-bit (desc_act=True)`) | 1 | RTX 5090 (`sm_120`) | 9.28 ms | 3.681/3.681 ms | 265.36 tok/s | 18516.0 MB | `MEASURED` |
-| SGLang 0.5.23 | Mistral-7B-v0.1-GPTQ (`GPTQ 4-bit (desc_act=True)`) | 4 | RTX 5090 (`sm_120`) | 4.12 ms | 4.123/4.123 ms | 970.25 tok/s | 18536.0 MB | `MEASURED` |
-| SGLang 0.5.23 | Mistral-7B-v0.1-GPTQ (`GPTQ 4-bit (desc_act=True)`) | 16 | RTX 5090 (`sm_120`) | 4.91 ms | 4.907/4.907 ms | 3260.69 tok/s | 18536.0 MB | `MEASURED` |
-| TensorRT-LLM 1.3.0 | Mistral-7B-v0.1-GPTQ / Qwen2.5-0.5B (`FP16 / GPTQ`) | 1 | RTX 5090 (`sm_120`) | — | —/— | — | — | `NOT_RUN` |
+| Engine / Version | Model / Format | Conc | TTFT (ms) | ITL p50/p99 (ms) | Median [Min, Max] (`tok/s`) | Peak VRAM (MB) | Status |
+|---|---|---:|---:|---|---:|---:|---|
+| CuTileForge Native (`v3.6.0` runtime; logged as `v3.1.0` in probe) | Mistral-7B-v0.1-GPTQ (`desc_act=True`) | 1 | 16.70 | 5.82 / 5.82 | 167.03 [167.01, 167.10] | 8,570.0 | `MEASURED` |
+| CuTileForge Native | Mistral-7B-v0.1-GPTQ (`desc_act=True`) | 4 | 0.00 | 6.436 / 6.439 | 621.53 [621.18, 622.55] | 8,592.5 | `MEASURED` |
+| CuTileForge Native | Mistral-7B-v0.1-GPTQ (`desc_act=True`) | 16 | 0.00 | 6.932 / 6.937 | 2,308.02 [2,306.29, 2,309.26] | 8,678.9 | `MEASURED` |
+| **SGLang 0.5.23** | Mistral-7B-v0.1-GPTQ (`desc_act=True`) | 1 | 9.30 | 3.686 / 3.686 | **265.01** [261.56, 265.39] | 18,512.0 | `MEASURED` |
+| **SGLang 0.5.23** | Mistral-7B-v0.1-GPTQ (`desc_act=True`) | 4 | 4.13 | 4.126 / 4.126 | **969.40** [967.64, 971.17] | 18,532.0 | `MEASURED` |
+| **SGLang 0.5.23** | Mistral-7B-v0.1-GPTQ (`desc_act=True`) | 16 | 4.91 | 4.905 / 4.905 | **3,261.84** [3,261.52, 3,265.89] | 18,532.0 | `MEASURED` |
+| vLLM 0.34.0 | Mistral-7B-v0.1-GPTQ (`desc_act=True`) | 1 | — | — | — | — | `UNSUPPORTED` |
+| HF Transformers 5.23.0 (Eager) | Qwen/Qwen2.5-0.5B (`FP16`) | 1 | 7.50 | 6.004 / 6.040 | 166.56 [165.55, 166.81] | 984.1 | `MEASURED` |
+| CuTileForge `UnifiedModelExecutor` | Qwen/Qwen2.5-0.5B (`FP16`, no KV-cache/CUDA-graph) | 1 | 6.17 | 5.873 / 7.319 | 170.27 [136.64, 170.58] | 1,957.3 | `DEGRADED` |
+| **vLLM 0.34.0** | Qwen/Qwen2.5-0.5B (`FP16`) | 1 | 3.91 | 1.401 / 1.401 | **694.12** [693.39, 698.15] | 16,914.0 | `MEASURED` |
+| **vLLM 0.34.0** | Qwen/Qwen2.5-0.5B (`FP16`) | 4 | 1.58 | 1.577 / 1.577 | **2,535.79** [2,532.04, 2,540.56] | 16,914.0 | `MEASURED` |
+| **vLLM 0.34.0** | Qwen/Qwen2.5-0.5B (`FP16`) | 16 | 1.69 | 1.685 / 1.685 | **9,494.11** [9,378.40, 9,579.41] | 16,914.0 | `MEASURED` |
+| **SGLang 0.5.23** | Qwen/Qwen2.5-0.5B (`FP16`) | 1 | 4.60 | 1.192 / 1.192 | **803.05** [801.67, 803.51] | 18,418.0 | `MEASURED` |
+| **SGLang 0.5.23** | Qwen/Qwen2.5-0.5B (`FP16`) | 4 | 1.39 | 1.392 / 1.392 | **2,873.88** [2,848.33, 2,877.07] | 18,438.0 | `MEASURED` |
+| **SGLang 0.5.23** | Qwen/Qwen2.5-0.5B (`FP16`) | 16 | 1.48 | 1.478 / 1.478 | **10,825.80** [10,801.08, 11,044.44] | 18,438.0 | `MEASURED` |
+| TensorRT-LLM 1.3.0 | Mistral-7B-v0.1-GPTQ / Qwen2.5-0.5B (`FP16 / GPTQ`) | 1 | — | — | — | — | `NOT_RUN` |
 
-## Analysis (Strict Parity Assessment)
+## Analysis (Where CuTileForge Wins vs Where It Loses)
 
-- **Where CuTileForge is faster / uniquely functional:**
-  - `Mistral-7B-v0.1-GPTQ` (`desc_act=True`, on-disk real checkpoint): `vLLM==0.34.0` refuses to load the checkpoint with a `VllmConfig` `ValidationError` (`desc_act=True` unsupported), whereas CuTileForge executes natively end-to-end.
-  - Lower peak VRAM than SGLang's static pool (`8.57 GB` allocated vs `18.52 GB` reported by `nvidia-smi` for SGLang `mem_fraction_static=0.5`).
-- **Where CuTileForge is slower:**
-  - On `Mistral-7B-v0.1-GPTQ`, `SGLang==0.5.23` (`265.36 tok/s` @ `C=1`, `970.25 tok/s` @ `C=4`, `3,260.69 tok/s` @ `C=16`) outperforms CuTileForge `v3.1.0` (`167.48`, `619.12`, and `2,310.52 tok/s`) in raw throughput and ITL.
-  - On unquantized `Qwen/Qwen2.5-0.5B` (FP16), `CuTileForge UnifiedModelExecutor` lacks a Qwen2 Paged KV-cache + CUDA Graph decode loop and achieves `92.7 tok/s`, which is much slower than `SGLang 0.5.23` (`804.45 tok/s`), `vLLM 0.34.0` (`699.55 tok/s`), and eager `HF Transformers` (`159.13 tok/s`).
-- **Memory use & missing engines (`NOT_RUN`):**
-  - `TensorRT-LLM 1.3.0` installed under `/var/tmp/arrhat_models/venvs/trtllm_env` but failed on `import tensorrt_llm` with `RuntimeError: Vendored triton_kernels module not found`, and is strictly recorded as `NOT_RUN` (never plotted as zero).
-
-Exact error (`vLLM 0.34.0` on `Mistral-7B-v0.1-GPTQ`):
-```text
-ValidationError: 1 validation error for VllmConfig
-  Value error, GPTQ group activation ordering (desc_act=True) is no longer supported. Use a checkpoint with static activation ordering or desc_act=False. [type=value_error, input_value=ArgsKwargs((), {'model_co... 'shutdown_timeout': 0}), input_type=ArgsKwargs]
-    For further information visit https://errors.pydantic.dev/2.14/v/value_error
-```
-
-Exact error (`TensorRT-LLM 1.3.0` on `Mistral-7B-v0.1-GPTQ / Qwen2.5-0.5B`):
-```text
-File "/var/tmp/arrhat_models/venvs/trtllm_env/lib/python3.12/site-packages/tensorrt_llm/__init__.py", line 28, in <module>
-    _prepare_environment()
-  File "/var/tmp/arrhat_models/venvs/trtllm_env/lib/python3.12/site-packages/tensorrt_llm/_bootstrap.py", line 125, in _prepare_environment
-    _setup_vendored_triton_kernels()
-  File "/var/tmp/arrhat_models/venvs/trtllm_env/lib/python3.12/site-packages/tensorrt_llm/_bootstrap.py", line 108, in _setup_vendored_triton_kernels
-    raise RuntimeError(f"Vendored triton_kernels module not found at {vendored}")
-RuntimeError: Vendored triton_kernels module not found at /var/tmp/arrhat_models/venvs/trtllm_env/lib/python3.12/site-packages/triton_kernels
-```
+- **Where CuTileForge loses (published prominently):**
+  - On `Mistral-7B-v0.1-GPTQ`, `SGLang 0.5.23` (`265.01` @ `C=1`, `969.40` @ `C=4`, `3,261.84 tok/s` @ `C=16`) is **`1.59x` faster at `C=1` and `1.41x` faster at `C=16`** than CuTileForge Native (`167.03`, `621.53`, `2,308.02 tok/s`), with lower ITL (`3.686–4.905 ms` vs `5.82–6.932 ms`).
+  - On unquantized `Qwen/Qwen2.5-0.5B` (`FP16`), `CuTileForge UnifiedModelExecutor` lacks a persistent Paged KV-cache and CUDA Graph decode loop (`DEGRADED`: `170.27 tok/s`, though Phase 17/18 kernel tuning improved it from `92.7 tok/s` to parity with eager HF `166.56 tok/s`). Both **`SGLang 0.5.23` (`803.05` @ `C=1`, `10,825.80` @ `C=16`)** and **`vLLM 0.34.0` (`694.12` @ `C=1`, `9,494.11` @ `C=16`)** are **`4.1x–4.7x` faster at `C=1`** and scale to ~10K tok/s at `C=16`.
+- **Where CuTileForge holds an advantage:**
+  - `Mistral-7B-v0.1-GPTQ` (`desc_act=True`): `vLLM 0.34.0` refuses to load this real checkpoint (`ValidationError`), whereas CuTileForge executes it natively (`167.03 tok/s`).
+  - Lower memory reservation than SGLang's static KV pool (`8,570 MB` vs `18,512 MB` reported by `nvidia-smi` for `mem_fraction_static=0.5`).
+- **Missing Engine (`NOT_RUN`):**
+  - `TensorRT-LLM 1.3.0` (in `/var/tmp/arrhat_models/venvs/trtllm_env`) still fails on `import tensorrt_llm` with:
+    `RuntimeError: Vendored triton_kernels module not found at /var/tmp/arrhat_models/venvs/trtllm_env/lib/python3.12/site-packages/triton_kernels`
+    and is strictly recorded as `NOT_RUN`.

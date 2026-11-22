@@ -1,5 +1,15 @@
 # Changelog
 
+## [3.6.0] (2026-11-22) — Phases 19–20 & Final Campaign Compatibility Matrix
+
+**Authors:** Arrhat Nag (`@samudragupto`) and Rupesh Nasre
+
+CuTileForge `v3.6.0` closes ecosystem validation, documents verified operational limits, publishes the 4-axis compatibility matrix generated strictly from JSON artifacts, and delivers hardware-scaling tooling and reproduction kits:
+
+- **Phase 19 Hardware Tooling & Honest Blocking (`cutile_forge/hardware_reports.py`, `cutile_forge/cli.py`, `scripts/run_laptop_4060.sh`, `scripts/run_multi_gpu_validation.sh`, `docs/MULTI_GPU_RUNBOOK.md`, `docs/HARDWARE_SUPPORT_MATRIX.md`)**: Added `cutile-forge import-hardware-report` with strict manifest validation, prepared one-command `sm_89` laptop 4060 runner (`UNVALIDATED` until user run), delivered physical multi-GPU NCCL/TP/PP/EP runbook + script (`BLOCKED: hardware` on 1-GPU RTX 5090 host), and segregated single-GPU loopback `SIMULATED` parity from performance claims.
+- **Phase 20 Ecosystem Validation (`benchmarks/validation_artifacts/v3.6.0/phase20_external_engines/`, `phase20_serving_stress/`, `benchmarks/repro_kit/`, `docs/EXTERNAL_ENGINE_COMPARISON.md`, `docs/OPERATIONAL_LIMITS.md`)**: Re-ran isolated comparisons against `vLLM 0.34.0`, `SGLang 0.5.23`, `HF Transformers 5.23.0`, and `TensorRT-LLM 1.3.0` (`NOT_RUN` due to missing `triton_kernels`) with losses reported prominently (`SGLang` faster than `CuTileForge` on `Mistral-7B-GPTQ` and `Qwen2.5-0.5B`); ran 60s `127.0.0.1` HTTP concurrency/soak stress test (`C=1..128`); pinned clean-room reproduction kit (`PENDING_INDEPENDENT_RUN`); documented container socket permission block; authored `docs/OPERATIONAL_LIMITS.md`.
+- **Final Campaign Compatibility Matrix (`benchmarks/production/bench_final_compatibility_matrix.py`, `docs/FINAL_COMPATIBILITY_MATRIX.md`)**: Published the `architecture × checkpoint_format × quantization_type × execution_path` matrix generated directly from verified JSON artifacts with strict `PASS`, `FAIL`, `UNSUPPORTED`, and `NOT RUN` statuses.
+
 ## [3.5.0] (2026-11-22) — Phase 18: Native Cross-Modal Execution & Real-Checkpoint Model Coverage
 
 **Authors:** Arrhat Nag (`@samudragupto`) and Rupesh Nasre

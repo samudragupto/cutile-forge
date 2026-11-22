@@ -125,6 +125,24 @@ def main() -> None:
     insp_p.add_argument("--target", default="sm_120")
     insp_p.add_argument("--json", action="store_true", help="Emit JSON report")
 
+    imp_p = sub.add_parser(
+        "import-hardware-report",
+        help="Validate and import an external hardware report (e.g., RTX 4060, multi-GPU)",
+    )
+    imp_p.add_argument("path", type=Path, help="Path to manifest.json or artifact directory")
+    imp_p.add_argument(
+        "--dest",
+        type=Path,
+        default=Path("benchmarks/validation_artifacts/imported_hardware"),
+        help="Destination directory for imported reports",
+    )
+    imp_p.add_argument(
+        "--update-matrix",
+        type=Path,
+        default=None,
+        help="Optional HARDWARE_SUPPORT_MATRIX.md path to update on successful import",
+    )
+
     args = parser.parse_args()
     target = getattr(args, "target", None)
     if target is not None:
@@ -261,6 +279,15 @@ def main() -> None:
         )
         print(reg_report.format_markdown())
         sys.exit(0 if reg_report.all_non_native_or_pass else 1)
+    elif args.command == "import-hardware-report":
+        from cutile_forge.hardware_reports import import_hardware_report
+
+        result = import_hardware_report(
+            report_path=args.path,
+            dest_dir=args.dest,
+            matrix_path=args.update_matrix,
+        )
+        print(json.dumps(result, indent=2))
 
 
 if __name__ == "__main__":

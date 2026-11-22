@@ -1,0 +1,1 @@
+benchmarks/production/bench_serving_stress.py --model-dir /home/arrhat/models/mistral_7b_4bit --output-dir benchmarks/validation_artifacts/v3.6.0/phase20_serving_stress --soak-seconds 60

@@ -1,0 +1,46 @@
+{
+  "schema_version": "1.0.0",
+  "release_version": "3.6.0",
+  "local_container_check": {
+    "command": "docker info",
+    "status": "BLOCKED",
+    "reason": "no docker socket permission (no sudo / user not in docker group)",
+    "docker_client_version": "29.9.3",
+    "exact_error": "permission denied while trying to connect to the docker API at unix:///var/run/docker.sock"
+  },
+  "dockerfile_static_audit": {
+    "path": "Dockerfile",
+    "base_image": "nvidia/cuda:13.2.0-runtime-ubuntu24.04",
+    "install_cmd": "python3 -m pip install --no-cache-dir --break-system-packages \".[cuda,serve]\"",
+    "entrypoint": "[\"cutile-forge\", \"serve\"]",
+    "exposed_port": 8000,
+    "status": "PRESENT"
+  },
+  "ci_ghcr_publish_history": {
+    "workflow": ".github/workflows/docker.yml",
+    "trigger": "release published + workflow_dispatch",
+    "recent_runs": [
+      {
+        "databaseId": 44934386405,
+        "headBranch": "v3.1.0",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/samudragupto/cutile-forge/actions/runs/44934386405"
+      },
+      {
+        "databaseId": 44923286209,
+        "headBranch": "v3.0.0",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/samudragupto/cutile-forge/actions/runs/44923286209"
+      },
+      {
+        "databaseId": 44902762243,
+        "headBranch": "v2.3.0",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/samudragupto/cutile-forge/actions/runs/44902762243"
+      }
+    ]
+  }
+}

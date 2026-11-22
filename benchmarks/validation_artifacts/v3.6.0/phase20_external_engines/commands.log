@@ -1,0 +1,1 @@
+benchmarks/production/probe_external_engines.py --output-dir benchmarks/validation_artifacts/v3.6.0/phase20_external_engines
