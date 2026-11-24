@@ -1,0 +1,294 @@
+{
+  "hardware": "NVIDIA GeForce RTX 5090",
+  "commit": "788a34382c4d8936d1775e28b250cfcc614ed3bf",
+  "models": {
+    "qwen2.5-0.5b": {
+      "checkpoint": "Qwen/Qwen2.5-0.5B",
+      "prefill_seq32_paged_kv": {
+        "total_aten_calls": 6658,
+        "forbidden_compute_ops": {},
+        "forbidden_compute_total": 0,
+        "allowed_host_metadata_ops": {
+          "aten._to_copy.default": 48,
+          "aten.add.Tensor": 120,
+          "aten.alias.default": 192,
+          "aten.arange.default": 24,
+          "aten.arange.start_step": 24,
+          "aten.cat.default": 48,
+          "aten.clone.default": 72,
+          "aten.copy_.default": 1536,
+          "aten.cos.default": 24,
+          "aten.div.Tensor": 24,
+          "aten.empty.memory_format": 194,
+          "aten.empty_like.default": 145,
+          "aten.mul.Tensor": 72,
+          "aten.pow.Scalar": 24,
+          "aten.reciprocal.default": 24,
+          "aten.sin.default": 24,
+          "aten.slice.Tensor": 3073,
+          "aten.transpose.int": 96,
+          "aten.view.default": 798,
+          "aten.zeros.default": 48,
+          "aten.zeros_like.default": 48
+        }
+      },
+      "cached_decode_seq1_paged_kv": {
+        "total_aten_calls": 2267,
+        "forbidden_compute_ops": {},
+        "forbidden_compute_total": 0,
+        "allowed_host_metadata_ops": {
+          "aten._to_copy.default": 48,
+          "aten.add.Tensor": 120,
+          "aten.alias.default": 144,
+          "aten.arange.default": 24,
+          "aten.arange.start_step": 24,
+          "aten.cat.default": 48,
+          "aten.copy_.default": 48,
+          "aten.cos.default": 24,
+          "aten.div.Tensor": 24,
+          "aten.empty.memory_format": 339,
+          "aten.empty_like.default": 145,
+          "aten.mul.Tensor": 72,
+          "aten.pow.Scalar": 24,
+          "aten.reciprocal.default": 24,
+          "aten.sin.default": 24,
+          "aten.slice.Tensor": 193,
+          "aten.transpose.int": 96,
+          "aten.view.default": 798,
+          "aten.zeros.default": 24,
+          "aten.zeros_like.default": 24
+        }
+      },
+      "cached_vs_uncached_parity": {
+        "cos_sim": 0.999999,
+        "max_abs_diff": 0.01562,
+        "decode_16tok_total_ms": 657.02,
+        "decode_tok_s": 24.35
+      }
+    },
+    "siglip-vit-b16": {
+      "checkpoint": "google/siglip-base-patch16-224",
+      "forward_pass": {
+        "total_aten_calls": 531,
+        "forbidden_compute_ops": {},
+        "forbidden_compute_total": 0,
+        "allowed_host_metadata_ops": {
+          "aten._unsafe_view.default": 1,
+          "aten.add.Tensor": 74,
+          "aten.alias.default": 1,
+          "aten.clone.default": 50,
+          "aten.empty.memory_format": 49,
+          "aten.empty_like.default": 49,
+          "aten.permute.default": 1,
+          "aten.t.default": 1,
+          "aten.transpose.int": 48,
+          "aten.unbind.int": 12,
+          "aten.view.default": 245
+        }
+      }
+    },
+    "whisper-tiny": {
+      "checkpoint": "openai/whisper-tiny",
+      "forward_pass": {
+        "total_aten_calls": 210,
+        "forbidden_compute_ops": {},
+        "forbidden_compute_total": 0,
+        "allowed_host_metadata_ops": {
+          "aten.add.Tensor": 25,
+          "aten.alias.default": 1,
+          "aten.clone.default": 21,
+          "aten.empty.memory_format": 18,
+          "aten.empty_like.default": 19,
+          "aten.permute.default": 2,
+          "aten.squeeze.dim": 2,
+          "aten.transpose.int": 19,
+          "aten.unbind.int": 4,
+          "aten.unsqueeze.default": 5,
+          "aten.view.default": 94
+        }
+      }
+    },
+    "dit-xl-2": {
+      "checkpoint": "facebook/DiT-XL-2-256",
+      "denoiser_step": {
+        "total_aten_calls": 2219,
+        "forbidden_compute_ops": {},
+        "forbidden_compute_total": 0,
+        "allowed_host_metadata_ops": {
+          "aten._to_copy.default": 2,
+          "aten._unsafe_view.default": 1,
+          "aten.add.Tensor": 401,
+          "aten.arange.start": 1,
+          "aten.cat.default": 1,
+          "aten.clone.default": 115,
+          "aten.cos.default": 1,
+          "aten.div.Tensor": 1,
+          "aten.empty.memory_format": 288,
+          "aten.empty_like.default": 171,
+          "aten.exp.default": 1,
+          "aten.mul.Tensor": 115,
+          "aten.permute.default": 2,
+          "aten.sin.default": 1,
+          "aten.split.Tensor": 29,
+          "aten.t.default": 1,
+          "aten.transpose.int": 112,
+          "aten.unbind.int": 28,
+          "aten.unsqueeze.default": 29,
+          "aten.view.default": 919
+        }
+      },
+      "pipeline_scope": "Denoiser forward only; CFG, scheduler, and VAE decode are outside UnifiedModelExecutor scope (UNRUN)"
+    },
+    "llava-1.5": {
+      "checkpoint": "llava-hf/llava-1.5-7b-hf",
+      "multimodal_prefill_paged_kv": {
+        "total_aten_calls": 122475,
+        "forbidden_compute_ops": {},
+        "forbidden_compute_total": 0,
+        "allowed_host_metadata_ops": {
+          "aten._local_scalar_dense.default": 2,
+          "aten._to_copy.default": 64,
+          "aten._unsafe_view.default": 1,
+          "aten.add.Tensor": 205,
+          "aten.alias.default": 2497,
+          "aten.any.default": 1,
+          "aten.arange.default": 32,
+          "aten.arange.start_step": 32,
+          "aten.cat.default": 65,
+          "aten.clone.default": 191,
+          "aten.copy_.default": 38080,
+          "aten.cos.default": 32,
+          "aten.div.Tensor": 32,
+          "aten.empty.memory_format": 321,
+          "aten.empty_like.default": 287,
+          "aten.eq.Scalar": 2,
+          "aten.expand.default": 1,
+          "aten.index_put_.default": 1,
+          "aten.mul.Tensor": 96,
+          "aten.permute.default": 1,
+          "aten.pow.Scalar": 32,
+          "aten.reciprocal.default": 32,
+          "aten.sin.default": 32,
+          "aten.slice.Tensor": 76225,
+          "aten.sum.default": 1,
+          "aten.t.default": 1,
+          "aten.transpose.int": 220,
+          "aten.unbind.int": 23,
+          "aten.view.default": 1534,
+          "aten.zeros.default": 1216,
+          "aten.zeros_like.default": 1216
+        }
+      },
+      "cached_text_decode_seq1_paged_kv": {
+        "total_aten_calls": 5099,
+        "forbidden_compute_ops": {},
+        "forbidden_compute_total": 0,
+        "allowed_host_metadata_ops": {
+          "aten._to_copy.default": 64,
+          "aten.add.Tensor": 64,
+          "aten.alias.default": 2432,
+          "aten.arange.default": 32,
+          "aten.arange.start_step": 32,
+          "aten.cat.default": 64,
+          "aten.copy_.default": 64,
+          "aten.cos.default": 32,
+          "aten.div.Tensor": 32,
+          "aten.empty.memory_format": 451,
+          "aten.empty_like.default": 193,
+          "aten.lift_fresh.default": 1,
+          "aten.mul.Tensor": 96,
+          "aten.pow.Scalar": 32,
+          "aten.reciprocal.default": 32,
+          "aten.sin.default": 32,
+          "aten.slice.Tensor": 256,
+          "aten.transpose.int": 128,
+          "aten.view.default": 1062
+        }
+      },
+      "cached_vs_uncached_parity": {
+        "cos_sim_step4": 1.0,
+        "decode_4tok_total_ms": 40.12,
+        "decode_tok_s": 99.69
+      }
+    },
+    "mixtral-8x7b": {
+      "checkpoint": "/var/tmp/arrhat_models/mixtral_8x7b_4bit",
+      "prefill_seq13_paged_kv": {
+        "total_aten_calls": 6920,
+        "forbidden_compute_ops": {},
+        "forbidden_compute_total": 0,
+        "allowed_host_metadata_ops": {
+          "aten._local_scalar_dense.default": 256,
+          "aten._to_copy.default": 245,
+          "aten.add.Tensor": 32,
+          "aten.alias.default": 64,
+          "aten.any.default": 256,
+          "aten.cat.default": 64,
+          "aten.clone.default": 96,
+          "aten.copy_.default": 832,
+          "aten.empty.memory_format": 834,
+          "aten.empty_like.default": 193,
+          "aten.eq.Scalar": 256,
+          "aten.index.Tensor": 213,
+          "aten.index_select.default": 213,
+          "aten.mul.Tensor": 213,
+          "aten.nonzero.default": 213,
+          "aten.slice.Tensor": 1857,
+          "aten.transpose.int": 128,
+          "aten.unbind.int": 213,
+          "aten.view.default": 646,
+          "aten.zeros.default": 32,
+          "aten.zeros_like.default": 64
+        }
+      },
+      "decode_seq1_paged_kv": {
+        "total_aten_calls": 3115,
+        "forbidden_compute_ops": {},
+        "forbidden_compute_total": 0,
+        "allowed_host_metadata_ops": {
+          "aten._local_scalar_dense.default": 256,
+          "aten._to_copy.default": 96,
+          "aten.add.Tensor": 32,
+          "aten.alias.default": 128,
+          "aten.any.default": 256,
+          "aten.cat.default": 64,
+          "aten.copy_.default": 64,
+          "aten.empty.memory_format": 387,
+          "aten.empty_like.default": 193,
+          "aten.eq.Scalar": 256,
+          "aten.index.Tensor": 64,
+          "aten.index_select.default": 64,
+          "aten.mul.Tensor": 64,
+          "aten.nonzero.default": 64,
+          "aten.slice.Tensor": 257,
+          "aten.transpose.int": 128,
+          "aten.unbind.int": 64,
+          "aten.view.default": 646,
+          "aten.zeros_like.default": 32
+        }
+      }
+    }
+  },
+  "scope_classification": {
+    "NATIVE_VERIFIED": [
+      "Qwen2.5-0.5B prefill and PagedKVCache cached decode (UnifiedModelExecutor)",
+      "Mixtral-8x7B-GPTQ prefill and PagedKVCache cached decode (Mistral7B + cutile_embedding_lookup + cutile_moe_router_topk + cutile_moe_weighted_add)",
+      "SigLIP ViT-B/16 vision patch GEMM + 12L encoder (UnifiedModelExecutor)",
+      "Whisper-Tiny audio 2x cutile_conv2d + cutile_gelu_erf stem + 4L encoder (UnifiedModelExecutor)",
+      "LLaVA-1.5 multimodal CLIP ViT + 2L projector + Llama prefill and cached text decode (UnifiedModelExecutor)",
+      "DiT-XL/2-256 conditioned denoiser forward step (UnifiedModelExecutor)"
+    ],
+    "SYNTHETIC_ONLY": [
+      "qwen2_moe (no ungated <16GB FP16 checkpoint fits with reference in 32GB VRAM)",
+      "deepseek_moe (no ungated <16GB FP16 checkpoint fits with reference in 32GB VRAM)"
+    ],
+    "FALLBACK": [],
+    "UNSUPPORTED": [
+      "Qwen2.5-0.5B / LLaVA-1.5 full-step CUDA Graph capture in UnifiedModelExecutor (eager CuTile + PagedKVCache supported)",
+      "Mistral-7B 64K context & GGUF Q5_0 tensors"
+    ],
+    "UNRUN": [
+      "DiT-XL/2 classifier-free guidance wrapper, DDIM/DPM scheduler loop, and VAE decoder (outside UnifiedModelExecutor scope)"
+    ]
+  }
+}

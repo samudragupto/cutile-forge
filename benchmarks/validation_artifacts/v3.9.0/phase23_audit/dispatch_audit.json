@@ -1,0 +1,245 @@
+{
+  "hardware": "NVIDIA GeForce RTX 5090",
+  "commit": "8890d07",
+  "models": {
+    "qwen2.5-0.5b": {
+      "checkpoint": "Qwen/Qwen2.5-0.5B",
+      "prefill_seq32": {
+        "total_aten_calls": 1833,
+        "forbidden_compute_ops": {},
+        "forbidden_compute_total": 0,
+        "allowed_or_other_ops": {
+          "aten._to_copy.default": 48,
+          "aten.add.Tensor": 120,
+          "aten.alias.default": 96,
+          "aten.arange.default": 24,
+          "aten.arange.start_step": 24,
+          "aten.clone.default": 96,
+          "aten.cos.default": 24,
+          "aten.div.Tensor": 24,
+          "aten.empty.memory_format": 194,
+          "aten.empty_like.default": 145,
+          "aten.mul.Tensor": 72,
+          "aten.pow.Scalar": 24,
+          "aten.reciprocal.default": 24,
+          "aten.sin.default": 24,
+          "aten.transpose.int": 96,
+          "aten.view.default": 798
+        }
+      },
+      "uncached_seq1": {
+        "total_aten_calls": 1882,
+        "forbidden_compute_ops": {},
+        "forbidden_compute_total": 0,
+        "allowed_or_other_ops": {
+          "aten._to_copy.default": 48,
+          "aten.add.Tensor": 120,
+          "aten.alias.default": 96,
+          "aten.arange.default": 24,
+          "aten.arange.start_step": 24,
+          "aten.cos.default": 24,
+          "aten.div.Tensor": 24,
+          "aten.empty.memory_format": 339,
+          "aten.empty_like.default": 145,
+          "aten.mul.Tensor": 72,
+          "aten.pow.Scalar": 24,
+          "aten.reciprocal.default": 24,
+          "aten.sin.default": 24,
+          "aten.transpose.int": 96,
+          "aten.view.default": 798
+        }
+      },
+      "cached_decode_status": "UNSUPPORTED (UnifiedModelExecutor lacks PagedKVCache / KV-cache decode API)"
+    },
+    "siglip-vit-b16": {
+      "checkpoint": "google/siglip-base-patch16-224",
+      "forward_pass": {
+        "total_aten_calls": 531,
+        "forbidden_compute_ops": {},
+        "forbidden_compute_total": 0,
+        "allowed_or_other_ops": {
+          "aten._unsafe_view.default": 1,
+          "aten.add.Tensor": 74,
+          "aten.alias.default": 1,
+          "aten.clone.default": 50,
+          "aten.empty.memory_format": 49,
+          "aten.empty_like.default": 49,
+          "aten.permute.default": 1,
+          "aten.t.default": 1,
+          "aten.transpose.int": 48,
+          "aten.unbind.int": 12,
+          "aten.view.default": 245
+        }
+      },
+      "notes": "Patch conv lowered to cutile_gemm_fp16 via _patch_embed_tokens"
+    },
+    "whisper-tiny": {
+      "checkpoint": "openai/whisper-tiny",
+      "forward_pass": {
+        "total_aten_calls": 210,
+        "forbidden_compute_ops": {},
+        "forbidden_compute_total": 0,
+        "allowed_or_other_ops": {
+          "aten.add.Tensor": 25,
+          "aten.alias.default": 1,
+          "aten.clone.default": 21,
+          "aten.empty.memory_format": 18,
+          "aten.empty_like.default": 19,
+          "aten.permute.default": 2,
+          "aten.squeeze.dim": 2,
+          "aten.transpose.int": 19,
+          "aten.unbind.int": 4,
+          "aten.unsqueeze.default": 5,
+          "aten.view.default": 94
+        }
+      },
+      "notes": "2-layer Conv1d stem runs cutile_conv2d + cutile_gelu_erf"
+    },
+    "dit-xl-2": {
+      "checkpoint": "facebook/DiT-XL-2-256",
+      "denoiser_step": {
+        "total_aten_calls": 2219,
+        "forbidden_compute_ops": {},
+        "forbidden_compute_total": 0,
+        "allowed_or_other_ops": {
+          "aten._to_copy.default": 2,
+          "aten._unsafe_view.default": 1,
+          "aten.add.Tensor": 401,
+          "aten.arange.start": 1,
+          "aten.cat.default": 1,
+          "aten.clone.default": 115,
+          "aten.cos.default": 1,
+          "aten.div.Tensor": 1,
+          "aten.empty.memory_format": 288,
+          "aten.empty_like.default": 171,
+          "aten.exp.default": 1,
+          "aten.mul.Tensor": 115,
+          "aten.permute.default": 2,
+          "aten.sin.default": 1,
+          "aten.split.Tensor": 29,
+          "aten.t.default": 1,
+          "aten.transpose.int": 112,
+          "aten.unbind.int": 28,
+          "aten.unsqueeze.default": 29,
+          "aten.view.default": 919
+        }
+      },
+      "pipeline_scope": "DiTTransformer2DModel denoiser only; CFG, DDIM/DPM scheduler, and VAE decode are outside UnifiedModelExecutor scope (UNRUN)"
+    },
+    "llava-1.5": {
+      "checkpoint": "llava-hf/llava-1.5-7b-hf",
+      "multimodal_prefill": {
+        "total_aten_calls": 3339,
+        "forbidden_compute_ops": {},
+        "forbidden_compute_total": 0,
+        "allowed_or_other_ops": {
+          "aten._local_scalar_dense.default": 2,
+          "aten._to_copy.default": 64,
+          "aten._unsafe_view.default": 1,
+          "aten.add.Tensor": 205,
+          "aten.alias.default": 129,
+          "aten.any.default": 1,
+          "aten.arange.default": 32,
+          "aten.arange.start_step": 32,
+          "aten.cat.default": 1,
+          "aten.clone.default": 223,
+          "aten.cos.default": 32,
+          "aten.div.Tensor": 32,
+          "aten.empty.memory_format": 321,
+          "aten.empty_like.default": 287,
+          "aten.eq.Scalar": 2,
+          "aten.expand.default": 1,
+          "aten.index_put_.default": 1,
+          "aten.mul.Tensor": 96,
+          "aten.permute.default": 1,
+          "aten.pow.Scalar": 32,
+          "aten.reciprocal.default": 32,
+          "aten.sin.default": 32,
+          "aten.slice.Tensor": 1,
+          "aten.sum.default": 1,
+          "aten.t.default": 1,
+          "aten.transpose.int": 220,
+          "aten.unbind.int": 23,
+          "aten.view.default": 1534
+        }
+      },
+      "cached_decode_status": "UNSUPPORTED (UnifiedModelExecutor recomputes full vision+prefix per decode step)"
+    },
+    "mixtral-8x7b": {
+      "checkpoint": "/var/tmp/arrhat_models/mixtral_8x7b_4bit",
+      "prefill_seq13_paged_kv": {
+        "total_aten_calls": 7669,
+        "forbidden_compute_ops": {
+          "aten.embedding.default": 1,
+          "aten.index_add_.default": 228,
+          "aten.mm.default": 32,
+          "aten.topk.default": 32
+        },
+        "forbidden_compute_total": 293,
+        "allowed_or_other_ops": {
+          "aten._local_scalar_dense.default": 256,
+          "aten._to_copy.default": 96,
+          "aten.add.Tensor": 32,
+          "aten.any.default": 256,
+          "aten.cat.default": 64,
+          "aten.clamp.default": 32,
+          "aten.clone.default": 96,
+          "aten.copy_.default": 832,
+          "aten.div.Tensor": 32,
+          "aten.empty.memory_format": 846,
+          "aten.empty_like.default": 193,
+          "aten.eq.Scalar": 256,
+          "aten.index.Tensor": 228,
+          "aten.index_select.default": 228,
+          "aten.mul.Tensor": 456,
+          "aten.nonzero.default": 228,
+          "aten.slice.Tensor": 1857,
+          "aten.sum.dim_IntList": 32,
+          "aten.t.default": 32,
+          "aten.transpose.int": 128,
+          "aten.unbind.int": 228,
+          "aten.unsqueeze.default": 228,
+          "aten.view.default": 644,
+          "aten.zeros.default": 32,
+          "aten.zeros_like.default": 64
+        }
+      },
+      "decode_seq1_paged_kv": {
+        "total_aten_calls": 3401,
+        "forbidden_compute_ops": {
+          "aten.embedding.default": 1,
+          "aten.index_add_.default": 64,
+          "aten.mm.default": 32,
+          "aten.topk.default": 32
+        },
+        "forbidden_compute_total": 129,
+        "allowed_or_other_ops": {
+          "aten._local_scalar_dense.default": 256,
+          "aten._to_copy.default": 96,
+          "aten.add.Tensor": 32,
+          "aten.alias.default": 64,
+          "aten.any.default": 256,
+          "aten.cat.default": 64,
+          "aten.clamp.default": 32,
+          "aten.copy_.default": 64,
+          "aten.div.Tensor": 32,
+          "aten.empty.memory_format": 354,
+          "aten.empty_like.default": 193,
+          "aten.eq.Scalar": 256,
+          "aten.index.Tensor": 64,
+          "aten.index_select.default": 64,
+          "aten.mul.Tensor": 128,
+          "aten.nonzero.default": 64,
+          "aten.slice.Tensor": 257,
+          "aten.sum.dim_IntList": 32,
+          "aten.t.default": 32,
+          "aten.transpose.int": 128,
+          "aten.unbind.int": 64,
+          "aten.unsqueeze.default": 64,
+          "aten.view.default": 644,
+          "aten.zeros_like.default": 32
+        }
+      }
+    }
+  }
+}
