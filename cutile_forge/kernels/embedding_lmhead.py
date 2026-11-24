@@ -79,8 +79,10 @@ def lm_head_tile_argmax_kernel(
         )
         acc = ct.mma(th, ct.transpose(tw), acc)
 
+    # Match FP16 logit precision of standalone `cutile_gemm_fp16` LM head.
+    acc_f16 = ct.astype(ct.astype(acc, ct.float16), ct.float32)
     v_ids = ct.reshape(pid_v * tv + ct.arange(tv, dtype=ct.int32), (1, tv))
-    masked = ct.where(v_ids < v_dim, acc, -1.0e9)
+    masked = ct.where(v_ids < v_dim, acc_f16, -1.0e9)
     best_val = ct.max(masked, axis=1)
     best_local = ct.astype(ct.argmax(masked, axis=1), ct.int32)
     best_global = pid_v * tv + best_local

@@ -93,6 +93,52 @@ def rmsnorm_residual_kernel(
     ct.store(norm_out_ptr, index=(row, 0), tile=ct.astype(out, ct.float16))
 
 
+@ct.kernel(occupancy=4)
+def rmsnorm_residual_permute_kernel(
+    x_ptr,
+    res_ptr,
+    w_ptr,
+    perm_ptr,
+    norm_out_ptr,
+    res_out_ptr,
+    eps: float,
+    inv_d: float,
+    d_model: int,
+    d_pad: ct.Constant[int],
+) -> None:
+    """Fused residual_sum = x + res; norm_out = RMSNorm(residual_sum)[:, perm]."""
+    row = ct.bid(0)
+    x = ct.astype(
+        ct.load(x_ptr, index=(row, 0), shape=(1, d_pad), padding_mode=ct.PaddingMode.ZERO),
+        ct.float32,
+    )
+    res = ct.astype(
+        ct.load(res_ptr, index=(row, 0), shape=(1, d_pad), padding_mode=ct.PaddingMode.ZERO),
+        ct.float32,
+    )
+    combined = x + res
+    ct.store(res_out_ptr, index=(row, 0), tile=ct.astype(combined, ct.float16))
+
+    col_idx = ct.reshape(ct.arange(d_pad, dtype=ct.int32), (1, d_pad))
+    c_valid = ct.where(col_idx < d_model, combined, 0.0)
+    mean_sq = ct.sum(c_valid * c_valid, axis=1, keepdims=True) * inv_d
+    inv_rms = ct.rsqrt(mean_sq + eps)
+
+    p = ct.reshape(
+        ct.astype(
+            ct.load(perm_ptr, index=(0,), shape=(d_pad,), padding_mode=ct.PaddingMode.ZERO),
+            ct.int32,
+        ),
+        (1, d_pad),
+    )
+    row_2d = ct.reshape(ct.full((1,), row, dtype=ct.int32), (1, 1))
+    xp = ct.astype(ct.gather(x_ptr, (row_2d, p), padding_value=0), ct.float32)
+    rp = ct.astype(ct.gather(res_ptr, (row_2d, p), padding_value=0), ct.float32)
+    wp = ct.astype(ct.gather(w_ptr, (ct.reshape(p, (d_pad,)),), padding_value=0), ct.float32)
+    out = ((xp + rp) * inv_rms) * ct.reshape(wp, (1, d_pad))
+    ct.store(norm_out_ptr, index=(row, 0), tile=ct.astype(out, ct.float16))
+
+
 def _next_pow2(n: int) -> int:
     p = 1
     while p < n:
@@ -150,6 +196,7 @@ def fused_rmsnorm_residual(
     eps: float = 1e-5,
     out_norm: torch.Tensor | None = None,
     out_res: torch.Tensor | None = None,
+    perm: torch.Tensor | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Compute (RMSNorm(x + residual), x + residual) in a single CuTile kernel."""
     orig_shape = x.shape
@@ -167,22 +214,46 @@ def fused_rmsnorm_residual(
     res_out = out_res.view(rows, d_model) if out_res is not None else torch.empty_like(x_2d)
     w_c = weight if weight.is_contiguous() else weight.contiguous()
 
-    ct.launch(
-        torch.cuda.current_stream(),
-        (rows, 1, 1),
-        rmsnorm_residual_kernel,
-        (
-            x_2d,
-            res_2d,
-            w_c,
-            norm_out,
-            res_out,
-            float(eps),
-            1.0 / d_model,
-            d_model,
-            d_pad,
-        ),
-    )
+    if perm is not None:
+        p_c = (
+            perm
+            if (perm.is_contiguous() and perm.dtype == torch.int32)
+            else perm.to(torch.int32).contiguous()
+        )
+        ct.launch(
+            torch.cuda.current_stream(),
+            (rows, 1, 1),
+            rmsnorm_residual_permute_kernel,
+            (
+                x_2d,
+                res_2d,
+                w_c,
+                p_c,
+                norm_out,
+                res_out,
+                float(eps),
+                1.0 / d_model,
+                d_model,
+                d_pad,
+            ),
+        )
+    else:
+        ct.launch(
+            torch.cuda.current_stream(),
+            (rows, 1, 1),
+            rmsnorm_residual_kernel,
+            (
+                x_2d,
+                res_2d,
+                w_c,
+                norm_out,
+                res_out,
+                float(eps),
+                1.0 / d_model,
+                d_model,
+                d_pad,
+            ),
+        )
     return norm_out.view(orig_shape), res_out.view(orig_shape)
 
 

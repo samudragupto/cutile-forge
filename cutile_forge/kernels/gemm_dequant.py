@@ -261,14 +261,115 @@ def gemm_dequant_add_kernel(
 def _select_gemm_tiles(m: int, group_size: int = 128, n: int = 4096) -> tuple[int, int, int]:
     """Select optimal tile shape (TM, TN, TK) based on batch/sequence length M and N."""
     if m <= 16:
+        if group_size >= 128 and n % 64 == 0:
+            return (16, 64, 128)
         if group_size >= 128 and n <= 6144 and (n % 32 == 0):
             return (16, 32, 128)
         tk = 64 if group_size >= 64 else 32
         return (16, 64, tk)
     tk = 64 if group_size >= 64 else 32
-    if m <= 64:
-        return (64, 128, tk)
-    return (128, 128, 32 if group_size >= 32 else tk)
+    return (64, 128, tk)
+
+
+@ct.kernel(occupancy=4)
+def gemm_dequant_splitk_kernel(
+    a_ptr,
+    qw_ptr,
+    scales_ptr,
+    zeros_ptr,
+    part_ptr,
+    split_k: ct.Constant[int],
+    tm: ct.Constant[int],
+    tn: ct.Constant[int],
+    tk: ct.Constant[int],
+    gs: ct.Constant[int],
+) -> None:
+    """Split-K INT4-dequant + FP16 GEMM writing FP32 partials `(split_k, M, N)`."""
+    pid_m = ct.bid(0)
+    pid_n = ct.bid(1)
+    sk_id = ct.bid(2)
+    num_k = ct.num_tiles(a_ptr, axis=1, shape=(tm, tk))
+    k_per_split = (num_k + split_k - 1) // split_k
+    k_start = sk_id * k_per_split
+    k_end = min(num_k, k_start + k_per_split)
+    half_tk: ct.Constant[int] = tk // 2
+    acc = ct.zeros((tm, tn), dtype=ct.float32)
+
+    for k in range(k_start, k_end):
+        tile_a = ct.load(
+            a_ptr, index=(pid_m, k), shape=(tm, tk), padding_mode=ct.PaddingMode.ZERO, latency=3
+        )
+        qw = ct.load(
+            qw_ptr,
+            index=(k, pid_n),
+            shape=(half_tk, tn),
+            padding_mode=ct.PaddingMode.ZERO,
+            latency=3,
+        )
+        lo = ct.astype(ct.bitwise_and(qw, 0x0F), ct.float16)
+        hi = ct.astype(ct.bitwise_and(ct.bitwise_rshift(qw, 4), 0x0F), ct.float16)
+        w_int = ct.reshape(
+            ct.cat((ct.reshape(lo, (half_tk, 1, tn)), ct.reshape(hi, (half_tk, 1, tn))), axis=1),
+            (tk, tn),
+        )
+        g_idx = (k * tk) // gs
+        scale = ct.load(
+            scales_ptr,
+            index=(g_idx, pid_n),
+            shape=(1, tn),
+            padding_mode=ct.PaddingMode.ZERO,
+            latency=3,
+        )
+        zero = ct.load(
+            zeros_ptr,
+            index=(g_idx, pid_n),
+            shape=(1, tn),
+            padding_mode=ct.PaddingMode.ZERO,
+            latency=3,
+        )
+        acc = ct.mma(tile_a, (w_int - zero) * scale, acc)
+
+    ct.store(part_ptr, index=(sk_id, pid_m, pid_n), tile=ct.reshape(acc, (1, tm, tn)))
+
+
+@ct.kernel(occupancy=4)
+def splitk_reduce_add_fp16_kernel(
+    part_ptr,
+    res_ptr,
+    out_ptr,
+    split_k: ct.Constant[int],
+    tm: ct.Constant[int],
+    tn: ct.Constant[int],
+) -> None:
+    """Fused Split-K FP32->FP16 reduction with residual add in epilogue."""
+    pid_m = ct.bid(0)
+    pid_n = ct.bid(1)
+    acc = ct.zeros((tm, tn), dtype=ct.float32)
+    for sk in range(split_k):
+        partial = ct.reshape(
+            ct.load(
+                part_ptr,
+                index=(sk, pid_m, pid_n),
+                shape=(1, tm, tn),
+                padding_mode=ct.PaddingMode.ZERO,
+                latency=3,
+            ),
+            (tm, tn),
+        )
+        acc = acc + partial
+    res_tile = ct.load(
+        res_ptr, index=(pid_m, pid_n), shape=(tm, tn), padding_mode=ct.PaddingMode.ZERO, latency=2
+    )
+    ct.store(out_ptr, index=(pid_m, pid_n), tile=ct.astype(acc, ct.float16) + res_tile)
+
+
+def _select_dequant_decode_splitk(m: int, n: int, k: int, group_size: int) -> int:
+    """Select Split-K factor for small-batch INT4 dequant decode GEMMs."""
+    if m > 16 or k < 2048 or group_size < 128 or k % 128 != 0 or n < 2048 or n % 64 != 0:
+        return 1
+    if k >= 8192:
+        return 8
+    return 4
 
 
 def pack_int4_weights(w_uint8: torch.Tensor) -> torch.Tensor:
@@ -500,6 +601,7 @@ def fused_gemm_dequant(
     group_size: int = 128,
     tile_shape: tuple[int, int, int] | None = None,
     out: torch.Tensor | None = None,
+    part_buf: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """Run fused INT4 dequantization + GEMM in a single CuTile kernel."""
     m, k = a.shape
@@ -533,6 +635,29 @@ def fused_gemm_dequant(
     z_c = zeros if zeros.is_contiguous() else zeros.contiguous()
     c = out if out is not None else torch.empty((m, n), device=a.device, dtype=torch.float16)
 
+    split_k = 1 if tile_shape is not None else _select_dequant_decode_splitk(m, n, k, group_size)
+    if split_k > 1 and tk == 128:
+        needed = split_k * m * n
+        part = (
+            part_buf[:needed].view(split_k, m, n)
+            if (part_buf is not None and part_buf.numel() >= needed)
+            else torch.empty((split_k, m, n), device=a.device, dtype=torch.float32)
+        )
+        grid_sk = (ct.cdiv(m, tm), ct.cdiv(n, tn), split_k)
+        ct.launch(
+            torch.cuda.current_stream(),
+            grid_sk,
+            gemm_dequant_splitk_kernel,
+            (a_c, qw_u8, s_c, z_c, part, split_k, tm, tn, tk, group_size),
+        )
+        ct.launch(
+            torch.cuda.current_stream(),
+            (ct.cdiv(m, tm), ct.cdiv(n, tn), 1),
+            splitk_reduce_fp16_kernel,
+            (part, c, split_k, tm, tn),
+        )
+        return c
+
     grid = (ct.cdiv(m, tm) * ct.cdiv(n, tn), 1, 1)
     ct.launch(
         torch.cuda.current_stream(),
@@ -552,6 +677,7 @@ def fused_gemm_dequant_add(
     group_size: int = 128,
     tile_shape: tuple[int, int, int] | None = None,
     out: torch.Tensor | None = None,
+    part_buf: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """Run fused INT4 dequantization + GEMM + residual add (`a @ W + residual`) in one kernel."""
     m, k = a.shape
@@ -570,6 +696,29 @@ def fused_gemm_dequant_add(
     z_c = zeros if zeros.is_contiguous() else zeros.contiguous()
     r_c = residual if residual.is_contiguous() else residual.contiguous()
     c = out if out is not None else torch.empty((m, n), device=a.device, dtype=torch.float16)
+
+    split_k = 1 if tile_shape is not None else _select_dequant_decode_splitk(m, n, k, group_size)
+    if split_k > 1 and tk == 128:
+        needed = split_k * m * n
+        part = (
+            part_buf[:needed].view(split_k, m, n)
+            if (part_buf is not None and part_buf.numel() >= needed)
+            else torch.empty((split_k, m, n), device=a.device, dtype=torch.float32)
+        )
+        grid_sk = (ct.cdiv(m, tm), ct.cdiv(n, tn), split_k)
+        ct.launch(
+            torch.cuda.current_stream(),
+            grid_sk,
+            gemm_dequant_splitk_kernel,
+            (a_c, qw_u8, s_c, z_c, part, split_k, tm, tn, tk, group_size),
+        )
+        ct.launch(
+            torch.cuda.current_stream(),
+            (ct.cdiv(m, tm), ct.cdiv(n, tn), 1),
+            splitk_reduce_add_fp16_kernel,
+            (part, r_c, c, split_k, tm, tn),
+        )
+        return c
 
     grid = (ct.cdiv(m, tm) * ct.cdiv(n, tn), 1, 1)
     ct.launch(

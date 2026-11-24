@@ -125,6 +125,8 @@ class _DecodeGraphWorkspace:
     res_mid: torch.Tensor  # (B, D) fp16
     swiglu_out: torch.Tensor  # (B, FFN_dim) fp16
     perm_ffn: torch.Tensor  # (B, FFN_dim) fp16
+    splitk_part: torch.Tensor  # Preallocated Split-K FP32 scratchpad (zero graph allocs)
+    splitk_part2: torch.Tensor  # Secondary Split-K FP32 scratchpad for fused SwiGLU
     lm_scratch: dict[str, torch.Tensor]
     graphs_by_bucket: dict[int, torch.cuda.CUDAGraph]
 
@@ -135,11 +137,18 @@ def _quant_linear_native(
     perm_i32: torch.Tensor | None = None,
     perm_buf: torch.Tensor | None = None,
     out: torch.Tensor | None = None,
+    part_buf: torch.Tensor | None = None,
 ) -> torch.Tensor:
     p = perm_i32 if perm_i32 is not None else qw.perm
     x_in = cutile_col_permute(x, p, out=perm_buf) if p is not None else x
     return fused_gemm_dequant(
-        x_in, qw.qweight, qw.scales, qw.zeros, group_size=qw.group_size, out=out
+        x_in,
+        qw.qweight,
+        qw.scales,
+        qw.zeros,
+        group_size=qw.group_size,
+        out=out,
+        part_buf=part_buf,
     )
 
 
@@ -241,6 +250,27 @@ class NativeModelRuntime:
             qkv_zr = None
 
         can_fuse_swiglu = _perms_equal(gp, up)
+        g_eff = lw.gate_proj
+        u_eff = lw.up_proj
+        if can_fuse_swiglu and dp is not None and self.use_cuda:
+            from cutile_forge.engine.weight_loader import QuantLinearWeight
+
+            dp_long = dp.to(device=lw.gate_proj.qweight.device, dtype=torch.long)
+            g_eff = QuantLinearWeight(
+                qweight=lw.gate_proj.qweight.index_select(1, dp_long).contiguous(),
+                scales=lw.gate_proj.scales.index_select(1, dp_long).contiguous(),
+                zeros=lw.gate_proj.zeros.index_select(1, dp_long).contiguous(),
+                group_size=lw.gate_proj.group_size,
+                perm=lw.gate_proj.perm,
+            )
+            u_eff = QuantLinearWeight(
+                qweight=lw.up_proj.qweight.index_select(1, dp_long).contiguous(),
+                scales=lw.up_proj.scales.index_select(1, dp_long).contiguous(),
+                zeros=lw.up_proj.zeros.index_select(1, dp_long).contiguous(),
+                group_size=lw.up_proj.group_size,
+                perm=lw.up_proj.perm,
+            )
+            dp = None
 
         return _PackedNativeLayer(
             layer_idx=lw.layer_idx,
@@ -261,8 +291,8 @@ class NativeModelRuntime:
             o_proj=lw.o_proj,
             o_perm_i32=op,
             swiglu_fused=can_fuse_swiglu,
-            gate_proj=lw.gate_proj,
-            up_proj=lw.up_proj,
+            gate_proj=g_eff,
+            up_proj=u_eff,
             down_proj=lw.down_proj,
             gate_perm_i32=gp,
             up_perm_i32=up,
@@ -343,6 +373,13 @@ class NativeModelRuntime:
         perm_ffn = torch.zeros(
             (batch_size, cfg.intermediate_size), device=self.device, dtype=torch.float16
         )
+        max_sk_n = max(cfg.hidden_size, cfg.intermediate_size, qkv_dim)
+        splitk_part = torch.empty(
+            (8 * batch_size * max_sk_n,), device=self.device, dtype=torch.float32
+        )
+        splitk_part2 = torch.empty(
+            (4 * batch_size * cfg.intermediate_size,), device=self.device, dtype=torch.float32
+        )
         lm_scratch = {
             "norm_out": torch.zeros(
                 (batch_size, cfg.hidden_size), device=self.device, dtype=torch.float16
@@ -368,6 +405,8 @@ class NativeModelRuntime:
             res_mid=res_mid,
             swiglu_out=swiglu_out,
             perm_ffn=perm_ffn,
+            splitk_part=splitk_part,
+            splitk_part2=splitk_part2,
             lm_scratch=lm_scratch,
             graphs_by_bucket={},
         )
@@ -396,7 +435,19 @@ class NativeModelRuntime:
         cutile_embedding_lookup(ws.token_id.view(bsz), self._embed_w, out=ws.hidden)
 
         for idx, pl in enumerate(self._packed_layers):
-            cutile_rmsnorm(ws.hidden, pl.input_layernorm, eps=cfg.rms_norm_eps, out=ws.norm)
+            use_qkv_perm_fuse = (
+                pl.qkv_packed
+                and pl.qkv_qweight is not None
+                and pl.qkv_scales is not None
+                and pl.qkv_zeros is not None
+            )
+            cutile_rmsnorm(
+                ws.hidden,
+                pl.input_layernorm,
+                eps=cfg.rms_norm_eps,
+                out=ws.norm,
+                perm=(pl.qkv_perm_i32 if use_qkv_perm_fuse else None),
+            )
 
             if (
                 pl.qkv_packed
@@ -404,24 +455,25 @@ class NativeModelRuntime:
                 and pl.qkv_scales is not None
                 and pl.qkv_zeros is not None
             ):
-                qkv_in = (
-                    cutile_col_permute(ws.norm, pl.qkv_perm_i32, out=ws.perm_d)
-                    if pl.qkv_perm_i32 is not None
-                    else ws.norm
-                )
                 fused_gemm_dequant(
-                    qkv_in,
+                    ws.norm,
                     pl.qkv_qweight,
                     pl.qkv_scales,
                     pl.qkv_zeros,
                     group_size=pl.group_size,
                     out=ws.qkv,
+                    part_buf=ws.splitk_part,
                 )
             else:
                 q_dim = cfg.num_attention_heads * cfg.head_dim
                 kv_dim = cfg.num_key_value_heads * cfg.head_dim
                 _quant_linear_native(
-                    ws.norm, pl.q_proj, pl.q_perm_i32, ws.perm_d, out=ws.qkv[:, :q_dim]
+                    ws.norm,
+                    pl.q_proj,
+                    pl.q_perm_i32,
+                    ws.perm_d,
+                    out=ws.qkv[:, :q_dim],
+                    part_buf=ws.splitk_part,
                 )
                 _quant_linear_native(
                     ws.norm,
@@ -429,6 +481,7 @@ class NativeModelRuntime:
                     pl.k_perm_i32,
                     ws.perm_d,
                     out=ws.qkv[:, q_dim : q_dim + kv_dim],
+                    part_buf=ws.splitk_part,
                 )
                 _quant_linear_native(
                     ws.norm,
@@ -436,6 +489,7 @@ class NativeModelRuntime:
                     pl.v_perm_i32,
                     ws.perm_d,
                     out=ws.qkv[:, q_dim + kv_dim :],
+                    part_buf=ws.splitk_part,
                 )
 
             apply_rope_qk_kv_write_pos(
@@ -465,7 +519,14 @@ class NativeModelRuntime:
             )
 
             attn_2d = ws.attn_out.view(bsz, cfg.hidden_size)
-            _quant_linear_native(attn_2d, pl.o_proj, pl.o_perm_i32, ws.perm_d, out=ws.o_out)
+            _quant_linear_native(
+                attn_2d,
+                pl.o_proj,
+                pl.o_perm_i32,
+                ws.perm_d,
+                out=ws.o_out,
+                part_buf=ws.splitk_part,
+            )
 
             fused_rmsnorm_residual(
                 ws.o_out,
@@ -474,16 +535,12 @@ class NativeModelRuntime:
                 eps=cfg.rms_norm_eps,
                 out_norm=ws.norm,
                 out_res=ws.res_mid,
+                perm=(pl.gate_perm_i32 if pl.swiglu_fused else None),
             )
 
             if pl.swiglu_fused:
-                g_in = (
-                    cutile_col_permute(ws.norm, pl.gate_perm_i32, out=ws.perm_d)
-                    if pl.gate_perm_i32 is not None
-                    else ws.norm
-                )
                 fused_swiglu_dequant(
-                    g_in,
+                    ws.norm,
                     pl.gate_proj.qweight,
                     pl.gate_proj.scales,
                     pl.gate_proj.zeros,
@@ -492,6 +549,8 @@ class NativeModelRuntime:
                     pl.up_proj.zeros,
                     group_size=pl.group_size,
                     out=ws.swiglu_out,
+                    part_g_buf=ws.splitk_part,
+                    part_u_buf=ws.splitk_part2,
                 )
             else:
                 g_in = (
@@ -506,7 +565,13 @@ class NativeModelRuntime:
                     pl.gate_proj.zeros,
                     group_size=pl.group_size,
                 )
-                uv = _quant_linear_native(ws.norm, pl.up_proj, pl.up_perm_i32, ws.perm_d)
+                uv = _quant_linear_native(
+                    ws.norm,
+                    pl.up_proj,
+                    pl.up_perm_i32,
+                    ws.perm_d,
+                    part_buf=ws.splitk_part,
+                )
                 cutile_ew_mul(ga, uv, out=ws.swiglu_out)
 
             d_in = (
@@ -522,6 +587,7 @@ class NativeModelRuntime:
                 ws.res_mid,
                 group_size=pl.group_size,
                 out=ws.hidden,
+                part_buf=ws.splitk_part,
             )
 
         cutile_lm_head_fused(
@@ -713,20 +779,29 @@ class NativeModelRuntime:
             return (rm.float() + ffn.float()).to(torch.float16)
 
         pl = self._packed_layers[idx] if self._packed_layers else None
-        x_n = cutile_rmsnorm(x_2d, lw.input_layernorm, eps=cfg.rms_norm_eps)
-
-        if (
+        use_qkv_packed = (
             pl is not None
             and pl.qkv_packed
             and pl.qkv_qweight is not None
             and pl.qkv_scales is not None
             and pl.qkv_zeros is not None
+        )
+        x_n = cutile_rmsnorm(
+            x_2d,
+            lw.input_layernorm,
+            eps=cfg.rms_norm_eps,
+            perm=(pl.qkv_perm_i32 if (pl is not None and use_qkv_packed) else None),
+        )
+
+        if (
+            use_qkv_packed
+            and pl is not None
+            and pl.qkv_qweight is not None
+            and pl.qkv_scales is not None
+            and pl.qkv_zeros is not None
         ):
-            qkv_in = (
-                cutile_col_permute(x_n, pl.qkv_perm_i32) if pl.qkv_perm_i32 is not None else x_n
-            )
             qkv_out = fused_gemm_dequant(
-                qkv_in, pl.qkv_qweight, pl.qkv_scales, pl.qkv_zeros, group_size=pl.group_size
+                x_n, pl.qkv_qweight, pl.qkv_scales, pl.qkv_zeros, group_size=pl.group_size
             )
             q_dim = cfg.num_attention_heads * cfg.head_dim
             kv_dim = cfg.num_key_value_heads * cfg.head_dim
@@ -784,17 +859,16 @@ class NativeModelRuntime:
 
         o_proj = _quant_linear_native(attn_2d, lw.o_proj, pl.o_perm_i32 if pl else None)
         post_norm, residual_mid = fused_rmsnorm_residual(
-            o_proj, x_2d, lw.post_attention_layernorm, eps=cfg.rms_norm_eps
+            o_proj,
+            x_2d,
+            lw.post_attention_layernorm,
+            eps=cfg.rms_norm_eps,
+            perm=(pl.gate_perm_i32 if (pl is not None and pl.swiglu_fused) else None),
         )
 
         if pl is not None and pl.swiglu_fused:
-            g_in = (
-                cutile_col_permute(post_norm, pl.gate_perm_i32)
-                if pl.gate_perm_i32 is not None
-                else post_norm
-            )
             act_mul = fused_swiglu_dequant(
-                g_in,
+                post_norm,
                 pl.gate_proj.qweight,
                 pl.gate_proj.scales,
                 pl.gate_proj.zeros,
