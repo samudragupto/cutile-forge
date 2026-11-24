@@ -1,0 +1,118 @@
+{
+  "phase": "Phase 24 \u2014 Performance Engineering",
+  "target_release": "v4.0.0",
+  "baseline_tag": "v3.9.0",
+  "hardware": "NVIDIA GeForce RTX 5090 (sm_120)",
+  "software": {
+    "cuda": "13.2",
+    "torch": "2.15.0+cu132",
+    "cuda_tile": "1.8.1",
+    "transformers": "5.23.0"
+  },
+  "frozen_correctness_gates": {
+    "lint": [
+      "black --check",
+      "ruff check",
+      "mypy --ignore-missing-imports"
+    ],
+    "cpu_pytest_min_passed": 207,
+    "gpu_pytest_min_passed": 302,
+    "forbidden_compute_aten_max": 0,
+    "regress_full_tier": {
+      "baseline_pass_fail": "2 PASS / 6 FAIL",
+      "rules": "Unchanged thresholds, comparators, prompts, token counts, and references; zero regression relative to v3.9.0 on any of the 8 models."
+    }
+  },
+  "workloads_and_targets": {
+    "prefill_mistral7b_gptq": {
+      "checkpoint": "/home/arrhat/models/mistral_7b_4bit",
+      "workload": "Mistral-7B-v0.1-GPTQ (desc_act=True), S=512 prefill & C=1 OUT=64 TTFT",
+      "baseline": {
+        "prefill_512_ms": 72.94,
+        "c1_ttft_ms": 16.7,
+        "sglang_c1_ttft_ms": 9.3
+      },
+      "target": {
+        "prefill_512_ms_max": 55.0,
+        "c1_ttft_ms_max": 10.5
+      }
+    },
+    "small_lm_qwen25_05b": {
+      "checkpoint": "Qwen/Qwen2.5-0.5B",
+      "workload": "Qwen2.5-0.5B (FP16), S=512 prefill & C=1 OUT=64 decode (NativePagedKVCache + CUDA Graph)",
+      "baseline": {
+        "prefill_512_ms": 10.74,
+        "uncached_tok_s": 170.27,
+        "eager_cached_tok_s": 24.35,
+        "sglang_c1_tok_s": 803.05,
+        "vllm_c1_tok_s": 694.12
+      },
+      "target": {
+        "prefill_512_ms_max": 8.0,
+        "c1_decode_tok_s_min": 500.0
+      }
+    },
+    "decode_mistral7b_gptq": {
+      "checkpoint": "/home/arrhat/models/mistral_7b_4bit",
+      "workload": "Mistral-7B-v0.1-GPTQ (desc_act=True), OUT=64, C=1, 4, 16",
+      "baseline": {
+        "c1_tok_s": 167.03,
+        "c4_tok_s": 621.53,
+        "c16_tok_s": 2308.02,
+        "c1_itl_p50_ms": 5.82,
+        "sglang_c1_tok_s": 265.01,
+        "sglang_c4_tok_s": 969.4,
+        "sglang_c16_tok_s": 3261.84
+      },
+      "target": {
+        "c1_tok_s_min": 220.0,
+        "c4_tok_s_min": 800.0,
+        "c16_tok_s_min": 2850.0,
+        "c1_itl_p50_ms_max": 4.5
+      }
+    },
+    "decode_mixtral_8x7b_gptq": {
+      "checkpoint": "/var/tmp/arrhat_models/mixtral_8x7b_4bit",
+      "workload": "Mixtral-8x7B-Instruct-v0.1-GPTQ (32L HBM), C=1 OUT=64",
+      "baseline": {
+        "c1_tok_s": 43.9,
+        "routing_host_syncs_per_step": 256
+      },
+      "target": {
+        "c1_tok_s_min": 62.0,
+        "routing_host_syncs_per_step_max": 0
+      }
+    },
+    "http_serving_c64_nonstream": {
+      "checkpoint": "/home/arrhat/models/mistral_7b_4bit",
+      "workload": "Mistral-7B-v0.1-GPTQ HTTP non-streaming C=64 (3-run median vs in-process C=64)",
+      "baseline": {
+        "inprocess_c64_tok_s": 2964.61,
+        "http_nonstream_c64_tok_s": 2519.59,
+        "http_nonstream_pct": 84.99,
+        "status": "FAIL (< 85%)"
+      },
+      "target": {
+        "http_nonstream_pct_min": 88.0,
+        "http_nonstream_c64_tok_s_min": 2610.0
+      }
+    },
+    "memory_and_fp8_kv": {
+      "workload": "PagedKVCache page=16 FP8 bytes & 32L 32K FP8 NativePagedKVCache decode (synthetic-weights)",
+      "baseline": {
+        "fp8_bytes_per_token": 2056.0,
+        "mistral_vram_mb_range": [
+          8570.0,
+          8679.0
+        ],
+        "32l_32k_fp8_ms_per_step": 7.6,
+        "32l_32k_fp16_ms_per_step": 3.86
+      },
+      "target": {
+        "fp8_bytes_per_token_max": 2056.0,
+        "mistral_vram_mb_max": 8800.0,
+        "32l_32k_fp8_ms_per_step_max": 3.86
+      }
+    }
+  }
+}
