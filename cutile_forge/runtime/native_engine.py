@@ -1161,6 +1161,88 @@ class NativeModelRuntime:
         )
         return next_tok.view(bsz, 1)
 
+    def bucket_len_for_pos(self, pos: int) -> int:
+        """Return the context bucket length selected for position `pos`."""
+        return self._select_bucket(pos)
+
+    @torch.inference_mode()
+    def decode_slots_steps(
+        self,
+        active_slots: list[int],
+        token_ids: list[int],
+        positions: list[int],
+        num_steps: int = 1,
+        sync_inputs: bool = True,
+    ) -> list[list[int]]:
+        """Run `num_steps` chained CUDA-Graph decode steps per active slot with one D2H sync."""
+        if not active_slots:
+            return []
+        if not (len(active_slots) == len(token_ids) == len(positions)):
+            raise ValueError("active_slots, token_ids, and positions must have matching lengths")
+        steps = max(1, int(num_steps))
+        if steps == 1:
+            one = self.decode_slots_step(
+                active_slots, token_ids, positions, sync_inputs=sync_inputs
+            )
+            return [[t] for t in one]
+
+        if self.use_cuda and self._all_layers_on_gpu:
+            steps = min(steps, self.max_seq_len)
+            b_cap = self._batch_bucket_for(max(active_slots) + 1)
+            ws = self._get_or_create_workspace(b_cap)
+            max_pos = max(positions)
+            bucket_len = self._select_bucket(max_pos + steps - 1)
+
+            slots_key = tuple(active_slots)
+            need_sync = (
+                sync_inputs
+                or b_cap != self._last_slot_bucket
+                or slots_key != self._last_active_slots
+            )
+            if need_sync:
+                tok_vals = [1] * b_cap
+                pos_vals = [0] * b_cap
+                for sid, tid, pos in zip(active_slots, token_ids, positions, strict=True):
+                    tok_vals[sid] = int(tid)
+                    pos_vals[sid] = int(pos)
+                ws.token_id[:, 0].copy_(
+                    torch.tensor(tok_vals, dtype=torch.int32, device=self.device)
+                )
+                ws.pos_buf.copy_(torch.tensor(pos_vals, dtype=torch.int32, device=self.device))
+            ws.step_buf.fill_(0)
+
+            ran_graph = False
+            if self.use_cuda_graph:
+                try:
+                    graph = self._capture_full_step_graph(ws, bucket_len)
+                    for _ in range(steps):
+                        graph.replay()
+                    ran_graph = True
+                except RuntimeError:
+                    self.use_cuda_graph = False
+                    self.graph_fallback_count += 1
+            if not ran_graph:
+                for _ in range(steps):
+                    self._execute_decode_step_in_workspace(ws, bucket_len)
+
+            self._last_slot_bucket = b_cap
+            self._last_active_slots = slots_key
+            hist_cpu = ws.history_buf[:steps, :b_cap].cpu().tolist()
+            return [[int(hist_cpu[st_i][sid]) for st_i in range(steps)] for sid in active_slots]
+
+        per_slot: list[list[int]] = [[] for _ in active_slots]
+        cur_toks = list(token_ids)
+        cur_pos = list(positions)
+        for step_i in range(steps):
+            nxt = self.decode_slots_step(
+                active_slots, cur_toks, cur_pos, sync_inputs=(sync_inputs and step_i == 0)
+            )
+            for idx_s, tok in enumerate(nxt):
+                per_slot[idx_s].append(int(tok))
+                cur_toks[idx_s] = int(tok)
+                cur_pos[idx_s] += 1
+        return per_slot
+
     @torch.inference_mode()
     def decode_slots_step(
         self,

@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from cutile_forge import __version__
@@ -309,16 +309,20 @@ def create_app(
             ],
         }
 
+    def _encode_prompt_list(prompt_text: str) -> list[int]:
+        if tokenizer is not None:
+            return [int(x) for x in tokenizer.encode(prompt_text, add_special_tokens=True)]
+        return [
+            max(1, ord(c) % max(2, engine.config.vocab_size))
+            for c in prompt_text[: max_prompt_tokens + 64]
+        ] or [1]
+
     def _encode_prompt(prompt_text: str) -> Any:
         import torch
 
         if tokenizer is not None:
             return tokenizer.encode(prompt_text, return_tensors="pt")
-        ids = [
-            max(1, ord(c) % max(2, engine.config.vocab_size))
-            for c in prompt_text[: max_prompt_tokens + 64]
-        ] or [1]
-        return torch.tensor([ids], dtype=torch.long)
+        return torch.tensor([_encode_prompt_list(prompt_text)], dtype=torch.long)
 
     def _decode_tokens(token_ids: list[int]) -> str:
         if tokenizer is not None:
@@ -345,16 +349,22 @@ def create_app(
             raise HTTPException(status_code=429, detail="Too many concurrent requests")
 
         prompt_text = _format_prompt(req.messages)
-        prompt_ids = _encode_prompt(prompt_text)
-        prompt_len = int(prompt_ids.shape[1]) if hasattr(prompt_ids, "shape") else len(prompt_ids)
+        if scheduler is not None:
+            p_tok_list = _encode_prompt_list(prompt_text)
+            prompt_ids: Any = None
+            prompt_len = len(p_tok_list)
+        else:
+            prompt_ids = _encode_prompt(prompt_text)
+            prompt_len = (
+                int(prompt_ids.shape[1]) if hasattr(prompt_ids, "shape") else len(prompt_ids)
+            )
+            p_tok_list = [int(x) for x in prompt_ids[0].tolist()]
         if prompt_len > max_prompt_tokens:
             _record_error(400)
             raise HTTPException(
                 status_code=400,
                 detail=f"Prompt length {prompt_len} exceeds max_prompt_tokens={max_prompt_tokens}",
             )
-
-        p_tok_list = [int(x) for x in prompt_ids[0].tolist()]
         if scheduler is not None:
             rt_max_seq = int(getattr(scheduler.runtime, "max_seq_len", 2048))
             if prompt_len + req.max_tokens > rt_max_seq:
@@ -541,7 +551,7 @@ def create_app(
         finally:
             telemetry["requests_inflight"] = max(0, telemetry["requests_inflight"] - 1)
         text = _decode_tokens(out_ids)
-        return {
+        payload = {
             "id": req_id,
             "object": "chat.completion",
             "created": created,
@@ -559,5 +569,6 @@ def create_app(
                 "total_tokens": prompt_len + len(out_ids),
             },
         }
+        return Response(content=json.dumps(payload), media_type="application/json")
 
     return app

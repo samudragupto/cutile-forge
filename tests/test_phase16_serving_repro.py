@@ -164,3 +164,40 @@ def test_http_stream_disconnect_releases_kv_slots_and_counts_disconnect() -> Non
     assert int(metrics.get("requests_inflight", -1)) == 0
     assert int(metrics.get("active_kv_slots", -1)) == 0
     assert int(metrics.get("tokens_generated_total", 64)) < 64
+
+
+def test_http_nonstream_chained_decode_slots_steps_parity() -> None:
+    """Concurrent stream=False requests must execute chained decode_slots_steps with exact parity."""
+    rt = _build_small_native_runtime(max_batch_size=8)
+    prompts_txt = ["alpha beta", "gamma delta epsilon", "zeta", "eta theta iota"]
+    adapter = _NativeServingAdapter(rt)
+    app = create_app(adapter, max_batch_size=8, batch_wait_ms=8.0)
+
+    async def _run() -> tuple[list[str], list[str], dict[str, object]]:
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+
+            async def _one(p_txt: str) -> str:
+                r = await client.post(
+                    "/v1/chat/completions",
+                    json={
+                        "model": "tiny",
+                        "messages": [{"role": "user", "content": p_txt}],
+                        "max_tokens": 20,
+                        "temperature": 0.0,
+                        "stream": False,
+                    },
+                )
+                assert r.status_code == 200
+                data = r.json()
+                assert int(data["usage"]["completion_tokens"]) == 20
+                return str(data["choices"][0]["message"]["content"])
+
+            solo_outs = [await _one(p) for p in prompts_txt]
+            batched_outs = await asyncio.gather(*[_one(p) for p in prompts_txt])
+            met = (await client.get("/metrics")).json()
+            return solo_outs, batched_outs, met
+
+    solo_texts, batched_texts, metrics = asyncio.run(_run())
+    assert batched_texts == solo_texts
+    assert int(str(metrics.get("batch_size_max", 0))) >= 2

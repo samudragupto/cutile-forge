@@ -303,51 +303,87 @@ class ContinuousBatchScheduler:
                         self._sync_slot_metrics_locked()
                     continue
 
-            # 2. Execute 1 continuous decode step across all currently active slots (including existing)
+            # 2. Execute continuous decode step(s) across all currently active slots
             with self._lock:
-                # Re-read active list only for slots that already existed before admit?
-                # Wait: newly admitted slots already got tok0; on the same tick we can decode all active slots!
-                # Check if any newly queued request should also be admitted first when decode isn't urgent:
                 decode_list = [s for s in self._active.values() if not s.req.cancel_event.is_set()]
                 if not decode_list:
                     self._sync_slot_metrics_locked()
                     continue
+                has_pending = bool(self._pending)
 
-            # If a burst is still arriving for admission, prefer admitting pending slots at top of next loop
-            # after advancing active slots by 1 decode step (true prefill-decode interleaving!).
             try:
                 active_sids = [s.slot_id for s in decode_list]
                 in_toks = [s.last_tok for s in decode_list]
                 in_pos = [s.pos for s in decode_list]
 
+                use_multi = (
+                    not admit
+                    and not has_pending
+                    and len(decode_list) >= self.max_batch_size
+                    and not any(s.req.stream for s in decode_list)
+                    and hasattr(self.runtime, "decode_slots_steps")
+                )
+                num_steps = 1
+                if use_multi:
+                    rem_min = min(max(1, s.req.max_tokens - s.generated) for s in decode_list)
+                    num_steps = min(16, rem_min)
+                    if hasattr(self.runtime, "bucket_len_for_pos"):
+                        max_p = max(in_pos)
+                        blen = int(self.runtime.bucket_len_for_pos(max_p))
+                        num_steps = min(num_steps, max(1, blen - max_p))
+
                 if self._telemetry is not None:
-                    self._telemetry["batches_executed"] += 1
-                    self._telemetry["batch_size_sum"] += len(active_sids)
+                    self._telemetry["batches_executed"] += num_steps
+                    self._telemetry["batch_size_sum"] += len(active_sids) * num_steps
                     self._telemetry["batch_size_max"] = max(
                         int(self._telemetry["batch_size_max"]), len(active_sids)
                     )
 
                 sync_inputs = self._gpu_inputs_dirty
                 self._gpu_inputs_dirty = False
-                try:
-                    next_toks = self.runtime.decode_slots_step(
-                        active_sids, in_toks, in_pos, sync_inputs=sync_inputs
+                if num_steps > 1:
+                    multi_toks = self.runtime.decode_slots_steps(
+                        active_sids,
+                        in_toks,
+                        in_pos,
+                        num_steps=num_steps,
+                        sync_inputs=sync_inputs,
                     )
-                except TypeError:
-                    next_toks = self.runtime.decode_slots_step(active_sids, in_toks, in_pos)
-                with self._lock:
-                    for slot_obj, nxt_tok in zip(decode_list, next_toks, strict=True):
-                        if slot_obj.req.cancel_event.is_set():
-                            self._release_slot_locked(slot_obj.slot_id)
-                            continue
-                        slot_obj.last_tok = int(nxt_tok)
-                        slot_obj.pos += 1
-                        slot_obj.generated += 1
-                        self._deliver_token(slot_obj.req, int(nxt_tok))
-                        if slot_obj.generated >= slot_obj.req.max_tokens:
-                            self._deliver_done(slot_obj.req)
-                            self._release_slot_locked(slot_obj.slot_id)
-                    self._sync_slot_metrics_locked()
+                    with self._lock:
+                        for slot_obj, tok_seq in zip(decode_list, multi_toks, strict=True):
+                            if slot_obj.req.cancel_event.is_set():
+                                self._release_slot_locked(slot_obj.slot_id)
+                                continue
+                            for nxt_tok in tok_seq:
+                                slot_obj.last_tok = int(nxt_tok)
+                                slot_obj.pos += 1
+                                slot_obj.generated += 1
+                                self._deliver_token(slot_obj.req, int(nxt_tok))
+                                if slot_obj.generated >= slot_obj.req.max_tokens:
+                                    self._deliver_done(slot_obj.req)
+                                    self._release_slot_locked(slot_obj.slot_id)
+                                    break
+                        self._sync_slot_metrics_locked()
+                else:
+                    try:
+                        next_toks = self.runtime.decode_slots_step(
+                            active_sids, in_toks, in_pos, sync_inputs=sync_inputs
+                        )
+                    except TypeError:
+                        next_toks = self.runtime.decode_slots_step(active_sids, in_toks, in_pos)
+                    with self._lock:
+                        for slot_obj, nxt_tok in zip(decode_list, next_toks, strict=True):
+                            if slot_obj.req.cancel_event.is_set():
+                                self._release_slot_locked(slot_obj.slot_id)
+                                continue
+                            slot_obj.last_tok = int(nxt_tok)
+                            slot_obj.pos += 1
+                            slot_obj.generated += 1
+                            self._deliver_token(slot_obj.req, int(nxt_tok))
+                            if slot_obj.generated >= slot_obj.req.max_tokens:
+                                self._deliver_done(slot_obj.req)
+                                self._release_slot_locked(slot_obj.slot_id)
+                        self._sync_slot_metrics_locked()
             except Exception as exc:
                 with self._lock:
                     for slot_obj in decode_list:
