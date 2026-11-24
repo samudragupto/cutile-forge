@@ -204,7 +204,7 @@ class ContinuousBatchScheduler:
 
                 if not self._active and self._pending and self.batch_wait_s > 0.0:
                     deadline = time.perf_counter() + self.batch_wait_s
-                    max_deadline = time.perf_counter() + max(self.batch_wait_s, 0.007)
+                    max_deadline = time.perf_counter() + max(self.batch_wait_s, 0.015)
                     prev_pending = len(self._pending)
                     while len(self._pending) < len(self._free_slots):
                         rem = deadline - time.perf_counter()
