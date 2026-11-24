@@ -183,19 +183,9 @@ class NativePagedKVCache:
         # Preallocated linear slot index table [0, 1, ..., total_slots - 1] (zero runtime fill/arange)
         self._linear_slots = torch.arange(self.total_slots, device=self.device, dtype=torch.int32)
 
-        # Scratchpad only needed when dequantizing FP8 KV or non-linear block tables
+        # Lazy scratchpad only allocated if FP16 dequantization or non-linear gather is requested
         self._k_work: list[torch.Tensor] = []
         self._v_work: list[torch.Tensor] = []
-        if self.storage_dtype != torch.float16:
-            work_elems = self.max_batch_size * num_kv_heads * max_seq_len * head_dim
-            self._k_work = [
-                torch.empty((work_elems,), device=self.device, dtype=torch.float16)
-                for _ in range(num_layers)
-            ]
-            self._v_work = [
-                torch.empty((work_elems,), device=self.device, dtype=torch.float16)
-                for _ in range(num_layers)
-            ]
 
     def reset(self) -> None:
         self.seq_lens = [0] * self.num_layers
@@ -235,11 +225,15 @@ class NativePagedKVCache:
         self.block_tables = [base_table.clone() for _ in range(self.num_layers)]
 
     def get_kv(
-        self, layer_idx: int, end_pos: int | None = None, batch_size: int = 1
+        self,
+        layer_idx: int,
+        end_pos: int | None = None,
+        batch_size: int = 1,
+        allow_native_dtype: bool = False,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Return `(B, H_kv, S_kv, D)` FP16 K and V tensors up to `end_pos`."""
+        """Return `(B, H_kv, S_kv, D)` K and V views (FP16 by default, or native dtype if allowed)."""
         seq_len = self.seq_lens[layer_idx] if end_pos is None else end_pos
-        if self._is_linear_mapping and self.storage_dtype == torch.float16:
+        if self._is_linear_mapping and (self.storage_dtype == torch.float16 or allow_native_dtype):
             return (
                 self.k_pools[layer_idx][:batch_size, :, :seq_len, :],
                 self.v_pools[layer_idx][:batch_size, :, :seq_len, :],

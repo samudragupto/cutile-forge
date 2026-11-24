@@ -161,25 +161,31 @@ def flash_decoding_split_kv_kernel(
     )
 
     for kv_tile in range(start_tile, end_tile):
-        k_tile = ct.reshape(
-            ct.load(
-                k_ptr,
-                index=(bh_kv, kv_tile, 0),
-                shape=(1, bk, d_head),
-                padding_mode=ct.PaddingMode.ZERO,
-                latency=3,
+        k_tile = ct.astype(
+            ct.reshape(
+                ct.load(
+                    k_ptr,
+                    index=(bh_kv, kv_tile, 0),
+                    shape=(1, bk, d_head),
+                    padding_mode=ct.PaddingMode.ZERO,
+                    latency=3,
+                ),
+                (bk, d_head),
             ),
-            (bk, d_head),
+            ct.float16,
         )
-        v_tile = ct.reshape(
-            ct.load(
-                v_ptr,
-                index=(bh_kv, kv_tile, 0),
-                shape=(1, bk, d_head),
-                padding_mode=ct.PaddingMode.ZERO,
-                latency=3,
+        v_tile = ct.astype(
+            ct.reshape(
+                ct.load(
+                    v_ptr,
+                    index=(bh_kv, kv_tile, 0),
+                    shape=(1, bk, d_head),
+                    padding_mode=ct.PaddingMode.ZERO,
+                    latency=3,
+                ),
+                (bk, d_head),
             ),
-            (bk, d_head),
+            ct.float16,
         )
         k_pos = ct.reshape(kv_tile * bk + k_base, (1, bk))
         if has_sw_edge:

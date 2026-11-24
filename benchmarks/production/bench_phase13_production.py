@@ -298,7 +298,7 @@ def run_production_benchmark(
 
         def _step(kvc: NativePagedKVCache = kv_cache) -> None:
             for l_idx in range(32):
-                k_v, v_v = kvc.get_kv(l_idx, end_pos=ctx_len)
+                k_v, v_v = kvc.get_kv(l_idx, end_pos=ctx_len, allow_native_dtype=True)
                 flash_decoding_split_kv(
                     q_long,
                     k_v,
