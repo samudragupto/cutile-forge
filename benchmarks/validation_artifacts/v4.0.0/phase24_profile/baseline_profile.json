@@ -1,0 +1,170 @@
+{
+  "phase": "Stage 24A \u2014 Baseline Bottleneck Profile",
+  "cutile_forge_path": "/var/tmp/arrhat_models/cutile_forge_p24/cutile_forge/__init__.py",
+  "hardware": "NVIDIA GeForce RTX 5090",
+  "software": {
+    "torch": "2.15.0+cu132",
+    "cuda": "13.2",
+    "cuda_tile": "1.8.1"
+  },
+  "mistral_7b_gptq": {
+    "packing_info": {
+      "qkv_packed": true,
+      "swiglu_fused": true,
+      "group_size": 128,
+      "has_q_perm": true,
+      "has_k_perm": true,
+      "has_v_perm": true,
+      "has_o_perm": true,
+      "has_gate_perm": true,
+      "has_up_perm": true,
+      "has_down_perm": true,
+      "qkv_packing_rate": 1.0,
+      "swiglu_fusion_rate": 1.0
+    },
+    "prefill_512_e2e_ms": 74.2826,
+    "prefill_2048_e2e_ms": 266.0284,
+    "generate_batch": {
+      "C=1": {
+        "wall_ms": 370.585,
+        "prefill_ms": 6.27,
+        "decode_ms": 364.26,
+        "itl_ms": 5.7819,
+        "tok_s": 172.7
+      },
+      "C=4": {
+        "wall_ms": 392.083,
+        "prefill_ms": 18.51,
+        "decode_ms": 373.5,
+        "itl_ms": 5.9286,
+        "tok_s": 652.92
+      },
+      "C=16": {
+        "wall_ms": 390.987,
+        "prefill_ms": 43.85,
+        "decode_ms": 346.89,
+        "itl_ms": 5.5062,
+        "tok_s": 2619.01
+      }
+    },
+    "op_breakdown": {
+      "M=1_decode_pos64": {
+        "embed_ms": 0.0115,
+        "layer0_rmsnorm1_ms": 0.0114,
+        "layer0_single_col_permute_ms": 0.0092,
+        "layer0_qkv_proj_total_ms": 0.0412,
+        "layer0_rope_kv_write_ms": 0.0143,
+        "layer0_attn_decode_ms": 0.0148,
+        "layer0_o_proj_ms": 0.0308,
+        "layer0_postnorm_res_ms": 0.0133,
+        "layer0_ffn_gate_up_ms": 0.0661,
+        "layer0_down_proj_add_ms": 0.0649,
+        "layer0_total_ms": 0.2568,
+        "32x_layers_plus_head_sum_ms": 8.4077,
+        "lm_head_ms": 0.1786,
+        "full_step_cuda_graph_ms": 5.8243
+      },
+      "M=4_decode_pos64": {
+        "embed_ms": 0.0112,
+        "layer0_rmsnorm1_ms": 0.0113,
+        "layer0_single_col_permute_ms": 0.009,
+        "layer0_qkv_proj_total_ms": 0.0415,
+        "layer0_rope_kv_write_ms": 0.0144,
+        "layer0_attn_decode_ms": 0.0148,
+        "layer0_o_proj_ms": 0.0313,
+        "layer0_postnorm_res_ms": 0.0131,
+        "layer0_ffn_gate_up_ms": 0.066,
+        "layer0_down_proj_add_ms": 0.0661,
+        "layer0_total_ms": 0.2585,
+        "32x_layers_plus_head_sum_ms": 8.4582,
+        "lm_head_ms": 0.175,
+        "full_step_cuda_graph_ms": 5.9699
+      },
+      "M=16_decode_pos64": {
+        "embed_ms": 0.0112,
+        "layer0_rmsnorm1_ms": 0.0113,
+        "layer0_single_col_permute_ms": 0.009,
+        "layer0_qkv_proj_total_ms": 0.0311,
+        "layer0_rope_kv_write_ms": 0.0144,
+        "layer0_attn_decode_ms": 0.0213,
+        "layer0_o_proj_ms": 0.0276,
+        "layer0_postnorm_res_ms": 0.0134,
+        "layer0_ffn_gate_up_ms": 0.0661,
+        "layer0_down_proj_add_ms": 0.06,
+        "layer0_total_ms": 0.2452,
+        "32x_layers_plus_head_sum_ms": 8.0329,
+        "lm_head_ms": 0.1753,
+        "full_step_cuda_graph_ms": 5.5992
+      },
+      "M=512_prefill": {
+        "layer0_rmsnorm1_ms": 0.0132,
+        "layer0_qkv_proj_and_split_ms": 0.2417,
+        "layer0_rope_ms": 0.0306,
+        "layer0_kv_append_get_ms": 0.0237,
+        "layer0_attn_prefill_ms": 0.0934,
+        "layer0_attn_transpose_contig_ms": 0.0092,
+        "layer0_o_proj_ms": 0.1519,
+        "layer0_postnorm_res_ms": 0.0149,
+        "layer0_ffn_gate_up_ms": 1.111,
+        "layer0_down_proj_add_ms": 0.534,
+        "layer0_total_ms": 2.2236,
+        "32x_layers_plus_head_sum_ms": 71.3442,
+        "lm_head_ms": 0.189,
+        "full_prefill_512_e2e_ms": 74.2826,
+        "python_dispatch_overhead_ms": 2.938
+      }
+    }
+  },
+  "qwen25_05b_fp16": {
+    "prefill_512_ms": 10.3599,
+    "eager_cached_decode_63steps_ms": 450.276,
+    "eager_cached_tok_s": 139.91,
+    "single_decode_step_wall_ms": 6.9012,
+    "single_decode_step_cuda_event_ms": 6.8914,
+    "single_block_causal_attention_ms": 0.1834,
+    "single_block_gemm_fp16_ms": 0.0202,
+    "diagnosis": "24-layer Python UnifiedModelExecutor + per-step PagedKVCache page alloc/cat/dict lookup without CUDA Graph"
+  },
+  "mixtral_8x7b_gptq": {
+    "prefill_ms": 9.682,
+    "c1_decode_tok_s": 46.22,
+    "c1_ms_per_tok": 21.635,
+    "layer0_router_topk_ms": 0.0884,
+    "layer0_moe_current_with_8_host_syncs_ms": 0.5314,
+    "layer0_moe_2experts_no_host_sync_ms": 0.2953,
+    "32x_moe_host_sync_saving_est_ms": 7.555,
+    "routing_host_syncs_per_step": 256
+  },
+  "fp8_long_context_32L": {
+    "8192_fp16": {
+      "get_kv_dequant_32L_ms": 0.0643,
+      "total_32L_step_ms": 1.328,
+      "attention_only_est_ms": 1.2637
+    },
+    "8192_fp8_e4m3fn": {
+      "get_kv_dequant_32L_ms": 1.0736,
+      "total_32L_step_ms": 1.8528,
+      "attention_only_est_ms": 0.7792
+    },
+    "16384_fp16": {
+      "get_kv_dequant_32L_ms": 0.0672,
+      "total_32L_step_ms": 2.1246,
+      "attention_only_est_ms": 2.0574
+    },
+    "16384_fp8_e4m3fn": {
+      "get_kv_dequant_32L_ms": 2.1735,
+      "total_32L_step_ms": 3.7437,
+      "attention_only_est_ms": 1.5702
+    },
+    "32768_fp16": {
+      "get_kv_dequant_32L_ms": 0.0675,
+      "total_32L_step_ms": 3.8105,
+      "attention_only_est_ms": 3.743
+    },
+    "32768_fp8_e4m3fn": {
+      "get_kv_dequant_32L_ms": 4.3663,
+      "total_32L_step_ms": 7.5645,
+      "attention_only_est_ms": 3.1982
+    }
+  }
+}
