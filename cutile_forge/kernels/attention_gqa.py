@@ -75,10 +75,16 @@ def attention_gqa_kernel(
         k_tile = ct.reshape(k_3d, (bk, d_head))
         v_tile = ct.reshape(v_3d, (bk, d_head))
 
+        k_pos = ct.reshape(kv_tile * bk + k_base, (1, bk))
+        if is_causal and sliding_window > 0:
+            if kv_tile * bk < min_k:
+                valid_col = ct.reshape(k_pos >= min_k, (bk, 1))
+                k_tile = ct.where(valid_col, k_tile, ct.astype(0.0, ct.float16))
+                v_tile = ct.where(valid_col, v_tile, ct.astype(0.0, ct.float16))
+
         qk = ct.mma(q, ct.transpose(k_tile), ct.zeros((bq, bk), dtype=ct.float32))
         scores = qk * sm_scale
 
-        k_pos = ct.reshape(kv_tile * bk + k_base, (1, bk))
         valid = k_pos < s_kv
         if is_causal:
             valid = valid & (k_pos <= q_pos)
@@ -124,6 +130,7 @@ def flash_decoding_split_kv_kernel(
     bk: ct.Constant[int],
     d_head: ct.Constant[int],
     is_causal: ct.Constant[int],
+    has_sw_edge: ct.Constant[int],
 ) -> None:
     """FlashDecoding Split-KV kernel: parallelizes long-context decode across 170 SMs."""
     split_idx = ct.bid(0)
@@ -149,6 +156,9 @@ def flash_decoding_split_kv_kernel(
     total_kv_tiles = ct.cdiv(s_kv, bk)
     start_tile = base_tile + split_idx * tiles_per_split
     end_tile = min(start_tile + tiles_per_split, total_kv_tiles)
+    min_k = (
+        ct.maximum(0, kv_offset - sliding_window + 1) if (is_causal and sliding_window > 0) else 0
+    )
 
     for kv_tile in range(start_tile, end_tile):
         k_tile = ct.reshape(
@@ -171,10 +181,16 @@ def flash_decoding_split_kv_kernel(
             ),
             (bk, d_head),
         )
+        k_pos = ct.reshape(kv_tile * bk + k_base, (1, bk))
+        if has_sw_edge:
+            if kv_tile * bk < min_k:
+                valid_col = ct.reshape(k_pos >= min_k, (bk, 1))
+                k_tile = ct.where(valid_col, k_tile, ct.astype(0.0, ct.float16))
+                v_tile = ct.where(valid_col, v_tile, ct.astype(0.0, ct.float16))
+
         scores = ct.mma(q_tile, ct.transpose(k_tile), ct.zeros((bq, bk), dtype=ct.float32))
         scores = scores * scale
 
-        k_pos = ct.reshape(kv_tile * bk + k_base, (1, bk))
         valid = k_pos < s_kv
         if is_causal:
             valid = valid & (k_pos <= q_pos)
@@ -272,9 +288,9 @@ def flash_decoding_split_kv(
     bk = 64
 
     total_kv_tiles = (s_kv + bk - 1) // bk
-    base_tile = (
-        max(0, kv_offset - sliding_window + 1) // bk if (causal and sliding_window > 0) else 0
-    )
+    min_k_host = max(0, kv_offset - sliding_window + 1) if (causal and sliding_window > 0) else 0
+    base_tile = min_k_host // bk
+    has_sw_edge = 1 if (min_k_host % bk != 0) else 0
     active_tiles = max(1, total_kv_tiles - base_tile)
     eff_splits = max(1, min(num_splits, active_tiles))
     tiles_per_split = (active_tiles + eff_splits - 1) // eff_splits
@@ -329,6 +345,7 @@ def flash_decoding_split_kv(
             bk,
             d_head,
             1 if causal else 0,
+            has_sw_edge,
         ),
     )
 

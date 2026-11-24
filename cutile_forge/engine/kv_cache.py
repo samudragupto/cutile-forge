@@ -21,10 +21,17 @@ class KVPage:
     swap_event: torch.cuda.Event | None = None
     k_scale: float = 1.0
     v_scale: float = 1.0
+    k_scales: torch.Tensor | None = None
+    v_scales: torch.Tensor | None = None
 
     @property
     def nbytes(self) -> int:
-        return self.k.numel() * self.k.element_size() + self.v.numel() * self.v.element_size()
+        total = self.k.numel() * self.k.element_size() + self.v.numel() * self.v.element_size()
+        if self.k_scales is not None:
+            total += self.k_scales.numel() * self.k_scales.element_size()
+        if self.v_scales is not None:
+            total += self.v_scales.numel() * self.v_scales.element_size()
+        return total
 
 
 class PagedKVCache:
@@ -216,6 +223,16 @@ class PagedKVCache:
                     dtype=self.storage_dtype,
                 )
                 v_buf = torch.zeros_like(k_buf)
+                k_scales = (
+                    torch.ones((1, 1, self.page_size, 1), device=alloc_dev, dtype=torch.float32)
+                    if self.kv_dtype == "fp8_e4m3fn"
+                    else None
+                )
+                v_scales = (
+                    torch.ones((1, 1, self.page_size, 1), device=alloc_dev, dtype=torch.float32)
+                    if self.kv_dtype == "fp8_e4m3fn"
+                    else None
+                )
                 page = KVPage(
                     layer_idx=layer_idx,
                     page_idx=page_idx,
@@ -223,6 +240,8 @@ class PagedKVCache:
                     v=v_buf,
                     valid_tokens=0,
                     on_gpu=on_gpu,
+                    k_scales=k_scales,
+                    v_scales=v_scales,
                 )
                 self.pages[key] = page
                 if on_gpu:
@@ -241,25 +260,16 @@ class PagedKVCache:
                     page.k_scale = req_k_scale
                     page.v_scale = req_v_scale
                 else:
-                    if req_k_scale > page.k_scale:
-                        ratio = page.k_scale / req_k_scale
-                        n_v = page.valid_tokens
-                        page.k[:, :, :n_v, :] = (
-                            page.k[:, :, :n_v, :].to(torch.float32) * ratio
-                        ).to(torch.float8_e4m3fn)
-                        page.k_scale = req_k_scale
-                    if req_v_scale > page.v_scale:
-                        ratio = page.v_scale / req_v_scale
-                        n_v = page.valid_tokens
-                        page.v[:, :, :n_v, :] = (
-                            page.v[:, :, :n_v, :].to(torch.float32) * ratio
-                        ).to(torch.float8_e4m3fn)
-                        page.v_scale = req_v_scale
+                    page.k_scale = max(page.k_scale, req_k_scale)
+                    page.v_scale = max(page.v_scale, req_v_scale)
+                if page.k_scales is not None and page.v_scales is not None:
+                    page.k_scales[:, :, slot : slot + 1, :].fill_(req_k_scale)
+                    page.v_scales[:, :, slot : slot + 1, :].fill_(req_v_scale)
                 page.k[:, :, slot : slot + 1, :] = (
-                    (k_slice.float() / page.k_scale).clamp(-448.0, 448.0).to(torch.float8_e4m3fn)
+                    (k_slice.float() / req_k_scale).clamp(-448.0, 448.0).to(torch.float8_e4m3fn)
                 )
                 page.v[:, :, slot : slot + 1, :] = (
-                    (v_slice.float() / page.v_scale).clamp(-448.0, 448.0).to(torch.float8_e4m3fn)
+                    (v_slice.float() / req_v_scale).clamp(-448.0, 448.0).to(torch.float8_e4m3fn)
                 )
             else:
                 page.k[:, :, slot : slot + 1, :] = k_slice
@@ -335,8 +345,18 @@ class PagedKVCache:
                 v_t = page.v[:, :, :n, :].to(self.device, non_blocking=True)
                 self.host_fetches += 1
             if self.kv_dtype == "fp8_e4m3fn":
-                k_t = (k_t.to(self.dtype) * page.k_scale).to(self.dtype)
-                v_t = (v_t.to(self.dtype) * page.v_scale).to(self.dtype)
+                ks = (
+                    page.k_scales[:, :, :n, :].to(device=k_t.device, dtype=torch.float32)
+                    if page.k_scales is not None
+                    else page.k_scale
+                )
+                vs = (
+                    page.v_scales[:, :, :n, :].to(device=v_t.device, dtype=torch.float32)
+                    if page.v_scales is not None
+                    else page.v_scale
+                )
+                k_t = (k_t.float() * ks).to(self.dtype)
+                v_t = (v_t.float() * vs).to(self.dtype)
             k_chunks.append(k_t)
             v_chunks.append(v_t)
         return torch.cat(k_chunks, dim=2), torch.cat(v_chunks, dim=2)

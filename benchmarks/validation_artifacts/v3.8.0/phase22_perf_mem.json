@@ -1,0 +1,161 @@
+{
+  "hardware": "NVIDIA GeForce RTX 5090",
+  "provenance": "synthetic-weights",
+  "warmup_runs": 50,
+  "before": {
+    "kernels": {
+      "fused_attn_gqa_skv128_sw0": {
+        "median_us": 25.504,
+        "min_us": 24.864,
+        "max_us": 33.248,
+        "runs": 200
+      },
+      "fused_attn_gqa_skv1024_sw0": {
+        "median_us": 39.232,
+        "min_us": 38.72,
+        "max_us": 45.984,
+        "runs": 200
+      },
+      "fused_attn_gqa_skv2047_sw2040": {
+        "median_us": 54.912,
+        "min_us": 52.896,
+        "max_us": 58.944,
+        "runs": 200
+      },
+      "flash_decoding_skv2048_sw2040": {
+        "median_us": 45.168,
+        "min_us": 44.352,
+        "max_us": 52.352,
+        "runs": 200
+      },
+      "flash_decoding_skv4096_sw4096": {
+        "median_us": 36.096,
+        "min_us": 34.016,
+        "max_us": 37.44,
+        "runs": 200
+      }
+    },
+    "memory": {
+      "fp16_bytes_per_page": 65536,
+      "fp16_bytes_per_token": 4096.0,
+      "fp8_bytes_per_page": 32768,
+      "fp8_bytes_per_token": 2048.0,
+      "fp8_single_page_peak_alloc_bytes": 16826368,
+      "fp8_single_page_peak_reserved_bytes": 23068672
+    }
+  },
+  "after": {
+    "kernels": {
+      "fused_attn_gqa_skv128_sw0": {
+        "median_us": 14.208,
+        "min_us": 13.312,
+        "max_us": 18.752,
+        "runs": 200
+      },
+      "fused_attn_gqa_skv1024_sw0": {
+        "median_us": 29.824,
+        "min_us": 29.344,
+        "max_us": 37.792,
+        "runs": 200
+      },
+      "fused_attn_gqa_skv2047_sw2040": {
+        "median_us": 48.128,
+        "min_us": 46.304,
+        "max_us": 54.048,
+        "runs": 200
+      },
+      "flash_decoding_skv2048_sw2040": {
+        "median_us": 34.736,
+        "min_us": 33.344,
+        "max_us": 42.944,
+        "runs": 200
+      },
+      "flash_decoding_skv4096_sw4096": {
+        "median_us": 36.736,
+        "min_us": 35.04,
+        "max_us": 45.888,
+        "runs": 200
+      }
+    },
+    "memory": {
+      "fp16_bytes_per_page": 65536,
+      "fp16_bytes_per_token": 4096.0,
+      "fp8_bytes_per_page": 32896,
+      "fp8_bytes_per_token": 2056.0,
+      "fp8_single_page_peak_alloc_bytes": 271360,
+      "fp8_single_page_peak_reserved_bytes": 2097152
+    }
+  },
+  "delta": {
+    "kernels": {
+      "fused_attn_gqa_skv128_sw0": {
+        "before_median_us": 25.504,
+        "after_median_us": 14.208,
+        "delta_us": -11.296,
+        "delta_pct": -44.29
+      },
+      "fused_attn_gqa_skv1024_sw0": {
+        "before_median_us": 39.232,
+        "after_median_us": 29.824,
+        "delta_us": -9.408,
+        "delta_pct": -23.98
+      },
+      "fused_attn_gqa_skv2047_sw2040": {
+        "before_median_us": 54.912,
+        "after_median_us": 48.128,
+        "delta_us": -6.784,
+        "delta_pct": -12.35
+      },
+      "flash_decoding_skv2048_sw2040": {
+        "before_median_us": 45.168,
+        "after_median_us": 34.736,
+        "delta_us": -10.432,
+        "delta_pct": -23.1
+      },
+      "flash_decoding_skv4096_sw4096": {
+        "before_median_us": 36.096,
+        "after_median_us": 36.736,
+        "delta_us": 0.64,
+        "delta_pct": 1.77
+      }
+    },
+    "memory": {
+      "fp16_bytes_per_page": {
+        "before": 65536,
+        "after": 65536,
+        "delta": 0,
+        "delta_pct": 0.0
+      },
+      "fp16_bytes_per_token": {
+        "before": 4096.0,
+        "after": 4096.0,
+        "delta": 0.0,
+        "delta_pct": 0.0
+      },
+      "fp8_bytes_per_page": {
+        "before": 32768,
+        "after": 32896,
+        "delta": 128,
+        "delta_pct": 0.39
+      },
+      "fp8_bytes_per_token": {
+        "before": 2048.0,
+        "after": 2056.0,
+        "delta": 8.0,
+        "delta_pct": 0.39
+      },
+      "fp8_single_page_peak_alloc_bytes": {
+        "before": 16826368,
+        "after": 271360,
+        "delta": -16555008,
+        "delta_pct": -98.39
+      },
+      "fp8_single_page_peak_reserved_bytes": {
+        "before": 23068672,
+        "after": 2097152,
+        "delta": -20971520,
+        "delta_pct": -90.91
+      }
+    }
+  }
+}

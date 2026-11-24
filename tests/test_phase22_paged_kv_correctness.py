@@ -120,13 +120,30 @@ def test_paged_kv_fp8_per_slot_scale_avoids_requant_drift() -> None:
     pkv.update(0, k_seq, v_seq)
     kg, vg = pkv.get_kv(0)
 
+    def _ideal_per_token_fp8(t: torch.Tensor) -> torch.Tensor:
+        out = []
+        for idx in range(t.shape[2]):
+            sl = t[:, :, idx : idx + 1, :]
+            scale = max(float(sl.abs().max().item()) / 448.0, 1e-6)
+            q = (sl.float() / scale).clamp(-448.0, 448.0).to(torch.float8_e4m3fn)
+            out.append((q.float() * scale).to(t.dtype))
+        return torch.cat(out, dim=2)
+
+    ideal_k = _ideal_per_token_fp8(k_seq)
+    ideal_v = _ideal_per_token_fp8(v_seq)
+
     early_k_err = float((kg[:, :, :10, :].float() - k_seq[:, :, :10, :].float()).abs().max().item())
-    all_k_err = float((kg.float() - k_seq.float()).abs().max().item())
-    all_v_err = float((vg.float() - v_seq.float()).abs().max().item())
-    assert early_k_err < 0.25, f"Earlier tokens suffered FP8 requantization drift: {early_k_err}"
-    assert (
-        all_k_err < 1.5 and all_v_err < 1.5
-    ), f"FP8 max diff too high: k={all_k_err}, v={all_v_err}"
+    early_v_err = float((vg[:, :, :10, :].float() - v_seq[:, :, :10, :].float()).abs().max().item())
+    assert early_k_err < 0.25, f"Earlier K tokens suffered FP8 requantization drift: {early_k_err}"
+    assert early_v_err < 0.25, f"Earlier V tokens suffered FP8 requantization drift: {early_v_err}"
+    assert torch.equal(kg, ideal_k), (
+        f"PagedKVCache K drifted from per-token FP8 oracle: "
+        f"{float((kg.float() - ideal_k.float()).abs().max().item())}"
+    )
+    assert torch.equal(vg, ideal_v), (
+        f"PagedKVCache V drifted from per-token FP8 oracle: "
+        f"{float((vg.float() - ideal_v.float()).abs().max().item())}"
+    )
 
 
 def test_paged_kv_invariants_sentinels_eviction_and_boundaries() -> None:
