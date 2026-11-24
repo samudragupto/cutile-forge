@@ -211,7 +211,11 @@ class PagedKVCache:
             if key not in self.pages:
                 on_gpu = self.device.type == "cuda"
                 elem_bytes = 1 if self.kv_dtype == "fp8_e4m3fn" else 2
-                page_bytes = 2 * self.num_kv_heads * self.page_size * self.head_dim * elem_bytes
+                scale_bytes = 2 * self.page_size * 4 if self.kv_dtype == "fp8_e4m3fn" else 0
+                page_bytes = (
+                    2 * self.num_kv_heads * self.page_size * self.head_dim * elem_bytes
+                    + scale_bytes
+                )
                 if on_gpu:
                     self._evict_if_needed(page_bytes)
                     if self.gpu_used_bytes + page_bytes > self.gpu_budget_bytes:

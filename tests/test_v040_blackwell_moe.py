@@ -29,7 +29,8 @@ def test_fp8_kv_cache_memory_and_accuracy() -> None:
     kv8.update(0, k, v)
 
     if torch.cuda.is_available():
-        assert kv8.gpu_used_bytes == kv16.gpu_used_bytes // 2
+        scale_bytes = len(kv8.pages) * 2 * kv8.page_size * 4
+        assert kv8.gpu_used_bytes == kv16.gpu_used_bytes // 2 + scale_bytes
 
     k_got, v_got = kv8.get_kv(0)
     assert (k_got - k).abs().mean().item() < 1e-2
