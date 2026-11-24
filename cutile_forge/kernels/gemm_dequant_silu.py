@@ -443,7 +443,7 @@ def fused_swiglu_dequant(
             and tk == 128
             and n >= 4096
             and n % tn == 0
-            and not (part_g_buf is None and k >= 8192)
+            and not (m == 1 and part_g_buf is None and k >= 8192)
         )
         else 1
     )

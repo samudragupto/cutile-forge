@@ -798,7 +798,7 @@ def fused_gemm_dequant(
 
     split_k = (
         1
-        if (tile_shape is not None or (part_buf is None and k >= 8192))
+        if (tile_shape is not None or (m == 1 and part_buf is None and k >= 8192))
         else _select_dequant_decode_splitk(m, n, k, group_size)
     )
     if split_k > 1 and tk == 128:
@@ -864,7 +864,7 @@ def fused_gemm_dequant_add(
 
     split_k = (
         1
-        if (tile_shape is not None or (part_buf is None and k >= 8192))
+        if (tile_shape is not None or (m == 1 and part_buf is None and k >= 8192))
         else _select_dequant_decode_splitk(m, n, k, group_size)
     )
     if split_k > 1 and tk == 128:
