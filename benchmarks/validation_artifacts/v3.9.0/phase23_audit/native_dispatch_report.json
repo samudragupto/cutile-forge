@@ -1,45 +1,50 @@
 {
   "hardware": "NVIDIA GeForce RTX 5090",
-  "commit": "788a34382c4d8936d1775e28b250cfcc614ed3bf",
+  "worktree": "/var/tmp/arrhat_models/cutile_forge_v390",
+  "base_commit": "c252c81",
+  "version": "3.9.0",
+  "claim_precision": "Zero forbidden ATen compute ops across 9 audited real-checkpoint execution paths (not zero ATen ops; Qwen/LLaVA cached decode verified in eager mode; DiT scope is denoiser forward only).",
   "models": {
     "qwen2.5-0.5b": {
       "checkpoint": "Qwen/Qwen2.5-0.5B",
-      "prefill_seq32_paged_kv": {
-        "total_aten_calls": 6658,
+      "mode": "eager",
+      "prefill_seq12_paged_kv": {
+        "total_aten_calls": 3827,
         "forbidden_compute_ops": {},
         "forbidden_compute_total": 0,
         "allowed_host_metadata_ops": {
           "aten._to_copy.default": 48,
           "aten.add.Tensor": 120,
-          "aten.alias.default": 192,
+          "aten.alias.default": 96,
           "aten.arange.default": 24,
           "aten.arange.start_step": 24,
           "aten.cat.default": 48,
           "aten.clone.default": 72,
-          "aten.copy_.default": 1536,
+          "aten.copy_.default": 576,
           "aten.cos.default": 24,
           "aten.div.Tensor": 24,
-          "aten.empty.memory_format": 194,
+          "aten.empty.memory_format": 339,
           "aten.empty_like.default": 145,
+          "aten.lift_fresh.default": 1,
           "aten.mul.Tensor": 72,
           "aten.pow.Scalar": 24,
           "aten.reciprocal.default": 24,
           "aten.sin.default": 24,
-          "aten.slice.Tensor": 3073,
+          "aten.slice.Tensor": 1200,
           "aten.transpose.int": 96,
           "aten.view.default": 798,
-          "aten.zeros.default": 48,
-          "aten.zeros_like.default": 48
+          "aten.zeros.default": 24,
+          "aten.zeros_like.default": 24
         }
       },
       "cached_decode_seq1_paged_kv": {
-        "total_aten_calls": 2267,
+        "total_aten_calls": 2122,
         "forbidden_compute_ops": {},
         "forbidden_compute_total": 0,
         "allowed_host_metadata_ops": {
           "aten._to_copy.default": 48,
           "aten.add.Tensor": 120,
-          "aten.alias.default": 144,
+          "aten.alias.default": 48,
           "aten.arange.default": 24,
           "aten.arange.start_step": 24,
           "aten.cat.default": 48,
@@ -52,22 +57,15 @@
           "aten.pow.Scalar": 24,
           "aten.reciprocal.default": 24,
           "aten.sin.default": 24,
-          "aten.slice.Tensor": 193,
+          "aten.slice.Tensor": 192,
           "aten.transpose.int": 96,
-          "aten.view.default": 798,
-          "aten.zeros.default": 24,
-          "aten.zeros_like.default": 24
+          "aten.view.default": 798
         }
-      },
-      "cached_vs_uncached_parity": {
-        "cos_sim": 0.999999,
-        "max_abs_diff": 0.01562,
-        "decode_16tok_total_ms": 657.02,
-        "decode_tok_s": 24.35
       }
     },
     "siglip-vit-b16": {
       "checkpoint": "google/siglip-base-patch16-224",
+      "mode": "eager",
       "forward_pass": {
         "total_aten_calls": 531,
         "forbidden_compute_ops": {},
@@ -89,6 +87,7 @@
     },
     "whisper-tiny": {
       "checkpoint": "openai/whisper-tiny",
+      "mode": "eager",
       "forward_pass": {
         "total_aten_calls": 210,
         "forbidden_compute_ops": {},
@@ -110,6 +109,7 @@
     },
     "dit-xl-2": {
       "checkpoint": "facebook/DiT-XL-2-256",
+      "mode": "eager",
       "denoiser_step": {
         "total_aten_calls": 2219,
         "forbidden_compute_ops": {},
@@ -137,10 +137,11 @@
           "aten.view.default": 919
         }
       },
-      "pipeline_scope": "Denoiser forward only; CFG, scheduler, and VAE decode are outside UnifiedModelExecutor scope (UNRUN)"
+      "pipeline_scope": "DiTTransformer2DModel denoiser forward only; CFG, scheduler loop, and VAE decode are UNRUN (outside UnifiedModelExecutor)"
     },
     "llava-1.5": {
       "checkpoint": "llava-hf/llava-1.5-7b-hf",
+      "mode": "eager",
       "multimodal_prefill_paged_kv": {
         "total_aten_calls": 122475,
         "forbidden_compute_ops": {},
@@ -180,7 +181,7 @@
         }
       },
       "cached_text_decode_seq1_paged_kv": {
-        "total_aten_calls": 5099,
+        "total_aten_calls": 5098,
         "forbidden_compute_ops": {},
         "forbidden_compute_total": 0,
         "allowed_host_metadata_ops": {
@@ -195,7 +196,6 @@
           "aten.div.Tensor": 32,
           "aten.empty.memory_format": 451,
           "aten.empty_like.default": 193,
-          "aten.lift_fresh.default": 1,
           "aten.mul.Tensor": 96,
           "aten.pow.Scalar": 32,
           "aten.reciprocal.default": 32,
@@ -204,11 +204,6 @@
           "aten.transpose.int": 128,
           "aten.view.default": 1062
         }
-      },
-      "cached_vs_uncached_parity": {
-        "cos_sim_step4": 1.0,
-        "decode_4tok_total_ms": 40.12,
-        "decode_tok_s": 99.69
       }
     },
     "mixtral-8x7b": {
@@ -239,6 +234,21 @@
           "aten.view.default": 646,
           "aten.zeros.default": 32,
           "aten.zeros_like.default": 64
+        },
+        "op_operand_classification": {
+          "routing_metadata_ops": {
+            "aten.eq.Scalar": 256,
+            "aten.any.default": 256,
+            "aten._local_scalar_dense.default": 256,
+            "aten.nonzero.default": 213,
+            "aten.unbind.int": 213,
+            "aten.index.Tensor": 213
+          },
+          "routing_metadata_note": "eq/any/_local_scalar_dense/nonzero/unbind operate on boolean routing index masks (indices == e); index operates on router probs[tok_idx, k_slot]",
+          "activation_gather_ops": {
+            "aten.index_select.default": 213
+          },
+          "activation_gather_note": "index_select gathers model activation rows from post_norm before expert dequant GEMM (operates on activations, NOT metadata-only)"
         }
       },
       "decode_seq1_paged_kv": {
@@ -265,30 +275,23 @@
           "aten.unbind.int": 64,
           "aten.view.default": 646,
           "aten.zeros_like.default": 32
+        },
+        "op_operand_classification": {
+          "routing_metadata_ops": {
+            "aten.eq.Scalar": 256,
+            "aten.any.default": 256,
+            "aten._local_scalar_dense.default": 256,
+            "aten.nonzero.default": 64,
+            "aten.unbind.int": 64,
+            "aten.index.Tensor": 64
+          },
+          "routing_metadata_note": "eq/any/_local_scalar_dense/nonzero/unbind operate on boolean routing index masks (indices == e); index operates on router probs[tok_idx, k_slot]",
+          "activation_gather_ops": {
+            "aten.index_select.default": 64
+          },
+          "activation_gather_note": "index_select gathers model activation rows from post_norm before expert dequant GEMM (operates on activations, NOT metadata-only)"
         }
       }
     }
-  },
-  "scope_classification": {
-    "NATIVE_VERIFIED": [
-      "Qwen2.5-0.5B prefill and PagedKVCache cached decode (UnifiedModelExecutor)",
-      "Mixtral-8x7B-GPTQ prefill and PagedKVCache cached decode (Mistral7B + cutile_embedding_lookup + cutile_moe_router_topk + cutile_moe_weighted_add)",
-      "SigLIP ViT-B/16 vision patch GEMM + 12L encoder (UnifiedModelExecutor)",
-      "Whisper-Tiny audio 2x cutile_conv2d + cutile_gelu_erf stem + 4L encoder (UnifiedModelExecutor)",
-      "LLaVA-1.5 multimodal CLIP ViT + 2L projector + Llama prefill and cached text decode (UnifiedModelExecutor)",
-      "DiT-XL/2-256 conditioned denoiser forward step (UnifiedModelExecutor)"
-    ],
-    "SYNTHETIC_ONLY": [
-      "qwen2_moe (no ungated <16GB FP16 checkpoint fits with reference in 32GB VRAM)",
-      "deepseek_moe (no ungated <16GB FP16 checkpoint fits with reference in 32GB VRAM)"
-    ],
-    "FALLBACK": [],
-    "UNSUPPORTED": [
-      "Qwen2.5-0.5B / LLaVA-1.5 full-step CUDA Graph capture in UnifiedModelExecutor (eager CuTile + PagedKVCache supported)",
-      "Mistral-7B 64K context & GGUF Q5_0 tensors"
-    ],
-    "UNRUN": [
-      "DiT-XL/2 classifier-free guidance wrapper, DDIM/DPM scheduler loop, and VAE decoder (outside UnifiedModelExecutor scope)"
-    ]
   }
 }

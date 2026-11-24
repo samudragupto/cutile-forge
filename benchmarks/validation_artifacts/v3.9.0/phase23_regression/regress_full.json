@@ -1,9 +1,9 @@
 {
   "tier": "full",
-  "commit": "788a34382c4d8936d1775e28b250cfcc614ed3bf",
+  "commit": "c252c819dec6908c03fb37387d56785aef533584",
   "hardware_id": "NVIDIA GeForce RTX 5090 (sm_120)",
   "contended": false,
-  "timestamp_utc": "2026-11-24T08:02:05.870272+00:00",
+  "timestamp_utc": "2026-11-24T11:33:58.441196+00:00",
   "results": [
     {
       "category": "Dense decoder",
@@ -25,8 +25,8 @@
         "greedy_total_prompts": 5,
         "greedy_tokens_per_prompt": 256,
         "greedy_tok_match_pct": 99.84,
-        "decode_med_tok_s": 169.79,
-        "decode_min_tok_s": 166.71,
+        "decode_med_tok_s": 169.44,
+        "decode_min_tok_s": 166.64,
         "decode_max_tok_s": 170.22
       },
       "gates": [
@@ -102,7 +102,7 @@
         "greedy_total_prompts": 5,
         "greedy_tokens_per_prompt": 256,
         "greedy_tok_match_pct": 99.92,
-        "prefill_512_med_ms": 10.72
+        "prefill_512_med_ms": 10.7
       },
       "gates": [
         {
@@ -177,9 +177,9 @@
         "greedy_total_prompts": 5,
         "greedy_tokens_per_prompt": 256,
         "greedy_tok_match_pct": 99.84,
-        "decode_med_tok_s": 43.16,
-        "decode_min_tok_s": 42.04,
-        "decode_max_tok_s": 43.23
+        "decode_med_tok_s": 43.9,
+        "decode_min_tok_s": 43.23,
+        "decode_max_tok_s": 44.17
       },
       "gates": [
         {
@@ -410,8 +410,8 @@
         "greedy_total_prompts": 5,
         "greedy_tokens_per_prompt": 256,
         "greedy_tok_match_pct": 99.92,
-        "decode_med_tok_s": 3.9,
-        "decode_min_tok_s": 3.9,
+        "decode_med_tok_s": 3.89,
+        "decode_min_tok_s": 3.84,
         "decode_max_tok_s": 3.9
       },
       "gates": [

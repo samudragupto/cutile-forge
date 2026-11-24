@@ -1,5 +1,15 @@
 # Changelog
 
+## [3.9.0] (2026-11-24) — Phase 23: Native Architecture Completion (Clean Candidate Verified)
+
+**Authors:** Arrhat Nag (`@samudragupto`) and Rupesh Nasre
+
+- **Zero Forbidden ATen Compute Ops Across Nine Audited Real-Checkpoint Paths (`cutile_forge/kernels/moe_fused.py`, `cutile_forge/engine/model.py`, `cutile_forge/models/model_graph.py`):**
+  - Replaced Mixtral (`Mistral7B` GPTQ path) `F.embedding` with `cutile_embedding_lookup`, PyTorch FP32 `torch.matmul` + `fused_topk_gating` (`torch.topk`) with `cutile_moe_router_topk(..., out_dtype=torch.float32)`, and `ffn_out.index_add_` with `cutile_moe_weighted_add_kernel` / `cutile_moe_weighted_add` (eliminating `293` prefill and `129` decode forbidden ATen compute ops down to **`0`**, verified in `benchmarks/validation_artifacts/v3.9.0/phase23_audit/native_dispatch_report.json`).
+  - **Explicit ATen Operation Classification:** Remaining ATen calls on Mixtral are explicitly partitioned into routing-metadata ops (`aten.eq.Scalar`, `aten.any.default`, `aten._local_scalar_dense.default`, `aten.nonzero.default`, `aten.unbind.int` on routing masks; `aten.index.Tensor` on router probabilities) vs **activation-gather ops (`aten.index_select.default` gathering `post_norm` activation rows for expert dispatch)** — Phase 23 reports zero forbidden ATen compute ops on nine audited paths, not zero ATen ops.
+- **Qwen2.5-0.5B & LLaVA-1.5 Eager Cached `PagedKVCache` Decode (`cutile_forge/models/model_graph.py`, `tests/test_phase23_native_completion.py`):** Added `kv_cache` and `pos_offset` support to `UnifiedModelExecutor.forward`, `reference_forward`, `_causal_attention`, and `MultimodalFusionStage` (skipping CLIP ViT + projector on `pixel_values=None` decode steps). Directly verified across 16-token `PagedKVCache` page boundaries in **eager mode** (`cached_path_and_op_audit.json`, `0` vision-encoder calls during LLaVA text decode).
+- **Precision, Parity & Scope Boundaries (`benchmarks/validation_artifacts/v3.9.0/phase23_regression/regress_full.json`):** Full 8-model unchanged-threshold regression remains **`2 PASS / 6 FAIL`** (`LLaVA-1.5` single-prompt 16-tok `PASS`, `DiT-XL/2` denoiser `PASS`). **Mixtral-8x7B `P2 @ step 185` remains `SUBSTANTIVE_DIVERGENCE` (`6.0 ULPs`, `28725` vs `28723`)** and is **not** claimed fixed despite aggregate Mixtral improvements (`cos 0.999988 -> 0.999996`, `max_diff 0.0771 -> 0.0664`, `greedy=3/5`). DiT coverage is explicitly the `DiTTransformer2DModel` denoiser forward step (`CFG`, scheduler, and VAE decode are `UNRUN`).
+
 ## [3.8.0] (2026-11-24) — Phase 22: PagedKVCache Numerical Correctness & Documentation Audit
 
 **Authors:** Arrhat Nag (`@samudragupto`) and Rupesh Nasre
