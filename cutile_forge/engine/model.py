@@ -36,6 +36,7 @@ from cutile_forge.kernels.gemm_dequant import (
 from cutile_forge.kernels.gemm_dequant_silu import fused_gemm_dequant_silu
 from cutile_forge.kernels.layernorm_residual import fused_rmsnorm_residual
 from cutile_forge.kernels.moe_fused import (
+    cutile_moe_indexed_ffn,
     cutile_moe_router_topk,
     cutile_moe_weighted_add,
     fused_moe_int4_gemm,
@@ -141,20 +142,33 @@ class MistralLayer:
         x_2d = hidden_states.view(bsz * seq_len, hidden_dim)
 
         x_norm = cutile_rmsnorm(x_2d, weights.input_layernorm, eps=self.config.rms_norm_eps)
+        q_dim = self.config.num_attention_heads * self.config.head_dim
+        kv_dim = self.config.num_key_value_heads * self.config.head_dim
+        if weights.qkv_qw is not None and weights.qkv_sc is not None and weights.qkv_zr is not None:
+            qkv = fused_gemm_dequant(
+                x_norm,
+                weights.qkv_qw,
+                weights.qkv_sc,
+                weights.qkv_zr,
+                group_size=weights.q_proj.group_size,
+            )
+            q = qkv[:, :q_dim]
+            k = qkv[:, q_dim : q_dim + kv_dim]
+            v = qkv[:, q_dim + kv_dim :]
+        else:
+            q = _quant_linear_cutile(x_norm, weights.q_proj)
+            k = _quant_linear_cutile(x_norm, weights.k_proj)
+            v = _quant_linear_cutile(x_norm, weights.v_proj)
 
-        q = _quant_linear_cutile(x_norm, weights.q_proj)
-        k = _quant_linear_cutile(x_norm, weights.k_proj)
-        v = _quant_linear_cutile(x_norm, weights.v_proj)
-
-        q = q.view(bsz, seq_len, self.config.num_attention_heads, self.config.head_dim).transpose(
-            1, 2
-        )
-        k = k.view(bsz, seq_len, self.config.num_key_value_heads, self.config.head_dim).transpose(
-            1, 2
-        )
-        v = v.view(bsz, seq_len, self.config.num_key_value_heads, self.config.head_dim).transpose(
-            1, 2
-        )
+        q = q.reshape(
+            bsz, seq_len, self.config.num_attention_heads, self.config.head_dim
+        ).transpose(1, 2)
+        k = k.reshape(
+            bsz, seq_len, self.config.num_key_value_heads, self.config.head_dim
+        ).transpose(1, 2)
+        v = v.reshape(
+            bsz, seq_len, self.config.num_key_value_heads, self.config.head_dim
+        ).transpose(1, 2)
 
         q = apply_rope(q, cos, sin, position_offset=pos_offset)
         k = apply_rope(k, cos, sin, position_offset=pos_offset)
@@ -174,7 +188,11 @@ class MistralLayer:
         )
         if kv_cache is not None and seq_len > 1 and kv_cache.sliding_window is not None:
             kv_cache.prune_outside_window(self.layer_idx)
-        attn_2d = attn_out.transpose(1, 2).contiguous().view(bsz * seq_len, hidden_dim)
+        attn_2d = (
+            attn_out.view(bsz, hidden_dim)
+            if seq_len == 1
+            else attn_out.transpose(1, 2).contiguous().view(bsz * seq_len, hidden_dim)
+        )
 
         o_proj = _quant_linear_cutile(attn_2d, weights.o_proj)
 
@@ -188,12 +206,47 @@ class MistralLayer:
             and weights.moe_w2 is not None
             and weights.moe_w3 is not None
         ):
+            gate_w = (
+                weights.moe_gate
+                if weights.moe_gate.dtype == post_norm.dtype
+                else weights.moe_gate.to(post_norm.dtype)
+            )
             probs, indices = cutile_moe_router_topk(
                 post_norm,
-                weights.moe_gate.to(post_norm.dtype),
+                gate_w,
                 top_k=self.config.top_k_experts,
                 out_dtype=torch.float32,
             )
+            if (
+                post_norm.shape[0] == 1
+                and post_norm.is_cuda
+                and weights.moe_w1_qw is not None
+                and weights.moe_w1_sc is not None
+                and weights.moe_w1_zr is not None
+                and weights.moe_w2_qw is not None
+                and weights.moe_w2_sc is not None
+                and weights.moe_w2_zr is not None
+                and weights.moe_w3_qw is not None
+                and weights.moe_w3_sc is not None
+                and weights.moe_w3_zr is not None
+            ):
+                out_h = cutile_moe_indexed_ffn(
+                    post_norm,
+                    weights.moe_w1_qw,
+                    weights.moe_w1_sc,
+                    weights.moe_w1_zr,
+                    weights.moe_w3_qw,
+                    weights.moe_w3_sc,
+                    weights.moe_w3_zr,
+                    weights.moe_w2_qw,
+                    weights.moe_w2_sc,
+                    weights.moe_w2_zr,
+                    probs,
+                    indices,
+                    residual=residual_mid,
+                    group_size=self.config.group_size,
+                )
+                return out_h.view(bsz, seq_len, hidden_dim)
             ffn_acc = torch.zeros_like(post_norm, dtype=torch.float32)
             for e in range(len(weights.moe_w1)):
                 mask = indices == e
@@ -341,6 +394,15 @@ class Mistral7B:
         self.layers: list[MistralLayer] = [
             MistralLayer(i, self.config) for i in range(self.config.num_hidden_layers)
         ]
+        if self.device.type == "cuda":
+            did_pack = False
+            for lw in self.weights.layers:
+                if lw.pack_moe_experts_inplace():
+                    did_pack = True
+                if lw.moe_gate is not None and lw.pack_qkv_inplace():
+                    did_pack = True
+            if did_pack:
+                torch.cuda.empty_cache()
         est_model_gb = (
             self.config.num_hidden_layers
             * self.config.hidden_size

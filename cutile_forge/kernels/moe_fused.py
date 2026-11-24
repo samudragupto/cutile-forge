@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import torch
 
 from cutile_forge.cuda_tile_init import ct
@@ -349,6 +351,88 @@ def cutile_moe_scatter_combine_kernel(
     ct.store(out_ptr, index=(tok, pid_n), tile=ct.astype(acc, out_ptr.dtype))
 
 
+_ROUTER_SCRATCH_CACHE: dict[tuple[Any, ...], dict[str, torch.Tensor]] = {}
+
+
+@ct.kernel(occupancy=4)
+def moe_router_splitk_kernel(
+    x_ptr,  # (M, K) fp16
+    rw_ptr,  # (E, K) fp16
+    part_ptr,  # (split_k, M, E_pad) fp32
+    k_dim: int,
+    split_k: ct.Constant[int],
+    e_pad: ct.Constant[int],
+    tm: ct.Constant[int],
+    tk: ct.Constant[int],
+) -> None:
+    """Split-K Stage 1 for small-batch MoE router projection."""
+    pid_m = ct.bid(0)
+    sk_id = ct.bid(1)
+    num_kt = (k_dim + tk - 1) // tk
+    k_per_split = (num_kt + split_k - 1) // split_k
+    k_start = sk_id * k_per_split
+    k_end = min(num_kt, k_start + k_per_split)
+    acc = ct.zeros((tm, e_pad), dtype=ct.float32)
+    for kt in range(k_start, k_end):
+        tx = ct.load(
+            x_ptr, index=(pid_m, kt), shape=(tm, tk), padding_mode=ct.PaddingMode.ZERO, latency=3
+        )
+        tw = ct.load(
+            rw_ptr, index=(0, kt), shape=(e_pad, tk), padding_mode=ct.PaddingMode.ZERO, latency=3
+        )
+        acc = ct.mma(tx, ct.transpose(tw), acc)
+    ct.store(part_ptr, index=(sk_id, pid_m, 0), tile=ct.reshape(acc, (1, tm, e_pad)))
+
+
+@ct.kernel(occupancy=4)
+def moe_router_reduce_topk_kernel(
+    part_ptr,  # (split_k, M, E_pad) fp32
+    probs_out_ptr,  # (M, top_k_pad)
+    idx_out_ptr,  # (M, top_k_pad) int32
+    num_experts: int,
+    split_k: ct.Constant[int],
+    e_pad: ct.Constant[int],
+    top_k: ct.Constant[int],
+    top_k_pad: ct.Constant[int],
+    tm: ct.Constant[int],
+) -> None:
+    """Split-K Stage 2 reduction + softmax + top-k normalization for MoE router."""
+    pid_m = ct.bid(0)
+    acc = ct.zeros((tm, e_pad), dtype=ct.float32)
+    for sk in range(split_k):
+        acc = acc + ct.reshape(
+            ct.load(
+                part_ptr,
+                index=(sk, pid_m, 0),
+                shape=(1, tm, e_pad),
+                padding_mode=ct.PaddingMode.ZERO,
+                latency=3,
+            ),
+            (tm, e_pad),
+        )
+    e_ids = ct.reshape(ct.arange(e_pad, dtype=ct.int32), (1, e_pad))
+    valid_e = e_ids < num_experts
+    logits = ct.where(valid_e, acc, -1.0e9)
+    mx = ct.max(logits, axis=1, keepdims=True)
+    ex = ct.where(valid_e, ct.exp(logits - mx), 0.0)
+    probs = ex / ct.maximum(ct.sum(ex, axis=1, keepdims=True), 1.0e-6)
+
+    scores = ct.where(valid_e, probs, -1.0)
+    sel_vals = ct.zeros((tm, top_k_pad), dtype=ct.float32)
+    sel_idx = ct.zeros((tm, top_k_pad), dtype=ct.int32)
+    k_ar = ct.reshape(ct.arange(top_k_pad, dtype=ct.int32), (1, top_k_pad))
+    for ki in range(top_k):
+        best_val = ct.max(scores, axis=1, keepdims=True)
+        best_i = ct.reshape(ct.astype(ct.argmax(scores, axis=1), ct.int32), (tm, 1))
+        scores = ct.where(e_ids == best_i, -1.0, scores)
+        k_mask = k_ar == ki
+        sel_vals = ct.where(k_mask, ct.broadcast_to(best_val, (tm, top_k_pad)), sel_vals)
+        sel_idx = ct.where(k_mask, ct.broadcast_to(best_i, (tm, top_k_pad)), sel_idx)
+    sel_vals = sel_vals / ct.maximum(ct.sum(sel_vals, axis=1, keepdims=True), 1.0e-6)
+    ct.store(probs_out_ptr, index=(pid_m, 0), tile=ct.astype(sel_vals, probs_out_ptr.dtype))
+    ct.store(idx_out_ptr, index=(pid_m, 0), tile=sel_idx)
+
+
 def cutile_moe_router_topk(
     x: torch.Tensor,
     router_weight: torch.Tensor,
@@ -372,15 +456,39 @@ def cutile_moe_router_topk(
     e_pad = max(16, _next_pow2_moe(num_experts))
     top_k_pad = _next_pow2_moe(top_k)
     tm, tk = 16, 64
+    x_c = x if x.is_contiguous() else x.contiguous()
+    rw_c = router_weight if router_weight.is_contiguous() else router_weight.contiguous()
     probs_out = torch.empty((m, top_k_pad), device=x.device, dtype=target_dtype)
     idx_out = torch.empty((m, top_k_pad), device=x.device, dtype=torch.int32)
+
+    if m <= 16 and k_dim >= 1024 and k_dim % tk == 0:
+        split_k = 16 if k_dim >= 2048 else 8
+        r_key = (str(x.device), split_k, m, e_pad)
+        r_sc = _ROUTER_SCRATCH_CACHE.get(r_key)
+        if r_sc is None:
+            r_sc = {"part": torch.empty((split_k, m, e_pad), device=x.device, dtype=torch.float32)}
+            _ROUTER_SCRATCH_CACHE[r_key] = r_sc
+        ct.launch(
+            torch.cuda.current_stream(),
+            (ct.cdiv(m, tm), split_k, 1),
+            moe_router_splitk_kernel,
+            (x_c, rw_c, r_sc["part"], k_dim, split_k, e_pad, tm, tk),
+        )
+        ct.launch(
+            torch.cuda.current_stream(),
+            (ct.cdiv(m, tm), 1, 1),
+            moe_router_reduce_topk_kernel,
+            (r_sc["part"], probs_out, idx_out, num_experts, split_k, e_pad, top_k, top_k_pad, tm),
+        )
+        return probs_out[:, :top_k], idx_out[:, :top_k]
+
     ct.launch(
         torch.cuda.current_stream(),
         (ct.cdiv(m, tm), 1, 1),
         cutile_moe_router_topk_kernel,
         (
-            x.contiguous(),
-            router_weight.contiguous(),
+            x_c,
+            rw_c,
             probs_out,
             idx_out,
             k_dim,
@@ -532,5 +640,427 @@ def fused_moe_int4_native(
         (m, ct.cdiv(n, tile_n), 1),
         cutile_moe_scatter_combine_kernel,
         (y_grouped, idx_c, slot_map, probs_c, out, top_k, tile_n),
+    )
+    return out
+
+
+@ct.kernel(occupancy=4)
+def moe_indexed_swiglu_splitk_kernel(
+    x_ptr,  # (1, K) fp16
+    idx_ptr,  # (top_k,) int32
+    w1_qw_ptr,  # (E, K // 2, N) uint8
+    w1_sc_ptr,  # (E, G, N) fp16
+    w1_zr_ptr,  # (E, G, N) fp16
+    w3_qw_ptr,  # (E, K // 2, N) uint8
+    w3_sc_ptr,  # (E, G, N) fp16
+    w3_zr_ptr,  # (E, G, N) fp16
+    part_g_ptr,  # (top_k, split_k, tm, N) fp32
+    part_u_ptr,  # (top_k, split_k, tm, N) fp32
+    num_groups: int,
+    split_k: ct.Constant[int],
+    tm: ct.Constant[int],
+    tn: ct.Constant[int],
+    tk: ct.Constant[int],
+    gs: ct.Constant[int],
+) -> None:
+    """Zero-sync M=1 Split-K Gate+Up INT4-dequant GEMM reading routed expert IDs on GPU."""
+    pid_n = ct.bid(0)
+    k_slot = ct.bid(1)
+    sk_id = ct.bid(2)
+
+    e_idx = ct.sum(
+        ct.astype(
+            ct.load(idx_ptr, index=(k_slot,), shape=(1,), padding_mode=ct.PaddingMode.ZERO),
+            ct.int32,
+        )
+    )
+    num_k = ct.num_tiles(x_ptr, axis=1, shape=(tm, tk))
+    k_per_split = (num_k + split_k - 1) // split_k
+    k_start = sk_id * k_per_split
+    k_end = min(num_k, k_start + k_per_split)
+    half_tk: ct.Constant[int] = tk // 2
+
+    acc_g = ct.zeros((tm, tn), dtype=ct.float32)
+    acc_u = ct.zeros((tm, tn), dtype=ct.float32)
+
+    for k in range(k_start, k_end):
+        ta = ct.load(
+            x_ptr, index=(0, k), shape=(tm, tk), padding_mode=ct.PaddingMode.ZERO, latency=3
+        )
+        g_idx = 0 if num_groups == 1 else (k * tk) // gs
+
+        gw = ct.reshape(
+            ct.load(
+                w1_qw_ptr,
+                index=(e_idx, k, pid_n),
+                shape=(1, half_tk, tn),
+                padding_mode=ct.PaddingMode.ZERO,
+                latency=3,
+            ),
+            (half_tk, tn),
+        )
+        g_lo = ct.astype(ct.bitwise_and(gw, 0x0F), ct.float16)
+        g_hi = ct.astype(ct.bitwise_and(ct.bitwise_rshift(gw, 4), 0x0F), ct.float16)
+        g_int = ct.reshape(
+            ct.cat(
+                (ct.reshape(g_lo, (half_tk, 1, tn)), ct.reshape(g_hi, (half_tk, 1, tn))), axis=1
+            ),
+            (tk, tn),
+        )
+        g_sc = ct.reshape(
+            ct.load(
+                w1_sc_ptr,
+                index=(e_idx, g_idx, pid_n),
+                shape=(1, 1, tn),
+                padding_mode=ct.PaddingMode.ZERO,
+                latency=3,
+            ),
+            (1, tn),
+        )
+        g_zr = ct.reshape(
+            ct.load(
+                w1_zr_ptr,
+                index=(e_idx, g_idx, pid_n),
+                shape=(1, 1, tn),
+                padding_mode=ct.PaddingMode.ZERO,
+                latency=3,
+            ),
+            (1, tn),
+        )
+        acc_g = ct.mma(ta, (g_int - g_zr) * g_sc, acc_g)
+
+        uw = ct.reshape(
+            ct.load(
+                w3_qw_ptr,
+                index=(e_idx, k, pid_n),
+                shape=(1, half_tk, tn),
+                padding_mode=ct.PaddingMode.ZERO,
+                latency=3,
+            ),
+            (half_tk, tn),
+        )
+        u_lo = ct.astype(ct.bitwise_and(uw, 0x0F), ct.float16)
+        u_hi = ct.astype(ct.bitwise_and(ct.bitwise_rshift(uw, 4), 0x0F), ct.float16)
+        u_int = ct.reshape(
+            ct.cat(
+                (ct.reshape(u_lo, (half_tk, 1, tn)), ct.reshape(u_hi, (half_tk, 1, tn))), axis=1
+            ),
+            (tk, tn),
+        )
+        u_sc = ct.reshape(
+            ct.load(
+                w3_sc_ptr,
+                index=(e_idx, g_idx, pid_n),
+                shape=(1, 1, tn),
+                padding_mode=ct.PaddingMode.ZERO,
+                latency=3,
+            ),
+            (1, tn),
+        )
+        u_zr = ct.reshape(
+            ct.load(
+                w3_zr_ptr,
+                index=(e_idx, g_idx, pid_n),
+                shape=(1, 1, tn),
+                padding_mode=ct.PaddingMode.ZERO,
+                latency=3,
+            ),
+            (1, tn),
+        )
+        acc_u = ct.mma(ta, (u_int - u_zr) * u_sc, acc_u)
+
+    ct.store(part_g_ptr, index=(k_slot, sk_id, 0, pid_n), tile=ct.reshape(acc_g, (1, 1, tm, tn)))
+    ct.store(part_u_ptr, index=(k_slot, sk_id, 0, pid_n), tile=ct.reshape(acc_u, (1, 1, tm, tn)))
+
+
+@ct.kernel(occupancy=4)
+def moe_splitk_reduce_swiglu_kernel(
+    part_g_ptr,  # (top_k, split_k, tm, N) fp32
+    part_u_ptr,  # (top_k, split_k, tm, N) fp32
+    inter_ptr,  # (top_k, tm, N) fp16
+    split_k: ct.Constant[int],
+    tm: ct.Constant[int],
+    tn: ct.Constant[int],
+) -> None:
+    """Reduce Split-K Gate/Up partials across `split_k` and compute SiLU(g) * u in registers."""
+    pid_n = ct.bid(0)
+    k_slot = ct.bid(1)
+    ag = ct.zeros((tm, tn), dtype=ct.float32)
+    au = ct.zeros((tm, tn), dtype=ct.float32)
+    for sk in range(split_k):
+        ag = ag + ct.reshape(
+            ct.load(
+                part_g_ptr,
+                index=(k_slot, sk, 0, pid_n),
+                shape=(1, 1, tm, tn),
+                padding_mode=ct.PaddingMode.ZERO,
+                latency=3,
+            ),
+            (tm, tn),
+        )
+        au = au + ct.reshape(
+            ct.load(
+                part_u_ptr,
+                index=(k_slot, sk, 0, pid_n),
+                shape=(1, 1, tm, tn),
+                padding_mode=ct.PaddingMode.ZERO,
+                latency=3,
+            ),
+            (tm, tn),
+        )
+    sig = 1.0 / (1.0 + ct.exp(-ag))
+    out = ct.astype(ag * sig, ct.float16) * ct.astype(au, ct.float16)
+    ct.store(inter_ptr, index=(k_slot, 0, pid_n), tile=ct.reshape(out, (1, tm, tn)))
+
+
+@ct.kernel(occupancy=4)
+def moe_indexed_down_splitk_kernel(
+    inter_ptr,  # (top_k, tm, FFN) fp16
+    idx_ptr,  # (top_k,) int32
+    w2_qw_ptr,  # (E, FFN // 2, D) uint8
+    w2_sc_ptr,  # (E, G, D) fp16
+    w2_zr_ptr,  # (E, G, D) fp16
+    part_ptr,  # (top_k, split_k, tm, D) fp32
+    num_groups: int,
+    split_k: ct.Constant[int],
+    tm: ct.Constant[int],
+    tn: ct.Constant[int],
+    tk: ct.Constant[int],
+    gs: ct.Constant[int],
+) -> None:
+    """Zero-sync M=1 Split-K Down-proj INT4-dequant GEMM reading routed expert IDs on GPU."""
+    pid_n = ct.bid(0)
+    k_slot = ct.bid(1)
+    sk_id = ct.bid(2)
+    e_idx = ct.sum(
+        ct.astype(
+            ct.load(idx_ptr, index=(k_slot,), shape=(1,), padding_mode=ct.PaddingMode.ZERO),
+            ct.int32,
+        )
+    )
+    num_k = ct.num_tiles(inter_ptr, axis=2, shape=(1, tm, tk))
+    k_per_split = (num_k + split_k - 1) // split_k
+    k_start = sk_id * k_per_split
+    k_end = min(num_k, k_start + k_per_split)
+    half_tk: ct.Constant[int] = tk // 2
+    acc = ct.zeros((tm, tn), dtype=ct.float32)
+
+    for k in range(k_start, k_end):
+        ta = ct.reshape(
+            ct.load(
+                inter_ptr,
+                index=(k_slot, 0, k),
+                shape=(1, tm, tk),
+                padding_mode=ct.PaddingMode.ZERO,
+                latency=3,
+            ),
+            (tm, tk),
+        )
+        g_idx = 0 if num_groups == 1 else (k * tk) // gs
+        qw = ct.reshape(
+            ct.load(
+                w2_qw_ptr,
+                index=(e_idx, k, pid_n),
+                shape=(1, half_tk, tn),
+                padding_mode=ct.PaddingMode.ZERO,
+                latency=3,
+            ),
+            (half_tk, tn),
+        )
+        lo = ct.astype(ct.bitwise_and(qw, 0x0F), ct.float16)
+        hi = ct.astype(ct.bitwise_and(ct.bitwise_rshift(qw, 4), 0x0F), ct.float16)
+        w_int = ct.reshape(
+            ct.cat((ct.reshape(lo, (half_tk, 1, tn)), ct.reshape(hi, (half_tk, 1, tn))), axis=1),
+            (tk, tn),
+        )
+        sc = ct.reshape(
+            ct.load(
+                w2_sc_ptr,
+                index=(e_idx, g_idx, pid_n),
+                shape=(1, 1, tn),
+                padding_mode=ct.PaddingMode.ZERO,
+                latency=3,
+            ),
+            (1, tn),
+        )
+        zr = ct.reshape(
+            ct.load(
+                w2_zr_ptr,
+                index=(e_idx, g_idx, pid_n),
+                shape=(1, 1, tn),
+                padding_mode=ct.PaddingMode.ZERO,
+                latency=3,
+            ),
+            (1, tn),
+        )
+        acc = ct.mma(ta, (w_int - zr) * sc, acc)
+
+    ct.store(part_ptr, index=(k_slot, sk_id, 0, pid_n), tile=ct.reshape(acc, (1, 1, tm, tn)))
+
+
+@ct.kernel(occupancy=4)
+def moe_splitk_reduce_weighted_add_kernel(
+    part_ptr,  # (top_k, split_k, tm, D) fp32
+    probs_ptr,  # (top_k,) fp32
+    res_ptr,  # (1, D) fp16
+    out_ptr,  # (1, D) fp16
+    top_k: ct.Constant[int],
+    split_k: ct.Constant[int],
+    tm: ct.Constant[int],
+    tn: ct.Constant[int],
+    has_residual: ct.Constant[int],
+) -> None:
+    """Reduce Split-K expert outputs weighted by router `probs` and optionally add `residual`."""
+    pid_n = ct.bid(0)
+    out_acc = ct.zeros((tm, tn), dtype=ct.float32)
+    for k_slot in range(top_k):
+        prob = ct.sum(
+            ct.astype(
+                ct.load(probs_ptr, index=(k_slot,), shape=(1,), padding_mode=ct.PaddingMode.ZERO),
+                ct.float32,
+            )
+        )
+        sk_acc = ct.zeros((tm, tn), dtype=ct.float32)
+        for sk in range(split_k):
+            sk_acc = sk_acc + ct.reshape(
+                ct.load(
+                    part_ptr,
+                    index=(k_slot, sk, 0, pid_n),
+                    shape=(1, 1, tm, tn),
+                    padding_mode=ct.PaddingMode.ZERO,
+                    latency=3,
+                ),
+                (tm, tn),
+            )
+        out_acc = out_acc + ct.astype(ct.astype(sk_acc, ct.float16), ct.float32) * prob
+
+    res_fp16 = ct.astype(out_acc, ct.float16)
+    if has_residual != 0:
+        res_tile = ct.load(
+            res_ptr, index=(0, pid_n), shape=(tm, tn), padding_mode=ct.PaddingMode.ZERO, latency=2
+        )
+        res_fp16 = res_fp16 + res_tile
+    ct.store(out_ptr, index=(0, pid_n), tile=res_fp16)
+
+
+_MOE_SCRATCH_CACHE: dict[tuple[Any, ...], dict[str, torch.Tensor]] = {}
+
+
+def cutile_moe_indexed_ffn(
+    x: torch.Tensor,
+    w1_qw_3d: torch.Tensor,
+    w1_sc_3d: torch.Tensor,
+    w1_zr_3d: torch.Tensor,
+    w3_qw_3d: torch.Tensor,
+    w3_sc_3d: torch.Tensor,
+    w3_zr_3d: torch.Tensor,
+    w2_qw_3d: torch.Tensor,
+    w2_sc_3d: torch.Tensor,
+    w2_zr_3d: torch.Tensor,
+    probs: torch.Tensor,
+    indices: torch.Tensor,
+    residual: torch.Tensor | None = None,
+    group_size: int = 128,
+) -> torch.Tensor:
+    """Execute zero-host-sync M=1 Split-K SwiGLU + weighted Down MoE over 3D packed experts."""
+    d_model = x.shape[1]
+    ffn_dim = w1_qw_3d.shape[2]
+    top_k = int(indices.shape[1])
+    tm = 16
+    tn_gu = 64 if ffn_dim % 64 == 0 else 32
+    tn_dn = 64 if d_model % 64 == 0 else 32
+    tk = (
+        128
+        if (group_size % 128 == 0 and d_model % 128 == 0 and ffn_dim % 128 == 0)
+        else (64 if (group_size % 64 == 0 and d_model % 64 == 0 and ffn_dim % 64 == 0) else 32)
+    )
+    sk_gu = 2 if (d_model // tk >= 2 and d_model >= 2048) else 1
+    sk_dn = (
+        8
+        if (ffn_dim // tk >= 8 and ffn_dim >= 8192)
+        else (4 if (ffn_dim // tk >= 4 and ffn_dim >= 2048) else 1)
+    )
+
+    key = (str(x.device), top_k, sk_gu, sk_dn, d_model, ffn_dim, tm)
+    sc = _MOE_SCRATCH_CACHE.get(key)
+    if sc is None:
+        sc = {
+            "part_g": torch.empty(
+                (top_k, sk_gu, tm, ffn_dim), device=x.device, dtype=torch.float32
+            ),
+            "part_u": torch.empty(
+                (top_k, sk_gu, tm, ffn_dim), device=x.device, dtype=torch.float32
+            ),
+            "inter": torch.zeros((top_k, tm, ffn_dim), device=x.device, dtype=torch.float16),
+            "part_dn": torch.empty(
+                (top_k, sk_dn, tm, d_model), device=x.device, dtype=torch.float32
+            ),
+        }
+        _MOE_SCRATCH_CACHE[key] = sc
+
+    x_c = x if x.is_contiguous() else x.contiguous()
+    idx_c = indices.view(top_k).to(torch.int32).contiguous()
+    probs_c = probs.view(top_k).to(torch.float32).contiguous()
+    out = torch.empty((1, d_model), device=x.device, dtype=torch.float16)
+
+    ct.launch(
+        torch.cuda.current_stream(),
+        (ct.cdiv(ffn_dim, tn_gu), top_k, sk_gu),
+        moe_indexed_swiglu_splitk_kernel,
+        (
+            x_c,
+            idx_c,
+            w1_qw_3d,
+            w1_sc_3d,
+            w1_zr_3d,
+            w3_qw_3d,
+            w3_sc_3d,
+            w3_zr_3d,
+            sc["part_g"],
+            sc["part_u"],
+            int(w1_sc_3d.shape[1]),
+            sk_gu,
+            tm,
+            tn_gu,
+            tk,
+            group_size,
+        ),
+    )
+    ct.launch(
+        torch.cuda.current_stream(),
+        (ct.cdiv(ffn_dim, tn_gu), top_k, 1),
+        moe_splitk_reduce_swiglu_kernel,
+        (sc["part_g"], sc["part_u"], sc["inter"], sk_gu, tm, tn_gu),
+    )
+    ct.launch(
+        torch.cuda.current_stream(),
+        (ct.cdiv(d_model, tn_dn), top_k, sk_dn),
+        moe_indexed_down_splitk_kernel,
+        (
+            sc["inter"],
+            idx_c,
+            w2_qw_3d,
+            w2_sc_3d,
+            w2_zr_3d,
+            sc["part_dn"],
+            int(w2_sc_3d.shape[1]),
+            sk_dn,
+            tm,
+            tn_dn,
+            tk,
+            group_size,
+        ),
+    )
+    has_res = 1 if residual is not None else 0
+    res_c = (
+        (residual if residual.is_contiguous() else residual.contiguous())
+        if residual is not None
+        else x_c
+    )
+    ct.launch(
+        torch.cuda.current_stream(),
+        (ct.cdiv(d_model, tn_dn), 1, 1),
+        moe_splitk_reduce_weighted_add_kernel,
+        (sc["part_dn"], probs_c, res_c, out, top_k, sk_dn, tm, tn_dn, has_res),
     )
     return out

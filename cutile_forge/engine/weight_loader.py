@@ -64,6 +64,69 @@ class MistralLayerWeights:
     moe_w1: list[QuantLinearWeight] | None = None
     moe_w2: list[QuantLinearWeight] | None = None
     moe_w3: list[QuantLinearWeight] | None = None
+    moe_w1_qw: torch.Tensor | None = None
+    moe_w1_sc: torch.Tensor | None = None
+    moe_w1_zr: torch.Tensor | None = None
+    moe_w2_qw: torch.Tensor | None = None
+    moe_w2_sc: torch.Tensor | None = None
+    moe_w2_zr: torch.Tensor | None = None
+    moe_w3_qw: torch.Tensor | None = None
+    moe_w3_sc: torch.Tensor | None = None
+    moe_w3_zr: torch.Tensor | None = None
+    qkv_qw: torch.Tensor | None = None
+    qkv_sc: torch.Tensor | None = None
+    qkv_zr: torch.Tensor | None = None
+
+    def pack_qkv_inplace(self) -> bool:
+        """Pack Q/K/V weights into fused `(K//2, QKV_dim)` tensors when `perm` is absent on CUDA."""
+        if self.qkv_qw is not None:
+            return True
+        projs = (self.q_proj, self.k_proj, self.v_proj)
+        if any(p.qweight.device.type != "cuda" or p.perm is not None for p in projs):
+            return False
+        if not (self.q_proj.group_size == self.k_proj.group_size == self.v_proj.group_size):
+            return False
+        q_dim = self.q_proj.qweight.shape[1]
+        k_dim = self.k_proj.qweight.shape[1]
+        self.qkv_qw = torch.cat([p.qweight for p in projs], dim=1).contiguous()
+        self.qkv_sc = torch.cat([p.scales for p in projs], dim=1).contiguous()
+        self.qkv_zr = torch.cat([p.zeros for p in projs], dim=1).contiguous()
+        slices = ((0, q_dim), (q_dim, q_dim + k_dim), (q_dim + k_dim, self.qkv_qw.shape[1]))
+        for proj, (s, e) in zip(projs, slices, strict=True):
+            proj.qweight = self.qkv_qw[:, s:e]
+            proj.scales = self.qkv_sc[:, s:e]
+            proj.zeros = self.qkv_zr[:, s:e]
+        return True
+
+    def pack_moe_experts_inplace(self) -> bool:
+        """Stack MoE expert weights into 3D `(E, ...)` CUDA views in-place with zero extra VRAM."""
+        if (
+            self.moe_w1 is None
+            or self.moe_w2 is None
+            or self.moe_w3 is None
+            or self.moe_w1_qw is not None
+        ):
+            return self.moe_w1_qw is not None
+        all_exps = self.moe_w1 + self.moe_w2 + self.moe_w3
+        if any(e.qweight.device.type != "cuda" or e.perm is not None for e in all_exps):
+            return False
+
+        def _pack_list(
+            w_list: list[QuantLinearWeight],
+        ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+            qw_3d = torch.stack([e.qweight for e in w_list], dim=0).contiguous()
+            sc_3d = torch.stack([e.scales for e in w_list], dim=0).contiguous()
+            zr_3d = torch.stack([e.zeros for e in w_list], dim=0).contiguous()
+            for e_idx, e_obj in enumerate(w_list):
+                e_obj.qweight = qw_3d[e_idx]
+                e_obj.scales = sc_3d[e_idx]
+                e_obj.zeros = zr_3d[e_idx]
+            return qw_3d, sc_3d, zr_3d
+
+        self.moe_w1_qw, self.moe_w1_sc, self.moe_w1_zr = _pack_list(self.moe_w1)
+        self.moe_w2_qw, self.moe_w2_sc, self.moe_w2_zr = _pack_list(self.moe_w2)
+        self.moe_w3_qw, self.moe_w3_sc, self.moe_w3_zr = _pack_list(self.moe_w3)
+        return True
 
     def to_tensor_dict(self) -> dict[str, torch.Tensor]:
         d: dict[str, torch.Tensor] = {
