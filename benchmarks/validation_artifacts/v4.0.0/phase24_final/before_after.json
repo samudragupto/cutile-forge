@@ -1,0 +1,158 @@
+{
+  "hardware": "NVIDIA GeForce RTX 5090 (sm_120)",
+  "commit": "f8d92dc22dc37eb1db8762086df6ac8a15def478",
+  "mistral": {
+    "prefill_512_ms": 53.758,
+    "c1_ttft_ms": 6.21,
+    "c1_itl_p50_ms": 3.89,
+    "c1_tok_s": 257.26,
+    "c4_tok_s": 999.21,
+    "c16_tok_s": 3716.81,
+    "mistral_vram_mb": 10524.1
+  },
+  "qwen": {
+    "prefill_512_ms": 4.169,
+    "c1_tok_s": 888.88
+  },
+  "mixtral": {
+    "c1_tok_s": 139.87
+  },
+  "kv_32l_32k": {
+    "32l_32k_fp8_ms_per_step": 3.3038,
+    "32l_32k_fp16_ms_per_step": 3.788,
+    "fp8_bytes_per_token": 2056.0
+  },
+  "serving_3run": {
+    "inproc_c64_tok_s": 3318.87,
+    "http_nonstream_c64_tok_s": 2797.32,
+    "http_nonstream_pct": 84.29,
+    "http_stream_c64_tok_s": 2946.45,
+    "http_stream_pct": 88.78
+  },
+  "regression": {
+    "pass": 3,
+    "fail": 5
+  },
+  "comparisons": [
+    {
+      "metric": "Mistral-7B Prefill S=512 (ms)",
+      "baseline_v390": 72.94,
+      "target": "<= 55.0 ms",
+      "final_phase24": 53.758,
+      "delta_or_speedup": "1.36x",
+      "status": "PASS"
+    },
+    {
+      "metric": "Mistral-7B C=1 TTFT (ms)",
+      "baseline_v390": 16.7,
+      "target": "<= 10.5 ms",
+      "final_phase24": 6.21,
+      "delta_or_speedup": "2.69x",
+      "status": "PASS"
+    },
+    {
+      "metric": "Mistral-7B C=1 Decode (tok/s)",
+      "baseline_v390": 167.03,
+      "target": ">= 220.0 tok/s",
+      "final_phase24": 257.26,
+      "delta_or_speedup": "1.54x",
+      "status": "PASS"
+    },
+    {
+      "metric": "Mistral-7B C=1 ITL p50 (ms)",
+      "baseline_v390": 5.82,
+      "target": "<= 4.5 ms",
+      "final_phase24": 3.89,
+      "delta_or_speedup": "1.50x",
+      "status": "PASS"
+    },
+    {
+      "metric": "Mistral-7B C=4 Decode (tok/s)",
+      "baseline_v390": 621.53,
+      "target": ">= 800.0 tok/s",
+      "final_phase24": 999.21,
+      "delta_or_speedup": "1.61x",
+      "status": "PASS"
+    },
+    {
+      "metric": "Mistral-7B C=16 Decode (tok/s)",
+      "baseline_v390": 2308.02,
+      "target": ">= 2850.0 tok/s",
+      "final_phase24": 3716.81,
+      "delta_or_speedup": "1.61x",
+      "status": "PASS"
+    },
+    {
+      "metric": "Qwen2.5-0.5B Prefill S=512 (ms)",
+      "baseline_v390": 10.74,
+      "target": "<= 8.0 ms",
+      "final_phase24": 4.169,
+      "delta_or_speedup": "2.58x",
+      "status": "PASS"
+    },
+    {
+      "metric": "Qwen2.5-0.5B C=1 Cached Decode (tok/s)",
+      "baseline_v390": 139.91,
+      "target": ">= 500.0 tok/s",
+      "final_phase24": 888.88,
+      "delta_or_speedup": "6.35x",
+      "status": "PASS"
+    },
+    {
+      "metric": "Mixtral-8x7B C=1 Decode (tok/s)",
+      "baseline_v390": 43.9,
+      "target": ">= 62.0 tok/s",
+      "final_phase24": 139.87,
+      "delta_or_speedup": "3.19x",
+      "status": "PASS"
+    },
+    {
+      "metric": "Mixtral-8x7B Routing Host Syncs / Step",
+      "baseline_v390": 256,
+      "target": "<= 0",
+      "final_phase24": 0,
+      "delta_or_speedup": "256 -> 0",
+      "status": "PASS"
+    },
+    {
+      "metric": "HTTP Non-Stream C=64 (tok/s)",
+      "baseline_v390": 2519.59,
+      "target": ">= 2610.0 tok/s",
+      "final_phase24": 2797.32,
+      "delta_or_speedup": "1.11x (+11.0%)",
+      "status": "PASS"
+    },
+    {
+      "metric": "HTTP Non-Stream C=64 (% of in-proc C=64)",
+      "baseline_v390": 84.99,
+      "target": ">= 88.0%",
+      "final_phase24": 84.29,
+      "delta_or_speedup": "2797.3 / 3318.9 tok/s (in-proc +11.9%)",
+      "status": "FAIL"
+    },
+    {
+      "metric": "32L 32K FP8 KV Attention (ms/step)",
+      "baseline_v390": 7.6,
+      "target": "<= 3.86 ms",
+      "final_phase24": 3.3038,
+      "delta_or_speedup": "2.30x",
+      "status": "PASS"
+    },
+    {
+      "metric": "PagedKVCache FP8 Bytes / Token",
+      "baseline_v390": 2056.0,
+      "target": "<= 2056.0 B",
+      "final_phase24": 2056.0,
+      "delta_or_speedup": "unchanged (2056 B)",
+      "status": "PASS"
+    },
+    {
+      "metric": "Mistral-7B Peak Allocated VRAM (MB)",
+      "baseline_v390": 8679.0,
+      "target": "<= 8800.0 MB",
+      "final_phase24": 10524.1,
+      "delta_or_speedup": "+1845.1 MB",
+      "status": "FAIL"
+    }
+  ]
+}

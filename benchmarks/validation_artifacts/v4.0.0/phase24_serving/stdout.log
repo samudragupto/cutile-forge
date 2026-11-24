@@ -1,0 +1,45 @@
+[Phase 16 Baseline | IN-PROCESS | C= 1] agg=243.87 tok/s [234.12..244.24] | TTFT p50=17.51ms | ITL p50=3.89ms | batch=1
+[Phase 16 Baseline | IN-PROCESS | C= 4] agg=795.02 tok/s [764.56..795.69] | TTFT p50=70.20ms | ITL p50=4.00ms | batch=4
+[Phase 16 Baseline | IN-PROCESS | C=16] agg=2901.79 tok/s [2760.68..2903.46] | TTFT p50=81.88ms | ITL p50=4.30ms | batch=16
+[Phase 16 Baseline | IN-PROCESS | C=64] agg=3318.87 tok/s [3317.29..3319.44] | TTFT p50=134.98ms | ITL p50=17.45ms | batch=64
+[Phase 16 Baseline] HTTP server booted in 10834.8 ms
+[Phase 16 Run 0 | http_nonstream | C= 1] agg=231.48 tok/s (94.9% of in-proc) [229.69..236.20] | TTFT p50/p99=276.4/278.5ms | ITL p50/p99=4.3/4.3ms | qwait=0.04ms | batch=1.00
+[Phase 16 Run 0 | http_nonstream | C= 4] agg=762.02 tok/s (95.8% of in-proc) [755.64..764.18] | TTFT p50/p99=334.4/337.3ms | ITL p50/p99=5.2/5.3ms | qwait=0.05ms | batch=4.00
+[Phase 16 Run 0 | http_nonstream | C=16] agg=2400.08 tok/s (82.7% of in-proc) [2350.09..2409.55] | TTFT p50/p99=419.9/433.1ms | ITL p50/p99=6.6/6.8ms | qwait=0.39ms | batch=15.52
+[Phase 16 Run 0 | http_nonstream | C=64] agg=2797.32 tok/s (84.3% of in-proc) [2777.88..2802.34] | TTFT p50/p99=1434.9/1464.7ms | ITL p50/p99=22.4/22.9ms | qwait=0.63ms | batch=60.24
+[Phase 16 Run 0 | http_stream    | C= 1] agg=233.88 tok/s (95.9% of in-proc) [229.61..233.94] | TTFT p50/p99=22.1/23.0ms | ITL p50/p99=4.0/4.2ms | qwait=0.04ms | batch=1.00
+[Phase 16 Run 0 | http_stream    | C= 4] agg=757.80 tok/s (95.3% of in-proc) [750.39..762.54] | TTFT p50/p99=79.1/80.1ms | ITL p50/p99=4.1/4.3ms | qwait=0.05ms | batch=4.00
+[Phase 16 Run 0 | http_stream    | C=16] agg=2556.87 tok/s (88.1% of in-proc) [2198.20..2602.95] | TTFT p50/p99=105.8/180.5ms | ITL p50/p99=4.5/4.9ms | qwait=0.25ms | batch=15.84
+[Phase 16 Run 0 | http_stream    | C=64] agg=2946.45 tok/s (88.8% of in-proc) [2873.60..2979.53] | TTFT p50/p99=155.3/264.8ms | ITL p50/p99=17.9/21.6ms | qwait=0.79ms | batch=60.84
+[Phase 16 Run 0 | ISOLATION] C=4: 4/4 | C=16: 16/16
+[Phase 16 Run 0 | DISCONNECT] inflight_after=0, active_kv_slots=0, disconnects_delta=1
+[Phase 16 Baseline] HTTP server booted in 10655.2 ms
+[Phase 16 Run 1 | http_nonstream | C= 1] agg=235.92 tok/s (96.7% of in-proc) [234.90..236.21] | TTFT p50/p99=271.2/272.4ms | ITL p50/p99=4.2/4.3ms | qwait=0.04ms | batch=1.00
+[Phase 16 Run 1 | http_nonstream | C= 4] agg=762.55 tok/s (95.9% of in-proc) [760.79..767.40] | TTFT p50/p99=334.2/335.1ms | ITL p50/p99=5.2/5.2ms | qwait=0.05ms | batch=4.00
+[Phase 16 Run 1 | http_nonstream | C=16] agg=2407.25 tok/s (83.0% of in-proc) [2188.79..2457.30] | TTFT p50/p99=417.9/465.2ms | ITL p50/p99=6.5/7.3ms | qwait=0.49ms | batch=15.52
+[Phase 16 Run 1 | http_nonstream | C=64] agg=2687.92 tok/s (81.0% of in-proc) [2598.87..2784.06] | TTFT p50/p99=1486.4/1560.8ms | ITL p50/p99=23.2/24.4ms | qwait=0.84ms | batch=59.09
+[Phase 16 Run 1 | http_stream    | C= 1] agg=238.39 tok/s (97.8% of in-proc) [235.14..238.57] | TTFT p50/p99=21.5/21.8ms | ITL p50/p99=3.9/4.1ms | qwait=0.04ms | batch=1.00
+[Phase 16 Run 1 | http_stream    | C= 4] agg=762.70 tok/s (95.9% of in-proc) [758.03..763.73] | TTFT p50/p99=77.8/79.0ms | ITL p50/p99=4.1/4.2ms | qwait=0.05ms | batch=4.00
+[Phase 16 Run 1 | http_stream    | C=16] agg=2432.60 tok/s (83.8% of in-proc) [2218.67..2541.11] | TTFT p50/p99=104.9/172.8ms | ITL p50/p99=4.6/5.4ms | qwait=0.30ms | batch=15.68
+[Phase 16 Run 1 | http_stream    | C=64] agg=2988.18 tok/s (90.0% of in-proc) [2890.41..2988.39] | TTFT p50/p99=153.7/267.9ms | ITL p50/p99=17.8/105.6ms | qwait=0.70ms | batch=60.24
+[Phase 16 Run 1 | ISOLATION] C=4: 4/4 | C=16: 16/16
+[Phase 16 Run 1 | DISCONNECT] inflight_after=0, active_kv_slots=0, disconnects_delta=1
+[Phase 16 Baseline] HTTP server booted in 10618.9 ms
+[Phase 16 Run 2 | http_nonstream | C= 1] agg=236.16 tok/s (96.8% of in-proc) [230.09..236.85] | TTFT p50/p99=271.0/278.0ms | ITL p50/p99=4.2/4.3ms | qwait=0.04ms | batch=1.00
+[Phase 16 Run 2 | http_nonstream | C= 4] agg=760.83 tok/s (95.7% of in-proc) [758.15..764.07] | TTFT p50/p99=335.0/336.2ms | ITL p50/p99=5.2/5.2ms | qwait=0.05ms | batch=4.00
+[Phase 16 Run 2 | http_nonstream | C=16] agg=2408.95 tok/s (83.0% of in-proc) [2407.41..2446.29] | TTFT p50/p99=415.5/422.6ms | ITL p50/p99=6.5/6.6ms | qwait=0.38ms | batch=15.52
+[Phase 16 Run 2 | http_nonstream | C=64] agg=2804.48 tok/s (84.5% of in-proc) [2763.11..2812.76] | TTFT p50/p99=1433.8/1472.4ms | ITL p50/p99=22.4/23.0ms | qwait=0.64ms | batch=60.24
+[Phase 16 Run 2 | http_stream    | C= 1] agg=234.02 tok/s (96.0% of in-proc) [230.11..234.88] | TTFT p50/p99=22.2/22.9ms | ITL p50/p99=4.0/4.2ms | qwait=0.04ms | batch=1.00
+[Phase 16 Run 2 | http_stream    | C= 4] agg=756.83 tok/s (95.2% of in-proc) [752.01..761.44] | TTFT p50/p99=79.2/80.1ms | ITL p50/p99=4.1/4.3ms | qwait=0.05ms | batch=4.00
+[Phase 16 Run 2 | http_stream    | C=16] agg=2568.76 tok/s (88.5% of in-proc) [2186.41..2610.92] | TTFT p50/p99=104.8/182.4ms | ITL p50/p99=4.5/4.8ms | qwait=0.28ms | batch=15.84
+[Phase 16 Run 2 | http_stream    | C=64] agg=2877.09 tok/s (86.7% of in-proc) [2691.08..2937.41] | TTFT p50/p99=157.2/372.7ms | ITL p50/p99=17.9/101.9ms | qwait=0.76ms | batch=60.84
+[Phase 16 Run 2 | ISOLATION] C=4: 4/4 | C=16: 16/16
+[Phase 16 Run 2 | DISCONNECT] inflight_after=0, active_kv_slots=0, disconnects_delta=1
+[REPRO SUMMARY http_nonstream_c1 ] tok/s=235.92 [231.48..236.16] (CV=1.12%, 96.7% in-proc) | TTFT p99 med=278.0ms | ITL p99 med=4.3ms
+[REPRO SUMMARY http_nonstream_c4 ] tok/s=762.02 [760.83..762.55] (CV=0.12%, 95.8% in-proc) | TTFT p99 med=336.2ms | ITL p99 med=5.2ms
+[REPRO SUMMARY http_nonstream_c16] tok/s=2407.25 [2400.08..2408.95] (CV=0.20%, 83.0% in-proc) | TTFT p99 med=433.1ms | ITL p99 med=6.8ms
+[REPRO SUMMARY http_nonstream_c64] tok/s=2797.32 [2687.92..2804.48] (CV=2.36%, 84.3% in-proc) | TTFT p99 med=1472.4ms | ITL p99 med=23.0ms
+[REPRO SUMMARY http_stream_c1    ] tok/s=234.02 [233.88..238.39] (CV=1.09%, 96.0% in-proc) | TTFT p99 med=22.9ms | ITL p99 med=4.2ms
+[REPRO SUMMARY http_stream_c4    ] tok/s=757.80 [756.83..762.70] (CV=0.41%, 95.3% in-proc) | TTFT p99 med=80.1ms | ITL p99 med=4.3ms
+[REPRO SUMMARY http_stream_c16   ] tok/s=2556.87 [2432.60..2568.76] (CV=2.99%, 88.1% in-proc) | TTFT p99 med=180.5ms | ITL p99 med=4.9ms
+[REPRO SUMMARY http_stream_c64   ] tok/s=2946.45 [2877.09..2988.18] (CV=1.91%, 88.8% in-proc) | TTFT p99 med=267.9ms | ITL p99 med=101.9ms
