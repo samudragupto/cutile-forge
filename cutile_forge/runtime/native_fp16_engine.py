@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import torch
 
@@ -23,14 +23,12 @@ from cutile_forge.kernels.gemm_dequant_silu import fused_swiglu_fp16
 from cutile_forge.kernels.layernorm_residual import fused_rmsnorm_residual
 from cutile_forge.kernels.rmsnorm import cutile_rmsnorm
 from cutile_forge.kernels.rope import apply_rope, apply_rope_qk_kv_write_pos
-from cutile_forge.models.model_graph import (
-    DenseTransformerBlock,
-    UnifiedModelGraph,
-    compute_scaled_rope_freqs,
-)
 from cutile_forge.runtime.native_engine import DEFAULT_CONTEXT_BUCKETS, GraphStrategy, _next_pow2
 from cutile_forge.runtime.native_kv_cache import NativePagedKVCache
 from cutile_forge.runtime.native_stream import NativeStreamManager
+
+if TYPE_CHECKING:
+    from cutile_forge.models.model_graph import UnifiedModelGraph
 
 
 @dataclass
@@ -85,6 +83,11 @@ class NativeFP16DecoderRuntime:
         context_buckets: tuple[int, ...] = DEFAULT_CONTEXT_BUCKETS,
         max_batch_size: int = 1,
     ) -> None:
+        from cutile_forge.models.model_graph import (
+            DenseTransformerBlock,
+            compute_scaled_rope_freqs,
+        )
+
         if not graph.blocks or not all(isinstance(b, DenseTransformerBlock) for b in graph.blocks):
             raise TypeError("NativeFP16DecoderRuntime supports DenseTransformerBlock graphs only")
         b0 = graph.blocks[0]
