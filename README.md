@@ -2,7 +2,7 @@
 
 **A Tile-Fusion Graph (TFG) compiler, native [`cuda-tile`](https://pypi.org/project/cuda-tile/) GPU kernel library, universal quantized inference engine, and OpenAI-compatible serving runtime.**
 
-- **Current tagged release:** `v3.7.1` (`bd9ec7d`) — Phase 22 (`PagedKVCache` numerical correctness & README audit) is complete in pre-release commits and **pending `v3.8.0` release sign-off** (not yet bumped or tagged).
+- **Current release:** **`v3.8.0`** (`2026-11-24`) — Phase 22 `PagedKVCache` numerical correctness & documentation release (see [CHANGELOG.md](CHANGELOG.md)).
 - **Verified hardware target:** Single `NVIDIA GeForce RTX 5090` (`sm_120`, 32 GB GDDR7, CUDA `13.2`, PyTorch `2.15.0+cu132`, `cuda-tile 1.8.1`, `transformers 5.23.0`).
 - **Validation discipline:** Green unit/integration tests and zero-fallback native execution are tracked separately from strict all-layer numerical parity (`2 PASS / 6 FAIL` under unchanged strict regression gates) and external engine performance (`SGLang` and `vLLM` lead CuTileForge on core serving benchmarks).
 
@@ -11,14 +11,15 @@
 ## Table of Contents
 
 1. [Overview](#overview)
-2. [Regression & Numerical Parity Status](#regression--numerical-parity-status)
-3. [Compatibility Matrix & External Engine Comparison](#compatibility-matrix--external-engine-comparison)
-4. [Hardware & Validation Scope](#hardware--validation-scope)
-5. [Prerequisites & Installation](#prerequisites--installation)
-6. [Tested Quickstart & Usage Examples](#tested-quickstart--usage-examples)
-7. [Benchmark Methodology & Phase 22 Metrics](#benchmark-methodology--phase-22-metrics)
-8. [Roadmap (Phases 22–24)](#roadmap-phases-2224)
-9. [Contributing, Documentation & License](#contributing-documentation--license)
+2. [Regression & Numerical Parity Status (`v3.8.0`)](#regression--numerical-parity-status-v380)
+3. [Compatibility Matrix, Quantization & Operational Limits](#compatibility-matrix-quantization--operational-limits)
+4. [External Engine Comparison](#external-engine-comparison)
+5. [Hardware & Validation Scope](#hardware--validation-scope)
+6. [Prerequisites & Installation](#prerequisites--installation)
+7. [Tested Quickstart & Usage Examples](#tested-quickstart--usage-examples)
+8. [Benchmark Methodology & Phase 22 Metrics](#benchmark-methodology--phase-22-metrics)
+9. [Release Evolution & Roadmap (Phases 22–24)](#release-evolution--roadmap-phases-2224)
+10. [Contributing, Documentation & License](#contributing-documentation--license)
 
 ---
 
@@ -32,15 +33,19 @@ CuTileForge compiles PyTorch/ONNX workloads and quantized HuggingFace/GGUF check
 
 ---
 
-## Regression & Numerical Parity Status
+## Regression & Numerical Parity Status (`v3.8.0`)
 
 > **Important distinction:** `8/8` regression models execute **natively on CuTile (`0` PyTorch compute fallbacks)**, and CI/unit suites pass (`298 passed` on GPU; `203 passed, 4 skipped` on CPU). **Neither green CI nor native execution implies full strict numerical parity.** Under unchanged strict thresholds (`cutile-forge regress --tier full`), the 8-model suite stands at **`2 PASS / 6 FAIL`**.
 
-Pinned evidence:
-- Tagged baseline: `v3.7.1` (`bd9ec7d`), [`benchmarks/validation_artifacts/v3.7.1/phase21_1_regression/regress_full.json`](benchmarks/validation_artifacts/v3.7.1/phase21_1_regression/regress_full.json)
-- Post-Phase 22 fix rerun: commit `40b8d43`, [`benchmarks/validation_artifacts/v3.8.0/phase22_regression/regress_full.json`](benchmarks/validation_artifacts/v3.8.0/phase22_regression/regress_full.json)
+<p align="center">
+  <img src="docs/figures/validation_v380/fig_v380_parity_and_kv.png" alt="Figure 1: v3.8.0 8-Model Regression Parity Status and Phase 22 Attention Kernel Latencies" width="100%"/>
+</p>
 
-| Category | Model (`Weight Source`) | Native Exec | Strict Parity (`v3.7.1` / `40b8d43`) | Key Measured Metrics (`40b8d43`) | Failure / Scope Detail (Unchanged Gates) |
+Pinned evidence:
+- `v3.7.1` baseline (`bd9ec7d`): [`benchmarks/validation_artifacts/v3.7.1/phase21_1_regression/regress_full.json`](benchmarks/validation_artifacts/v3.7.1/phase21_1_regression/regress_full.json)
+- `v3.8.0` Phase 22 rerun (`40b8d43`): [`benchmarks/validation_artifacts/v3.8.0/phase22_regression/regress_full.json`](benchmarks/validation_artifacts/v3.8.0/phase22_regression/regress_full.json)
+
+| Category | Model (`Weight Source`) | Native Exec | Strict Parity (`v3.8.0`) | Key Measured Metrics (`40b8d43`) | Failure / Scope Detail (Unchanged Gates) |
 |---|---|---:|---|---|---|
 | Multimodal | `LLaVA-1.5` (`real-checkpoint`, 55L) | Yes | **`PASS`** | `cos=1.000000`, `max_diff=0.0156`, `greedy=1/1 (16/16 tok)` | **Single 16-token greedy continuation only** (does not establish 5-prompt x 256-token parity). |
 | Diffusion | `DiT-XL/2` (`real-checkpoint`, 28L) | Yes | **`PASS`** | `cos=0.999999`, `max_diff=0.00439` | Passes `cos >= 0.9999` and `max_abs_diff < 0.05` against `diffusers==0.43.0`. |
@@ -55,17 +60,38 @@ Decoder tie classifications (`ONE_SIDED_TIE`, `EXACT_LOGIT_TIE`, `NUMERIC_NEAR_T
 
 ---
 
-## Compatibility Matrix & External Engine Comparison
+## Compatibility Matrix, Quantization & Operational Limits
 
-### 4-Axis Compatibility Matrix & Known Operational Limits
-
-- **Full Matrix:** [`docs/FINAL_COMPATIBILITY_MATRIX.md`](docs/FINAL_COMPATIBILITY_MATRIX.md) (`29` representative cells: **`14 PASS` / `8 FAIL` / `4 UNSUPPORTED` / `3 NOT RUN`**).
+- **Full 4-Axis Matrix:** [`docs/FINAL_COMPATIBILITY_MATRIX.md`](docs/FINAL_COMPATIBILITY_MATRIX.md) (`29` representative cells: **`14 PASS` / `8 FAIL` / `4 UNSUPPORTED` / `3 NOT RUN`**).
 - **Operational Limits:** [`docs/OPERATIONAL_LIMITS.md`](docs/OPERATIONAL_LIMITS.md) documents strict context ceilings (`64K` on Mistral-7B `UNSUPPORTED`), GGUF `Q5_0` rejection (`UNSUPPORTED`), `qwen2_moe`/`deepseek_moe` (`SYNTHETIC-ONLY`), and serving gate status.
 - **Phase 16 HTTP Non-Streaming Gate (`FAIL`):** At concurrency `C=64` on `Mistral-7B-v0.1-GPTQ`, HTTP streaming SSE passes at `90.98%` (`2,697.14 tok/s`), whereas **HTTP non-streaming `C=64` is `FAIL` at `84.99%` (`2,519.59 tok/s` 3-run median vs strict `>= 85%` target; single run-0 `85.02%` does not override the median)**.
 
-### External Engine Comparison (RTX 5090 `sm_120`, Isolated Environments)
+### Quantization & Architecture Coverage Highlights (`real-checkpoint` vs `UNSUPPORTED` / `NOT RUN`)
 
-Measured in [`docs/EXTERNAL_ENGINE_COMPARISON.md`](docs/EXTERNAL_ENGINE_COMPARISON.md) (`OUT_TOKENS=64`, `temperature=0.0`, `5` runs after `2` warmup; `v3.6.0/phase20_external_engines/manifest.json`):
+| Model / Family | Format / Quantization | Path | Status | Measured PPL / Parity (`FINAL_COMPATIBILITY_MATRIX.md`) |
+|---|---|---|---|---|
+| `Mistral-7B-v0.1` | `GGUF Q4_K_M` | `eager` | **`PASS`** | `ppl=6.0710 vs 6.0716` (`0.0094%`) |
+| `Mistral-7B-v0.1` | `GPTQ Int4 (desc_act=True)` | `batched` (`C=64`) / `speculative` | **`PASS`** | `2,964.61 tok/s` (`C=64`); `354.51 tok/s` (`89.29%` accept) |
+| `Mistral-7B-v0.1` | `GPTQ Int4 (desc_act=True)` | `http` (`C=64` nonstream) | **`FAIL`** | `2,519.59 tok/s` (`84.99% < 85%`) |
+| `Qwen2.5-0.5B` | `GPTQ` / `AWQ` / `FP8_channel` / `GGUF Q4_0, Q8_0, Q6_K` | `eager` | **`PASS`** | `0.0001%–0.032%` PPL diff (`v3.2.0/phase15_quant_real`) |
+| `Qwen2.5-0.5B` | `GGUF Q4_K_M` (mixed `Q5_0` tensors) | `eager` | **`UNSUPPORTED`** | `GGML tensor type 'Q5_0' has no native CuTile kernel` |
+| `Llama-3.2-1B-Instruct` | `FP16` (`hf_transformers`) | `eager` | **`PASS`** | `cos=0.999996`, `max_diff=0.03125`, `greedy=5/5` |
+| `ViT-B/16` / `CLIP-ViT-B/32` | `FP16` (`hf_transformers`) | `eager` | **`PASS`** | `cos=1.0 / 0.999989`, `max_diff=0.00391 / 0.03711` |
+| `Qwen2-MoE` / `DeepSeek-MoE` | `FP16` (`synthetic_weights`) | `eager` | **`NOT RUN`** (`SYNTHETIC-ONLY`) | No ungated `< 16 GB` FP16 checkpoint fits with reference in 32 GB |
+
+<p align="center">
+  <img src="docs/images_5090/fig6_tracks_abc_results.png" alt="Figure 2: Operator Optimization, Zero-ATen Runtime Audit, and Architecture Compatibility Summary" width="100%"/>
+</p>
+
+---
+
+## External Engine Comparison
+
+Measured in [`docs/EXTERNAL_ENGINE_COMPARISON.md`](docs/EXTERNAL_ENGINE_COMPARISON.md) on `NVIDIA GeForce RTX 5090` (`sm_120`, `OUT_TOKENS=64`, `temperature=0.0`, `5` runs after `2` warmup; `v3.6.0/phase20_external_engines/manifest.json`):
+
+<p align="center">
+  <img src="docs/figures/validation_v380/fig_v380_external_engines.png" alt="Figure 3: CuTileForge vs SGLang, vLLM, and HuggingFace Transformers on RTX 5090" width="100%"/>
+</p>
 
 | Engine | Model / Format | C=1 (`tok/s`) | C=4 (`tok/s`) | C=16 (`tok/s`) | Peak VRAM (MB) | Status & Takeaways |
 |---|---|---:|---:|---:|---:|---|
@@ -167,7 +193,7 @@ Additional runnable scripts live under [`examples/`](examples/) (`generate.py`, 
 Details in [`docs/BENCHMARK_METHODOLOGY.md`](docs/BENCHMARK_METHODOLOGY.md) and [`benchmarks/validation_artifacts/`](benchmarks/validation_artifacts/):
 - GPU timings use `torch.cuda.Event(enable_timing=True)` with `torch.cuda.synchronize()`, explicit warmup iterations, and median (`p50`) reporting alongside min/max/tail statistics.
 - Every artifact explicitly separates **`real-checkpoint`** measurements from **`synthetic-weights`** microbenchmarks.
-- Full verification commands used after Phase 22 code changes:
+- Full verification commands used for `v3.8.0`:
   - `black --check cutile_forge/ tests/ benchmarks/` (`206` files unchanged)
   - `ruff check cutile_forge/ tests/ benchmarks/` (`0` issues)
   - `mypy cutile_forge/ --ignore-missing-imports` (`95` source files clean)
@@ -177,10 +203,10 @@ Details in [`docs/BENCHMARK_METHODOLOGY.md`](docs/BENCHMARK_METHODOLOGY.md) and 
 ### Phase 22 (`PagedKVCache` Correctness & Microbenchmark Impact)
 
 Phase 22 fixed two isolated defects without regressing kernel performance ([`benchmarks/validation_artifacts/v3.8.0/phase22_perf_mem.json`](benchmarks/validation_artifacts/v3.8.0/phase22_perf_mem.json), `synthetic-weights`, `50` warmup, `200` CUDA-event runs on RTX 5090):
-1. **Sliding-window IEEE-754 `0.0 * NaN` prevention (`attention_gqa.py`):** Zeroed expired `k_tile` / `v_tile` sliding-window slots before `ct.mma` in `attention_gqa_kernel` and `flash_decoding_split_kv_kernel`.
+1. **Sliding-window IEEE-754 `0.0 * NaN` prevention (`attention_gqa.py`):** Zeroed expired `k_tile` / `v_tile` sliding-window slots before `ct.mma` in `attention_gqa_kernel` and `flash_decoding_split_kv_kernel` (using compile-time `has_sw_edge` guarding so interior/aligned Split-KV tiles incur zero overhead).
 2. **Per-slot FP8 E4M3 scale isolation (`kv_cache.py`):** Stored per-slot `k_scales` and `v_scales` (`float32`, `+128 B/page`, `+0.39%` over 32,768 B data page) so high-magnitude spikes do not overwrite earlier slots' scale factors (`early_k_err` dropped `0.4375 -> 0.140625`, matching exact single-token FP8 E4M3 oracle).
 
-| Microbenchmark / Metric (`synthetic-weights`) | Before | After | Delta |
+| Microbenchmark / Metric (`synthetic-weights`) | Before (`v3.7.1`) | After (`v3.8.0`) | Delta |
 |---|---:|---:|---:|
 | `fused_attn_gqa` (`s_kv=128, sw=0`) | `25.504 us` | `14.208 us` | `-44.29%` |
 | `fused_attn_gqa` (`s_kv=1024, sw=0`) | `39.232 us` | `29.824 us` | `-23.98%` |
@@ -189,15 +215,20 @@ Phase 22 fixed two isolated defects without regressing kernel performance ([`ben
 | `flash_decoding` (`s_kv=4096, sw=4096`) | `36.096 us` | `36.736 us` | `+1.77%` |
 | `PagedKVCache` FP8 page size (`page=16, H_kv=8, D=128`) | `32,768 B` (`2,048 B/tok`) | `32,896 B` (`2,056 B/tok`) | `+128 B` (`+0.39%`) |
 
-Diagnostic traces explaining `Mixtral-8x7B` `P2 @ step 185` (`cu_kv` vs `cu_nokv`/`pt_kv`/`pt_nokv`, router flip at `abs_pos=59`, first prefix divergence at `abs_pos=63`, sub-ULP `L0` GQA tiling delta `4.8e-07`) are preserved in [`benchmarks/validation_artifacts/v3.8.0/phase22_diag/`](benchmarks/validation_artifacts/v3.8.0/phase22_diag/).
+Diagnostic traces explaining `Mixtral-8x7B` `P2 @ step 185` (`cu_kv` vs `cu_nokv`/`pt_kv`/`pt_nokv`, router flip at `abs_pos=59`, first prefix divergence at `abs_pos=63`, sub-ULP `L0` GQA tiling delta `4.8e-07`) are archived in [`benchmarks/validation_artifacts/v3.8.0/phase22_diag/`](benchmarks/validation_artifacts/v3.8.0/phase22_diag/).
 
 ---
 
-## Roadmap (Phases 22–24)
+## Release Evolution & Roadmap (Phases 22–24)
 
-- **Phase 22 (Target `v3.8.0` — Complete, Pending Sign-Off):** `PagedKVCache` and sliding-window numerical correctness closure, per-slot FP8 scales, full regression verification (`40b8d43`), and full honest `README.md` rewrite. Version bump and `v3.8.0` tag await explicit release approval.
-- **Phase 23 (Queued):** Decoder & MoE strict greedy parity investigation (`Mixtral P2 @ step 185`, persistent `PagedKVCache` + CUDA Graph support for `UnifiedModelExecutor` / `Qwen2.5-0.5B`).
-- **Phase 24 (Queued):** External hardware matrix completion (`RTX 4060 sm_89` and multi-GPU physical cluster validation) + independent reproduction closure and HTTP `nonstream C=64` serving gap closure.
+| Release | Milestone | Verified Outcome / Status |
+|---|---|---|
+| **`v3.0.0`–`v3.5.0`** | Zero-ATen CUDA Graph (`NativeModelRuntime`), Universal Quantization (`GPTQ`/`AWQ`/`GGUF`/`FP8`), 13 Model Families, Native Cross-Modal Execution | `172.58 tok/s` single-stream `Mistral-7B-GPTQ`; `0` PyTorch compute fallbacks across `8/8` regression models |
+| **`v3.6.0`** | Ecosystem Validation, Compatibility Matrix, Multi-GPU Runbook (`SIMULATED` / `BLOCKED: hardware`), Repro Kit (`PENDING_INDEPENDENT_RUN`) | `29`-cell compatibility matrix (`14 PASS / 8 FAIL / 4 UNSUPPORTED / 3 NOT RUN`); isolated `SGLang`/`vLLM` comparison |
+| **`v3.7.0`–`v3.7.1`** | Phase 21/21.1 Numerical Parity Closure, Explicit `GateResult` Reporting, Decoder Tie & Encoder Floor Audits | `DiT-XL/2` fixed (`FAIL -> PASS`); `Whisper-Tiny` `gelu_erf` fixed (`-40%` max diff); `2 PASS / 6 FAIL` |
+| **`v3.8.0` (Current)** | **Phase 22 (`PagedKVCache` Numerical Correctness & README Audit)** | Sliding-window `NaN` tile guard, per-slot FP8 E4M3 scales, Mixtral `P2 @ step 185` 4-way isolation, updated README & figures |
+| **Phase 23 (Queued)** | Decoder & MoE strict greedy parity investigation (`Mixtral P2 @ step 185`, persistent `PagedKVCache` + CUDA Graph for `UnifiedModelExecutor` / `Qwen2.5-0.5B`) | Not started |
+| **Phase 24 (Queued)** | External hardware matrix completion (`RTX 4060 sm_89`, multi-GPU physical cluster), independent repro, HTTP `nonstream C=64` gap closure | Not started |
 
 ---
 

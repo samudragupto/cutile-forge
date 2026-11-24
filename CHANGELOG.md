@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.8.0] (2026-11-24) — Phase 22: PagedKVCache Numerical Correctness & Documentation Audit
+
+**Authors:** Arrhat Nag (`@samudragupto`) and Rupesh Nasre
+
+- **Sliding-Window Expired Slot NaN Guard (`cutile_forge/kernels/attention_gqa.py`):** Masked expired `k_tile`/`v_tile` slots to `0.0` before `ct.mma` in `attention_gqa_kernel` and `flash_decoding_split_kv_kernel` (using compile-time `has_sw_edge` guarding so interior/aligned Split-KV tiles incur zero branch overhead), eliminating IEEE-754 `0.0 * NaN = NaN` propagation when earlier context slots hold uninitialized or `NaN` values.
+- **Per-Slot FP8 E4M3 KV Scale Isolation (`cutile_forge/engine/kv_cache.py`):** Stored per-token `k_scales`/`v_scales` (`float32`, `(1, 1, page_size, 1)`, `+128 B/page`) on `KVPage` instead of destructively re-quantizing earlier slots when a high-magnitude token enters the page, matching exact single-token FP8 E4M3 quantization while keeping honest `KVPage.nbytes` and eviction budget accounting.
+- **Diagnostics & Repro Coverage (`benchmarks/validation_artifacts/v3.8.0/`, `tests/test_phase22_paged_kv_correctness.py`, `tests/test_v040_blackwell_moe.py`):** Archived 4-way Mixtral `P2 @ step 185` isolation (`sub-ULP L0 GQA tiling divergence 4.8e-07 -> cascading router flip at abs_pos=59 -> step 185 divergence`), boundary sweeps, and before/after microbenchmarks (`-44.29%` to `+1.77%` kernel delta).
+- **Full `README.md` Overhaul & `v3.8.0` Figures (`README.md`, `scripts/generate_v380_figures.py`, `docs/figures/validation_v380/`):** Rewrote documentation around verified `2 PASS / 6 FAIL` regression parity, strict distinction between green CI/native execution and full parity, `29`-cell compatibility matrix (`14 PASS / 8 FAIL / 4 UNSUPPORTED / 3 NOT RUN`), external `SGLang`/`vLLM` leads, Phase 16 `http_nonstream C=64` `FAIL` (`84.99%`), and explicit hardware blocks (`sm_89` `UNVALIDATED`, multi-GPU `BLOCKED: hardware`).
+
 ## [3.7.1] (2026-11-24) — Phase 21.1 Audit Closure: Decoder Tie/Divergence Diagnostics, Encoder Calibration & Matrix Reconciliation
 
 **Authors:** Arrhat Nag (`@samudragupto`) and Rupesh Nasre
