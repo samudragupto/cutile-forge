@@ -1,0 +1,163 @@
+{
+  "provenance": {
+    "git_tag_v3_7_1": "bd9ec7d05e17371c4e223cc49a403001a0edb350",
+    "git_head": "bd9ec7d05e17371c4e223cc49a403001a0edb350",
+    "gpu_name": "NVIDIA GeForce RTX 5090",
+    "compute_capability": [
+      12,
+      0
+    ],
+    "cuda_version": "13.2",
+    "torch_version": "2.15.0+cu132",
+    "transformers_version": "5.23.0",
+    "cuda_tile_module": "1.8.1",
+    "cutile_forge_version": "3.7.1",
+    "checkpoint_dir": "/var/tmp/arrhat_models/mixtral_8x7b_4bit",
+    "checkpoint_files": [
+      {
+        "name": "config.json",
+        "bytes": 2214
+      },
+      {
+        "name": "generation_config.json",
+        "bytes": 116
+      },
+      {
+        "name": "model.safetensors",
+        "bytes": 23811549344
+      },
+      {
+        "name": "quantize_config.json",
+        "bytes": 185
+      },
+      {
+        "name": "special_tokens_map.json",
+        "bytes": 72
+      },
+      {
+        "name": "tokenizer.json",
+        "bytes": 1795303
+      },
+      {
+        "name": "tokenizer.model",
+        "bytes": 493443
+      },
+      {
+        "name": "tokenizer_config.json",
+        "bytes": 1460
+      }
+    ]
+  },
+  "prompt_len_with_bos": 13,
+  "shared_prefix_len": 198,
+  "tracing_invariance": {
+    "tokens_identical": true,
+    "step185_logits_bit_exact": true,
+    "step185_logits_max_diff": 0.0
+  },
+  "dispatch_observed": {
+    "cu_kv_prefill": [
+      "attention_gqa_kernel(bq=16,bk=64,sq=13,skv=13)"
+    ],
+    "cu_kv_decode_sample": [
+      "attention_gqa_kernel(bq=16,bk=64,sq=1,skv=100)",
+      "attention_gqa_kernel(bq=16,bk=64,sq=1,skv=99)"
+    ],
+    "cu_nokv": [
+      "attention_gqa_kernel(bq=64,bk=64,sq=198,skv=198)"
+    ],
+    "pt_kv": [
+      "MistralLayer.forward_pytorch -> torch.nn.functional.scaled_dot_product_attention"
+    ],
+    "pt_nokv": [
+      "MistralLayer.forward_pytorch -> torch.nn.functional.scaled_dot_product_attention"
+    ]
+  },
+  "positions_glossary": {
+    "first_router_disagreement_lead": {
+      "abs_pos": 59,
+      "gen_step": 47,
+      "page_idx": 3,
+      "slot_in_page": 11
+    },
+    "step_185_mismatch": {
+      "abs_pos": 197,
+      "gen_step": 185,
+      "page_idx": 12,
+      "slot_in_page": 5
+    }
+  },
+  "first_mismatches_on_shared_prefix": {
+    "cu_kv_vs_pt_nokv": {
+      "mismatch_steps": [
+        51,
+        185
+      ],
+      "first_mismatch": {
+        "abs_pos": 63,
+        "gen_step": 51,
+        "page_idx": 3,
+        "slot_in_page": 15,
+        "pred": 28725,
+        "ref_pred": 297
+      }
+    },
+    "cu_nokv_vs_pt_nokv": {
+      "mismatch_steps": [
+        51
+      ],
+      "first_mismatch": {
+        "abs_pos": 63,
+        "gen_step": 51,
+        "page_idx": 3,
+        "slot_in_page": 15,
+        "pred": 28725,
+        "ref_pred": 297
+      }
+    },
+    "pt_kv_vs_pt_nokv": {
+      "mismatch_steps": [
+        51,
+        57
+      ],
+      "first_mismatch": {
+        "abs_pos": 63,
+        "gen_step": 51,
+        "page_idx": 3,
+        "slot_in_page": 15,
+        "pred": 28725,
+        "ref_pred": 297
+      }
+    }
+  },
+  "step_185_4way": {
+    "cu_kv": {
+      "emitted_token_id": 28723,
+      "top2_token_id": 28725,
+      "logit_28725": 22.390625,
+      "logit_28723": 22.4375,
+      "margin_top1_minus_top2": 0.046875
+    },
+    "cu_nokv": {
+      "emitted_token_id": 28725,
+      "top2_token_id": 28723,
+      "logit_28725": 22.5,
+      "logit_28723": 22.421875,
+      "margin_top1_minus_top2": 0.078125
+    },
+    "pt_kv": {
+      "emitted_token_id": 28725,
+      "top2_token_id": 28723,
+      "logit_28725": 22.484375,
+      "logit_28723": 22.40625,
+      "margin_top1_minus_top2": 0.078125
+    },
+    "pt_nokv": {
+      "emitted_token_id": 28725,
+      "top2_token_id": 28723,
+      "logit_28725": 22.484375,
+      "logit_28723": 22.421875,
+      "margin_top1_minus_top2": 0.0625
+    }
+  }
+}

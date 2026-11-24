@@ -1,0 +1,1312 @@
+{
+  "upstream_stage_trace": {
+    "L0_pos13": {
+      "coords": {
+        "abs_pos": 13,
+        "gen_step": 1,
+        "page_idx": 0,
+        "slot_in_page": 13
+      },
+      "cu_kv_vs_cu_nokv": {
+        "x_in": 0.0,
+        "x_norm": 0.0,
+        "q_rope": 0.0,
+        "k_rope": 0.0,
+        "v_pre_cache": 0.0,
+        "k_full": 0.0,
+        "v_full": 0.0,
+        "attn_out": 0.0,
+        "o_proj": 0.0,
+        "residual_mid": 0.0,
+        "post_norm": 0.0,
+        "router_logits": 2.4e-07,
+        "h_out": 0.0
+      },
+      "cu_kv_vs_pt_kv": {
+        "x_in": 0.0,
+        "x_norm": 0.0,
+        "q_rope": 0.00195312,
+        "k_rope": 0.00097656,
+        "v_pre_cache": 3.81e-06,
+        "k_full": 0.0078125,
+        "v_full": 0.00024414,
+        "attn_out": 0.00012207,
+        "o_proj": 0.00024414,
+        "residual_mid": 0.00024414,
+        "post_norm": 0.00048828,
+        "router_logits": 0.00070322,
+        "h_out": 0.00097656
+      },
+      "cu_nokv_vs_pt_nokv": {
+        "x_in": 0.0,
+        "x_norm": 0.0,
+        "q_rope": 0.0,
+        "k_rope": 0.00195312,
+        "v_pre_cache": 0.00024414,
+        "k_full": 0.00390625,
+        "v_full": 0.00024414,
+        "attn_out": 6.104e-05,
+        "o_proj": 0.00024414,
+        "residual_mid": 0.00024414,
+        "post_norm": 0.00048828,
+        "router_logits": 0.00086284,
+        "h_out": 0.00097656
+      },
+      "pt_kv_vs_pt_nokv": {
+        "x_in": 0.0,
+        "x_norm": 0.0,
+        "q_rope": 0.00195312,
+        "k_rope": 0.00195312,
+        "v_pre_cache": 0.00024414,
+        "k_full": 0.0078125,
+        "v_full": 0.00024414,
+        "attn_out": 0.00012207,
+        "o_proj": 3.052e-05,
+        "residual_mid": 3.052e-05,
+        "post_norm": 0.00048828,
+        "router_logits": 0.00088942,
+        "h_out": 6.104e-05
+      }
+    },
+    "L0_pos59": {
+      "coords": {
+        "abs_pos": 59,
+        "gen_step": 47,
+        "page_idx": 3,
+        "slot_in_page": 11
+      },
+      "cu_kv_vs_cu_nokv": {
+        "x_in": 0.0,
+        "x_norm": 0.0,
+        "q_rope": 0.0,
+        "k_rope": 0.0,
+        "v_pre_cache": 0.0,
+        "k_full": 0.0,
+        "v_full": 0.0,
+        "attn_out": 0.0,
+        "o_proj": 0.0,
+        "residual_mid": 0.0,
+        "post_norm": 0.0,
+        "router_logits": 1.2e-07,
+        "h_out": 0.0
+      },
+      "cu_kv_vs_pt_kv": {
+        "x_in": 0.0,
+        "x_norm": 0.0,
+        "q_rope": 0.00195312,
+        "k_rope": 0.00097656,
+        "v_pre_cache": 0.00012207,
+        "k_full": 0.0078125,
+        "v_full": 0.00024414,
+        "attn_out": 6.104e-05,
+        "o_proj": 3.052e-05,
+        "residual_mid": 3.052e-05,
+        "post_norm": 0.00048828,
+        "router_logits": 0.00029236,
+        "h_out": 0.00012207
+      },
+      "cu_nokv_vs_pt_nokv": {
+        "x_in": 0.0,
+        "x_norm": 0.0,
+        "q_rope": 0.0,
+        "k_rope": 0.00390625,
+        "v_pre_cache": 0.00012207,
+        "k_full": 0.00390625,
+        "v_full": 0.00024414,
+        "attn_out": 6.104e-05,
+        "o_proj": 6.104e-05,
+        "residual_mid": 0.00012207,
+        "post_norm": 0.00048828,
+        "router_logits": 0.00040078,
+        "h_out": 0.00024414
+      },
+      "pt_kv_vs_pt_nokv": {
+        "x_in": 0.0,
+        "x_norm": 0.0,
+        "q_rope": 0.00195312,
+        "k_rope": 0.00390625,
+        "v_pre_cache": 0.00012207,
+        "k_full": 0.0078125,
+        "v_full": 0.00024414,
+        "attn_out": 6.104e-05,
+        "o_proj": 6.104e-05,
+        "residual_mid": 0.00012207,
+        "post_norm": 0.00048828,
+        "router_logits": 0.00034496,
+        "h_out": 0.00024414
+      }
+    },
+    "L0_pos197": {
+      "coords": {
+        "abs_pos": 197,
+        "gen_step": 185,
+        "page_idx": 12,
+        "slot_in_page": 5
+      },
+      "cu_kv_vs_cu_nokv": {
+        "x_in": 0.0,
+        "x_norm": 0.0,
+        "q_rope": 0.0,
+        "k_rope": 0.0,
+        "v_pre_cache": 0.0,
+        "k_full": 0.0,
+        "v_full": 0.0,
+        "attn_out": 4.8e-07,
+        "o_proj": 7.63e-06,
+        "residual_mid": 1.526e-05,
+        "post_norm": 0.00012207,
+        "router_logits": 1.115e-05,
+        "h_out": 6.104e-05
+      },
+      "cu_kv_vs_pt_kv": {
+        "x_in": 0.0,
+        "x_norm": 0.0,
+        "q_rope": 0.00390625,
+        "k_rope": 0.00195312,
+        "v_pre_cache": 1.526e-05,
+        "k_full": 0.0078125,
+        "v_full": 0.00024414,
+        "attn_out": 0.00012207,
+        "o_proj": 3.052e-05,
+        "residual_mid": 3.052e-05,
+        "post_norm": 0.00048828,
+        "router_logits": 0.00044727,
+        "h_out": 0.00012207
+      },
+      "cu_nokv_vs_pt_nokv": {
+        "x_in": 0.0,
+        "x_norm": 0.0,
+        "q_rope": 0.0,
+        "k_rope": 0.00390625,
+        "v_pre_cache": 0.00012207,
+        "k_full": 0.0078125,
+        "v_full": 0.00024414,
+        "attn_out": 0.00024414,
+        "o_proj": 0.00024414,
+        "residual_mid": 0.00024414,
+        "post_norm": 0.00048828,
+        "router_logits": 0.00036383,
+        "h_out": 0.00024414
+      },
+      "pt_kv_vs_pt_nokv": {
+        "x_in": 0.0,
+        "x_norm": 0.0,
+        "q_rope": 0.00390625,
+        "k_rope": 0.00390625,
+        "v_pre_cache": 0.00012207,
+        "k_full": 0.0078125,
+        "v_full": 0.00024414,
+        "attn_out": 0.00024414,
+        "o_proj": 0.00024414,
+        "residual_mid": 0.00024414,
+        "post_norm": 0.00048828,
+        "router_logits": 0.00034094,
+        "h_out": 0.00024414
+      }
+    },
+    "L1_pos13": {
+      "coords": {
+        "abs_pos": 13,
+        "gen_step": 1,
+        "page_idx": 0,
+        "slot_in_page": 13
+      },
+      "cu_kv_vs_cu_nokv": {
+        "x_in": 0.0,
+        "x_norm": 0.0,
+        "q_rope": 0.0,
+        "k_rope": 0.0,
+        "v_pre_cache": 0.0,
+        "k_full": 0.0,
+        "v_full": 0.0,
+        "attn_out": 0.0,
+        "o_proj": 0.0,
+        "residual_mid": 0.0,
+        "post_norm": 0.0,
+        "router_logits": 1.2e-07,
+        "h_out": 0.0
+      },
+      "cu_kv_vs_pt_kv": {
+        "x_in": 0.00097656,
+        "x_norm": 0.015625,
+        "q_rope": 0.00390625,
+        "k_rope": 0.00390625,
+        "v_pre_cache": 0.00048828,
+        "k_full": 0.0078125,
+        "v_full": 0.00097656,
+        "attn_out": 0.00048828,
+        "o_proj": 0.00024414,
+        "residual_mid": 0.00048828,
+        "post_norm": 0.00097656,
+        "router_logits": 0.00218797,
+        "h_out": 0.00390625
+      },
+      "cu_nokv_vs_pt_nokv": {
+        "x_in": 0.00097656,
+        "x_norm": 0.015625,
+        "q_rope": 0.00390625,
+        "k_rope": 0.00390625,
+        "v_pre_cache": 0.00048828,
+        "k_full": 0.00585938,
+        "v_full": 0.00097656,
+        "attn_out": 0.00039673,
+        "o_proj": 0.00048828,
+        "residual_mid": 0.00024414,
+        "post_norm": 0.00097656,
+        "router_logits": 0.00103307,
+        "h_out": 0.00048828
+      },
+      "pt_kv_vs_pt_nokv": {
+        "x_in": 6.104e-05,
+        "x_norm": 0.00195312,
+        "q_rope": 0.00390625,
+        "k_rope": 0.00390625,
+        "v_pre_cache": 0.00048828,
+        "k_full": 0.0078125,
+        "v_full": 0.00097656,
+        "attn_out": 0.00048828,
+        "o_proj": 0.00048828,
+        "residual_mid": 0.00048828,
+        "post_norm": 0.00061035,
+        "router_logits": 0.0011549,
+        "h_out": 0.00390625
+      }
+    },
+    "L1_pos59": {
+      "coords": {
+        "abs_pos": 59,
+        "gen_step": 47,
+        "page_idx": 3,
+        "slot_in_page": 11
+      },
+      "cu_kv_vs_cu_nokv": {
+        "x_in": 0.0,
+        "x_norm": 0.0,
+        "q_rope": 0.0,
+        "k_rope": 0.0,
+        "v_pre_cache": 0.0,
+        "k_full": 0.00390625,
+        "v_full": 0.00048828,
+        "attn_out": 6.104e-05,
+        "o_proj": 6.104e-05,
+        "residual_mid": 0.00012207,
+        "post_norm": 0.00048828,
+        "router_logits": 0.0001235,
+        "h_out": 0.00048828
+      },
+      "cu_kv_vs_pt_kv": {
+        "x_in": 0.00012207,
+        "x_norm": 0.00390625,
+        "q_rope": 0.00195312,
+        "k_rope": 0.00390625,
+        "v_pre_cache": 0.00048828,
+        "k_full": 0.0078125,
+        "v_full": 0.00097656,
+        "attn_out": 0.00036621,
+        "o_proj": 0.00012207,
+        "residual_mid": 0.00024414,
+        "post_norm": 0.00097656,
+        "router_logits": 0.00111991,
+        "h_out": 0.00048828
+      },
+      "cu_nokv_vs_pt_nokv": {
+        "x_in": 0.00024414,
+        "x_norm": 0.0078125,
+        "q_rope": 0.00390625,
+        "k_rope": 0.00390625,
+        "v_pre_cache": 0.00048828,
+        "k_full": 0.0078125,
+        "v_full": 0.00097656,
+        "attn_out": 0.00048828,
+        "o_proj": 0.00024414,
+        "residual_mid": 0.00048828,
+        "post_norm": 0.00097656,
+        "router_logits": 0.00157773,
+        "h_out": 0.00097656
+      },
+      "pt_kv_vs_pt_nokv": {
+        "x_in": 0.00024414,
+        "x_norm": 0.0078125,
+        "q_rope": 0.00390625,
+        "k_rope": 0.00390625,
+        "v_pre_cache": 0.00024414,
+        "k_full": 0.0078125,
+        "v_full": 0.00097656,
+        "attn_out": 0.00048828,
+        "o_proj": 0.00024414,
+        "residual_mid": 0.00048828,
+        "post_norm": 0.00146484,
+        "router_logits": 0.00179636,
+        "h_out": 0.00097656
+      }
+    },
+    "L1_pos197": {
+      "coords": {
+        "abs_pos": 197,
+        "gen_step": 185,
+        "page_idx": 12,
+        "slot_in_page": 5
+      },
+      "cu_kv_vs_cu_nokv": {
+        "x_in": 6.104e-05,
+        "x_norm": 0.00097656,
+        "q_rope": 0.00195312,
+        "k_rope": 0.00195312,
+        "v_pre_cache": 0.00024414,
+        "k_full": 0.00390625,
+        "v_full": 0.00048828,
+        "attn_out": 0.00024414,
+        "o_proj": 6.104e-05,
+        "residual_mid": 0.00012207,
+        "post_norm": 0.00054932,
+        "router_logits": 0.00039303,
+        "h_out": 0.00024414
+      },
+      "cu_kv_vs_pt_kv": {
+        "x_in": 0.00012207,
+        "x_norm": 0.00292969,
+        "q_rope": 0.00195312,
+        "k_rope": 0.00390625,
+        "v_pre_cache": 0.00048828,
+        "k_full": 0.0078125,
+        "v_full": 0.00097656,
+        "attn_out": 0.00048828,
+        "o_proj": 0.00024414,
+        "residual_mid": 0.00024414,
+        "post_norm": 0.00097656,
+        "router_logits": 0.00045025,
+        "h_out": 0.00024414
+      },
+      "cu_nokv_vs_pt_nokv": {
+        "x_in": 0.00024414,
+        "x_norm": 0.015625,
+        "q_rope": 0.00390625,
+        "k_rope": 0.0078125,
+        "v_pre_cache": 0.00048828,
+        "k_full": 0.0078125,
+        "v_full": 0.00097656,
+        "attn_out": 0.00097656,
+        "o_proj": 0.00048828,
+        "residual_mid": 0.00024414,
+        "post_norm": 0.00097656,
+        "router_logits": 0.00119251,
+        "h_out": 0.00048828
+      },
+      "pt_kv_vs_pt_nokv": {
+        "x_in": 0.00024414,
+        "x_norm": 0.015625,
+        "q_rope": 0.00390625,
+        "k_rope": 0.0078125,
+        "v_pre_cache": 0.00048828,
+        "k_full": 0.0078125,
+        "v_full": 0.00097656,
+        "attn_out": 0.00097656,
+        "o_proj": 0.00048828,
+        "residual_mid": 0.00024414,
+        "post_norm": 0.00097656,
+        "router_logits": 0.00074071,
+        "h_out": 0.00048828
+      }
+    },
+    "L2_pos13": {
+      "coords": {
+        "abs_pos": 13,
+        "gen_step": 1,
+        "page_idx": 0,
+        "slot_in_page": 13
+      },
+      "cu_kv_vs_cu_nokv": {
+        "x_in": 0.0,
+        "x_norm": 0.0,
+        "q_rope": 0.0,
+        "k_rope": 0.0,
+        "v_pre_cache": 0.0,
+        "k_full": 0.0,
+        "v_full": 0.0,
+        "attn_out": 0.0,
+        "o_proj": 0.0,
+        "residual_mid": 0.0,
+        "post_norm": 0.0,
+        "router_logits": 1.2e-07,
+        "h_out": 0.0
+      },
+      "cu_kv_vs_pt_kv": {
+        "x_in": 0.00390625,
+        "x_norm": 0.03125,
+        "q_rope": 0.00390625,
+        "k_rope": 0.0078125,
+        "v_pre_cache": 0.00109863,
+        "k_full": 0.0078125,
+        "v_full": 0.00195312,
+        "attn_out": 0.00048828,
+        "o_proj": 0.00097656,
+        "residual_mid": 0.00390625,
+        "post_norm": 0.00195312,
+        "router_logits": 0.0006065,
+        "h_out": 0.00097656
+      },
+      "cu_nokv_vs_pt_nokv": {
+        "x_in": 0.00048828,
+        "x_norm": 0.015625,
+        "q_rope": 0.00585938,
+        "k_rope": 0.00390625,
+        "v_pre_cache": 0.00097656,
+        "k_full": 0.015625,
+        "v_full": 0.00195312,
+        "attn_out": 0.00024414,
+        "o_proj": 0.00097656,
+        "residual_mid": 0.00048828,
+        "post_norm": 0.00097656,
+        "router_logits": 0.00075103,
+        "h_out": 0.00048828
+      },
+      "pt_kv_vs_pt_nokv": {
+        "x_in": 0.00390625,
+        "x_norm": 0.03125,
+        "q_rope": 0.00390625,
+        "k_rope": 0.0078125,
+        "v_pre_cache": 0.00097656,
+        "k_full": 0.015625,
+        "v_full": 0.00195312,
+        "attn_out": 0.00048828,
+        "o_proj": 0.00024414,
+        "residual_mid": 0.00390625,
+        "post_norm": 0.00292969,
+        "router_logits": 0.00065482,
+        "h_out": 0.00097656
+      }
+    },
+    "L2_pos59": {
+      "coords": {
+        "abs_pos": 59,
+        "gen_step": 47,
+        "page_idx": 3,
+        "slot_in_page": 11
+      },
+      "cu_kv_vs_cu_nokv": {
+        "x_in": 0.00048828,
+        "x_norm": 0.015625,
+        "q_rope": 0.0078125,
+        "k_rope": 0.00390625,
+        "v_pre_cache": 0.00097656,
+        "k_full": 0.0078125,
+        "v_full": 0.00195312,
+        "attn_out": 0.00097656,
+        "o_proj": 0.00097656,
+        "residual_mid": 0.00097656,
+        "post_norm": 0.00097656,
+        "router_logits": 0.00073886,
+        "h_out": 0.00097656
+      },
+      "cu_kv_vs_pt_kv": {
+        "x_in": 0.00048828,
+        "x_norm": 0.015625,
+        "q_rope": 0.0078125,
+        "k_rope": 0.00390625,
+        "v_pre_cache": 0.00097656,
+        "k_full": 0.0078125,
+        "v_full": 0.00195312,
+        "attn_out": 0.00097656,
+        "o_proj": 0.00048828,
+        "residual_mid": 0.00097656,
+        "post_norm": 0.00146484,
+        "router_logits": 0.00108594,
+        "h_out": 0.00097656
+      },
+      "cu_nokv_vs_pt_nokv": {
+        "x_in": 0.00097656,
+        "x_norm": 0.03125,
+        "q_rope": 0.0078125,
+        "k_rope": 0.0078125,
+        "v_pre_cache": 0.00195312,
+        "k_full": 0.015625,
+        "v_full": 0.00292969,
+        "attn_out": 0.00341797,
+        "o_proj": 0.00195312,
+        "residual_mid": 0.00097656,
+        "post_norm": 0.00146484,
+        "router_logits": 0.00119424,
+        "h_out": 0.00097656
+      },
+      "pt_kv_vs_pt_nokv": {
+        "x_in": 0.00097656,
+        "x_norm": 0.03125,
+        "q_rope": 0.0078125,
+        "k_rope": 0.0078125,
+        "v_pre_cache": 0.00195312,
+        "k_full": 0.015625,
+        "v_full": 0.00195312,
+        "attn_out": 0.00341797,
+        "o_proj": 0.00097656,
+        "residual_mid": 0.00097656,
+        "post_norm": 0.00195312,
+        "router_logits": 0.00111401,
+        "h_out": 0.00097656
+      }
+    },
+    "L2_pos197": {
+      "coords": {
+        "abs_pos": 197,
+        "gen_step": 185,
+        "page_idx": 12,
+        "slot_in_page": 5
+      },
+      "cu_kv_vs_cu_nokv": {
+        "x_in": 0.00024414,
+        "x_norm": 0.00390625,
+        "q_rope": 0.00390625,
+        "k_rope": 0.00390625,
+        "v_pre_cache": 0.00097656,
+        "k_full": 0.0078125,
+        "v_full": 0.00195312,
+        "attn_out": 0.00048828,
+        "o_proj": 0.00097656,
+        "residual_mid": 0.00024414,
+        "post_norm": 0.00097656,
+        "router_logits": 0.00069726,
+        "h_out": 0.00390625
+      },
+      "cu_kv_vs_pt_kv": {
+        "x_in": 0.00024414,
+        "x_norm": 0.0078125,
+        "q_rope": 0.0078125,
+        "k_rope": 0.00390625,
+        "v_pre_cache": 0.00097656,
+        "k_full": 0.015625,
+        "v_full": 0.00195312,
+        "attn_out": 0.00048828,
+        "o_proj": 0.00097656,
+        "residual_mid": 0.00048828,
+        "post_norm": 0.00097656,
+        "router_logits": 0.00091314,
+        "h_out": 0.00390625
+      },
+      "cu_nokv_vs_pt_nokv": {
+        "x_in": 0.00048828,
+        "x_norm": 0.03125,
+        "q_rope": 0.0078125,
+        "k_rope": 0.0078125,
+        "v_pre_cache": 0.00146484,
+        "k_full": 0.015625,
+        "v_full": 0.00292969,
+        "attn_out": 0.00097656,
+        "o_proj": 0.00097656,
+        "residual_mid": 0.00073242,
+        "post_norm": 0.0012207,
+        "router_logits": 0.00321579,
+        "h_out": 0.00097656
+      },
+      "pt_kv_vs_pt_nokv": {
+        "x_in": 0.00048828,
+        "x_norm": 0.03125,
+        "q_rope": 0.0078125,
+        "k_rope": 0.0078125,
+        "v_pre_cache": 0.00146484,
+        "k_full": 0.015625,
+        "v_full": 0.00390625,
+        "attn_out": 0.00073242,
+        "o_proj": 0.00097656,
+        "residual_mid": 0.00048828,
+        "post_norm": 0.00146484,
+        "router_logits": 0.00275373,
+        "h_out": 0.00097656
+      }
+    },
+    "L29_pos13": {
+      "coords": {
+        "abs_pos": 13,
+        "gen_step": 1,
+        "page_idx": 0,
+        "slot_in_page": 13
+      },
+      "cu_kv_vs_cu_nokv": {
+        "x_in": 0.25,
+        "x_norm": 0.0625,
+        "q_rope": 0.01367188,
+        "k_rope": 0.0078125,
+        "v_pre_cache": 0.02734375,
+        "k_full": 0.015625,
+        "v_full": 0.02734375,
+        "attn_out": 0.02929688,
+        "o_proj": 0.03125,
+        "residual_mid": 0.25,
+        "post_norm": 0.03125,
+        "router_logits": 0.00345278,
+        "h_out": 0.0625
+      },
+      "cu_kv_vs_pt_kv": {
+        "x_in": 0.25,
+        "x_norm": 0.0390625,
+        "q_rope": 0.015625,
+        "k_rope": 0.00976562,
+        "v_pre_cache": 0.03125,
+        "k_full": 0.015625,
+        "v_full": 0.03125,
+        "attn_out": 0.03125,
+        "o_proj": 0.0625,
+        "residual_mid": 0.25,
+        "post_norm": 0.046875,
+        "router_logits": 0.00276768,
+        "h_out": 0.125
+      },
+      "cu_nokv_vs_pt_nokv": {
+        "x_in": 0.04882812,
+        "x_norm": 0.0390625,
+        "q_rope": 0.015625,
+        "k_rope": 0.0078125,
+        "v_pre_cache": 0.02539062,
+        "k_full": 0.015625,
+        "v_full": 0.02539062,
+        "attn_out": 0.015625,
+        "o_proj": 0.03125,
+        "residual_mid": 0.0625,
+        "post_norm": 0.0234375,
+        "router_logits": 0.00217652,
+        "h_out": 0.25
+      },
+      "pt_kv_vs_pt_nokv": {
+        "x_in": 0.125,
+        "x_norm": 0.03515625,
+        "q_rope": 0.00878906,
+        "k_rope": 0.0078125,
+        "v_pre_cache": 0.01953125,
+        "k_full": 0.01074219,
+        "v_full": 0.03125,
+        "attn_out": 0.02099609,
+        "o_proj": 0.0625,
+        "residual_mid": 0.0625,
+        "post_norm": 0.03125,
+        "router_logits": 0.00255108,
+        "h_out": 0.25
+      }
+    },
+    "L29_pos59": {
+      "coords": {
+        "abs_pos": 59,
+        "gen_step": 47,
+        "page_idx": 3,
+        "slot_in_page": 11
+      },
+      "cu_kv_vs_cu_nokv": {
+        "x_in": 0.125,
+        "x_norm": 0.03125,
+        "q_rope": 0.00976562,
+        "k_rope": 0.00634766,
+        "v_pre_cache": 0.02001953,
+        "k_full": 0.0234375,
+        "v_full": 0.06054688,
+        "attn_out": 0.0234375,
+        "o_proj": 0.03125,
+        "residual_mid": 0.0625,
+        "post_norm": 0.015625,
+        "router_logits": 0.00180984,
+        "h_out": 0.0625
+      },
+      "cu_kv_vs_pt_kv": {
+        "x_in": 0.375,
+        "x_norm": 0.046875,
+        "q_rope": 0.015625,
+        "k_rope": 0.0078125,
+        "v_pre_cache": 0.0234375,
+        "k_full": 0.01953125,
+        "v_full": 0.05078125,
+        "attn_out": 0.05078125,
+        "o_proj": 0.03125,
+        "residual_mid": 0.375,
+        "post_norm": 0.0390625,
+        "router_logits": 0.00248098,
+        "h_out": 13.5
+      },
+      "cu_nokv_vs_pt_nokv": {
+        "x_in": 0.125,
+        "x_norm": 0.03515625,
+        "q_rope": 0.00976562,
+        "k_rope": 0.0078125,
+        "v_pre_cache": 0.01757812,
+        "k_full": 0.02148438,
+        "v_full": 0.0546875,
+        "attn_out": 0.046875,
+        "o_proj": 0.0625,
+        "residual_mid": 0.0625,
+        "post_norm": 0.0234375,
+        "router_logits": 0.00179756,
+        "h_out": 13.75
+      },
+      "pt_kv_vs_pt_nokv": {
+        "x_in": 0.375,
+        "x_norm": 0.0625,
+        "q_rope": 0.015625,
+        "k_rope": 0.0078125,
+        "v_pre_cache": 0.0234375,
+        "k_full": 0.01953125,
+        "v_full": 0.0546875,
+        "attn_out": 0.0390625,
+        "o_proj": 0.0625,
+        "residual_mid": 0.375,
+        "post_norm": 0.0390625,
+        "router_logits": 0.00155711,
+        "h_out": 0.3125
+      }
+    },
+    "L29_pos197": {
+      "coords": {
+        "abs_pos": 197,
+        "gen_step": 185,
+        "page_idx": 12,
+        "slot_in_page": 5
+      },
+      "cu_kv_vs_cu_nokv": {
+        "x_in": 0.4296875,
+        "x_norm": 0.35546875,
+        "q_rope": 0.09179688,
+        "k_rope": 0.1015625,
+        "v_pre_cache": 0.13451385,
+        "k_full": 0.59472656,
+        "v_full": 1.6640625,
+        "attn_out": 0.56738281,
+        "o_proj": 0.4375,
+        "residual_mid": 0.6875,
+        "post_norm": 0.19335938,
+        "router_logits": 0.0191431,
+        "h_out": 0.71289062
+      },
+      "cu_kv_vs_pt_kv": {
+        "x_in": 0.4296875,
+        "x_norm": 0.3671875,
+        "q_rope": 0.09326172,
+        "k_rope": 0.09375,
+        "v_pre_cache": 0.13491821,
+        "k_full": 0.58959961,
+        "v_full": 1.66015625,
+        "attn_out": 0.57519531,
+        "o_proj": 0.4375,
+        "residual_mid": 0.69335938,
+        "post_norm": 0.19335938,
+        "router_logits": 0.01854396,
+        "h_out": 0.71679688
+      },
+      "cu_nokv_vs_pt_nokv": {
+        "x_in": 0.125,
+        "x_norm": 0.0703125,
+        "q_rope": 0.02050781,
+        "k_rope": 0.02880859,
+        "v_pre_cache": 0.04110718,
+        "k_full": 0.20828247,
+        "v_full": 0.72265625,
+        "attn_out": 0.06347656,
+        "o_proj": 0.125,
+        "residual_mid": 0.1875,
+        "post_norm": 0.0625,
+        "router_logits": 0.00349668,
+        "h_out": 0.125
+      },
+      "pt_kv_vs_pt_nokv": {
+        "x_in": 0.125,
+        "x_norm": 0.078125,
+        "q_rope": 0.02148438,
+        "k_rope": 0.01953125,
+        "v_pre_cache": 0.03125,
+        "k_full": 0.09375,
+        "v_full": 0.203125,
+        "attn_out": 0.04345703,
+        "o_proj": 0.125,
+        "residual_mid": 0.25,
+        "post_norm": 0.03710938,
+        "router_logits": 0.00251624,
+        "h_out": 0.25
+      }
+    }
+  },
+  "controls_real_mixtral": {
+    "L0_pos13": {
+      "control_A_same_kv_diff_attn": {
+        "cu_vs_fp64": 6.103515625e-05,
+        "sdpa_vs_fp64": 6.103515625e-05,
+        "cu_vs_sdpa": 0.0
+      },
+      "control_B_same_attn_diff_kv_cache": {
+        "k_diff_cu_kv_vs_cu_nokv": 0.0,
+        "v_diff_cu_kv_vs_cu_nokv": 0.0,
+        "fp64_on_cu_kv_vs_cu_nokv": 0.0,
+        "fp64_on_cu_kv_vs_pt_nokv": 6.103515625e-05,
+        "cu_on_cu_kv_vs_cu_nokv": 0.0,
+        "cu_on_cu_kv_vs_pt_nokv": 6.103515625e-05
+      }
+    },
+    "L0_pos59": {
+      "control_A_same_kv_diff_attn": {
+        "cu_vs_fp64": 0.000244140625,
+        "sdpa_vs_fp64": 0.000244140625,
+        "cu_vs_sdpa": 3.814697265625e-06
+      },
+      "control_B_same_attn_diff_kv_cache": {
+        "k_diff_cu_kv_vs_cu_nokv": 0.0,
+        "v_diff_cu_kv_vs_cu_nokv": 0.0,
+        "fp64_on_cu_kv_vs_cu_nokv": 0.0,
+        "fp64_on_cu_kv_vs_pt_nokv": 0.000244140625,
+        "cu_on_cu_kv_vs_cu_nokv": 0.0,
+        "cu_on_cu_kv_vs_pt_nokv": 6.103515625e-05
+      }
+    },
+    "L0_pos197": {
+      "control_A_same_kv_diff_attn": {
+        "cu_vs_fp64": 6.103515625e-05,
+        "sdpa_vs_fp64": 6.103515625e-05,
+        "cu_vs_sdpa": 6.103515625e-05
+      },
+      "control_B_same_attn_diff_kv_cache": {
+        "k_diff_cu_kv_vs_cu_nokv": 0.0,
+        "v_diff_cu_kv_vs_cu_nokv": 0.0,
+        "fp64_on_cu_kv_vs_cu_nokv": 0.0,
+        "fp64_on_cu_kv_vs_pt_nokv": 0.000244140625,
+        "cu_on_cu_kv_vs_cu_nokv": 0.0,
+        "cu_on_cu_kv_vs_pt_nokv": 0.000244140625
+      }
+    },
+    "L29_pos59": {
+      "control_A_same_kv_diff_attn": {
+        "cu_vs_fp64": 0.00390625,
+        "sdpa_vs_fp64": 0.00390625,
+        "cu_vs_sdpa": 0.0001220703125
+      },
+      "control_B_same_attn_diff_kv_cache": {
+        "k_diff_cu_kv_vs_cu_nokv": 0.0234375,
+        "v_diff_cu_kv_vs_cu_nokv": 0.060546875,
+        "fp64_on_cu_kv_vs_cu_nokv": 0.017578125,
+        "fp64_on_cu_kv_vs_pt_nokv": 0.0234375,
+        "cu_on_cu_kv_vs_cu_nokv": 0.01953125,
+        "cu_on_cu_kv_vs_pt_nokv": 0.0234375
+      }
+    },
+    "L29_pos197": {
+      "control_A_same_kv_diff_attn": {
+        "cu_vs_fp64": 0.00390625,
+        "sdpa_vs_fp64": 0.001953125,
+        "cu_vs_sdpa": 0.00390625
+      },
+      "control_B_same_attn_diff_kv_cache": {
+        "k_diff_cu_kv_vs_cu_nokv": 0.5947265625,
+        "v_diff_cu_kv_vs_cu_nokv": 1.6640625,
+        "fp64_on_cu_kv_vs_cu_nokv": 0.5517578125,
+        "fp64_on_cu_kv_vs_pt_nokv": 0.576171875,
+        "cu_on_cu_kv_vs_cu_nokv": 0.552734375,
+        "cu_on_cu_kv_vs_pt_nokv": 0.5771484375
+      }
+    }
+  },
+  "control_C_quant_linear_M1_vs_Mbatch": {
+    "M=14_pos13_prefill13": {
+      "q_proj": {
+        "gemm_path_M1": {
+          "regime": "skinny_splitk",
+          "tile_shape": [
+            16,
+            128,
+            64
+          ],
+          "split_k": 4,
+          "red_tile": [
+            16,
+            128
+          ],
+          "latency": 3
+        },
+        "gemm_path_Mbatch": {
+          "regime": "skinny_splitk",
+          "tile_shape": [
+            16,
+            128,
+            64
+          ],
+          "split_k": 4,
+          "red_tile": [
+            16,
+            128
+          ],
+          "latency": 3
+        },
+        "cutile_M1_vs_Mbatch_max_abs": 0.0,
+        "cutile_M1_vs_pytorch_max_abs": 0.001953125,
+        "cutile_Mbatch_vs_pytorch_max_abs": 0.001953125
+      },
+      "k_proj": {
+        "gemm_path_M1": {
+          "regime": "skinny_splitk",
+          "tile_shape": [
+            16,
+            128,
+            64
+          ],
+          "split_k": 4,
+          "red_tile": [
+            16,
+            128
+          ],
+          "latency": 3
+        },
+        "gemm_path_Mbatch": {
+          "regime": "skinny_splitk",
+          "tile_shape": [
+            16,
+            128,
+            64
+          ],
+          "split_k": 4,
+          "red_tile": [
+            16,
+            128
+          ],
+          "latency": 3
+        },
+        "cutile_M1_vs_Mbatch_max_abs": 0.0,
+        "cutile_M1_vs_pytorch_max_abs": 0.0009765625,
+        "cutile_Mbatch_vs_pytorch_max_abs": 0.0009765625
+      },
+      "v_proj": {
+        "gemm_path_M1": {
+          "regime": "skinny_splitk",
+          "tile_shape": [
+            16,
+            128,
+            64
+          ],
+          "split_k": 4,
+          "red_tile": [
+            16,
+            128
+          ],
+          "latency": 3
+        },
+        "gemm_path_Mbatch": {
+          "regime": "skinny_splitk",
+          "tile_shape": [
+            16,
+            128,
+            64
+          ],
+          "split_k": 4,
+          "red_tile": [
+            16,
+            128
+          ],
+          "latency": 3
+        },
+        "cutile_M1_vs_Mbatch_max_abs": 0.0,
+        "cutile_M1_vs_pytorch_max_abs": 3.814697265625e-06,
+        "cutile_Mbatch_vs_pytorch_max_abs": 3.814697265625e-06
+      },
+      "o_proj": {
+        "gemm_path_M1": {
+          "regime": "skinny_splitk",
+          "tile_shape": [
+            16,
+            128,
+            64
+          ],
+          "split_k": 4,
+          "red_tile": [
+            16,
+            128
+          ],
+          "latency": 3
+        },
+        "gemm_path_Mbatch": {
+          "regime": "skinny_splitk",
+          "tile_shape": [
+            16,
+            128,
+            64
+          ],
+          "split_k": 4,
+          "red_tile": [
+            16,
+            128
+          ],
+          "latency": 3
+        },
+        "cutile_M1_vs_Mbatch_max_abs": 0.0,
+        "cutile_M1_vs_pytorch_max_abs": 0.000244140625,
+        "cutile_Mbatch_vs_pytorch_max_abs": 0.000244140625
+      }
+    },
+    "M=60_pos59_first_router_diff": {
+      "q_proj": {
+        "gemm_path_M1": {
+          "regime": "skinny_splitk",
+          "tile_shape": [
+            16,
+            128,
+            64
+          ],
+          "split_k": 4,
+          "red_tile": [
+            16,
+            128
+          ],
+          "latency": 3
+        },
+        "gemm_path_Mbatch": {
+          "regime": "medium_l2",
+          "tile_shape": [
+            64,
+            64,
+            64
+          ],
+          "split_k": 4,
+          "red_tile": [
+            64,
+            64
+          ],
+          "latency": 3
+        },
+        "cutile_M1_vs_Mbatch_max_abs": 0.0,
+        "cutile_M1_vs_pytorch_max_abs": 0.001953125,
+        "cutile_Mbatch_vs_pytorch_max_abs": 0.001953125
+      },
+      "k_proj": {
+        "gemm_path_M1": {
+          "regime": "skinny_splitk",
+          "tile_shape": [
+            16,
+            128,
+            64
+          ],
+          "split_k": 4,
+          "red_tile": [
+            16,
+            128
+          ],
+          "latency": 3
+        },
+        "gemm_path_Mbatch": {
+          "regime": "medium_l2",
+          "tile_shape": [
+            64,
+            64,
+            64
+          ],
+          "split_k": 4,
+          "red_tile": [
+            64,
+            64
+          ],
+          "latency": 3
+        },
+        "cutile_M1_vs_Mbatch_max_abs": 0.0,
+        "cutile_M1_vs_pytorch_max_abs": 0.0009765625,
+        "cutile_Mbatch_vs_pytorch_max_abs": 0.0009765625
+      },
+      "v_proj": {
+        "gemm_path_M1": {
+          "regime": "skinny_splitk",
+          "tile_shape": [
+            16,
+            128,
+            64
+          ],
+          "split_k": 4,
+          "red_tile": [
+            16,
+            128
+          ],
+          "latency": 3
+        },
+        "gemm_path_Mbatch": {
+          "regime": "medium_l2",
+          "tile_shape": [
+            64,
+            64,
+            64
+          ],
+          "split_k": 4,
+          "red_tile": [
+            64,
+            64
+          ],
+          "latency": 3
+        },
+        "cutile_M1_vs_Mbatch_max_abs": 0.0,
+        "cutile_M1_vs_pytorch_max_abs": 0.0001220703125,
+        "cutile_Mbatch_vs_pytorch_max_abs": 0.0001220703125
+      },
+      "o_proj": {
+        "gemm_path_M1": {
+          "regime": "skinny_splitk",
+          "tile_shape": [
+            16,
+            128,
+            64
+          ],
+          "split_k": 4,
+          "red_tile": [
+            16,
+            128
+          ],
+          "latency": 3
+        },
+        "gemm_path_Mbatch": {
+          "regime": "medium_l2",
+          "tile_shape": [
+            64,
+            64,
+            64
+          ],
+          "split_k": 4,
+          "red_tile": [
+            64,
+            64
+          ],
+          "latency": 3
+        },
+        "cutile_M1_vs_Mbatch_max_abs": 0.0,
+        "cutile_M1_vs_pytorch_max_abs": 0.0001220703125,
+        "cutile_Mbatch_vs_pytorch_max_abs": 0.0001220703125
+      }
+    },
+    "M=198_pos197_step185": {
+      "q_proj": {
+        "gemm_path_M1": {
+          "regime": "skinny_splitk",
+          "tile_shape": [
+            16,
+            128,
+            64
+          ],
+          "split_k": 4,
+          "red_tile": [
+            16,
+            128
+          ],
+          "latency": 3
+        },
+        "gemm_path_Mbatch": {
+          "regime": "medium_l2",
+          "tile_shape": [
+            64,
+            64,
+            64
+          ],
+          "split_k": 1,
+          "red_tile": [
+            64,
+            64
+          ],
+          "latency": 3
+        },
+        "cutile_M1_vs_Mbatch_max_abs": 0.0,
+        "cutile_M1_vs_pytorch_max_abs": 0.00390625,
+        "cutile_Mbatch_vs_pytorch_max_abs": 0.00390625
+      },
+      "k_proj": {
+        "gemm_path_M1": {
+          "regime": "skinny_splitk",
+          "tile_shape": [
+            16,
+            128,
+            64
+          ],
+          "split_k": 4,
+          "red_tile": [
+            16,
+            128
+          ],
+          "latency": 3
+        },
+        "gemm_path_Mbatch": {
+          "regime": "medium_l2",
+          "tile_shape": [
+            64,
+            64,
+            64
+          ],
+          "split_k": 1,
+          "red_tile": [
+            64,
+            64
+          ],
+          "latency": 3
+        },
+        "cutile_M1_vs_Mbatch_max_abs": 0.0,
+        "cutile_M1_vs_pytorch_max_abs": 0.001953125,
+        "cutile_Mbatch_vs_pytorch_max_abs": 0.001953125
+      },
+      "v_proj": {
+        "gemm_path_M1": {
+          "regime": "skinny_splitk",
+          "tile_shape": [
+            16,
+            128,
+            64
+          ],
+          "split_k": 4,
+          "red_tile": [
+            16,
+            128
+          ],
+          "latency": 3
+        },
+        "gemm_path_Mbatch": {
+          "regime": "medium_l2",
+          "tile_shape": [
+            64,
+            64,
+            64
+          ],
+          "split_k": 1,
+          "red_tile": [
+            64,
+            64
+          ],
+          "latency": 3
+        },
+        "cutile_M1_vs_Mbatch_max_abs": 0.0,
+        "cutile_M1_vs_pytorch_max_abs": 1.52587890625e-05,
+        "cutile_Mbatch_vs_pytorch_max_abs": 1.52587890625e-05
+      },
+      "o_proj": {
+        "gemm_path_M1": {
+          "regime": "skinny_splitk",
+          "tile_shape": [
+            16,
+            128,
+            64
+          ],
+          "split_k": 4,
+          "red_tile": [
+            16,
+            128
+          ],
+          "latency": 3
+        },
+        "gemm_path_Mbatch": {
+          "regime": "medium_l2",
+          "tile_shape": [
+            64,
+            64,
+            64
+          ],
+          "split_k": 1,
+          "red_tile": [
+            64,
+            64
+          ],
+          "latency": 3
+        },
+        "cutile_M1_vs_Mbatch_max_abs": 0.0,
+        "cutile_M1_vs_pytorch_max_abs": 0.000244140625,
+        "cutile_Mbatch_vs_pytorch_max_abs": 0.000244140625
+      }
+    }
+  },
+  "fixture_S198_controls": {
+    "paged_kv_bit_exact_vs_contig": true,
+    "native_kv_bit_exact_vs_contig": true,
+    "cu_sq1_vs_fp64": 0.000244140625,
+    "cu_sq198_vs_fp64": 0.000244140625,
+    "sdpa_sq1_vs_fp64": 0.000244140625,
+    "sdpa_sq198_vs_fp64": 0.000244140625,
+    "cu_sq1_vs_cu_sq198": 0.0,
+    "cu_on_paged_kv_bit_exact_vs_contig": true,
+    "cu_on_native_kv_bit_exact_vs_contig": true
+  }
+}

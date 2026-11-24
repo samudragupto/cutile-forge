@@ -1,0 +1,49 @@
+{
+  "tests": [
+    {
+      "name": "paged_kv_fp16_per_pos_0_127",
+      "status": "PASS",
+      "positions": 128,
+      "bit_exact_get_kv": true
+    },
+    {
+      "name": "paged_kv_sentinels_unwritten_truncate_reset",
+      "status": "PASS",
+      "unwritten_trailing_finite": true,
+      "truncate_clean": true,
+      "reset_clean": true
+    },
+    {
+      "name": "paged_kv_lru_evict_and_host_fetch",
+      "status": "PASS",
+      "evictions": 3,
+      "host_fetches": 3,
+      "bit_exact": true
+    },
+    {
+      "name": "paged_kv_fp8_dynamic_scale",
+      "status": "FAIL",
+      "max_abs_diff_vs_fp16": 2.40625
+    },
+    {
+      "name": "native_kv_b4_and_nonlinear_gather",
+      "status": "PASS",
+      "b4_linear_exact": true,
+      "nonlinear_s19_exact": true,
+      "nonlinear_shape": [
+        1,
+        8,
+        19,
+        128
+      ],
+      "work_oob_written": false,
+      "error": ""
+    },
+    {
+      "name": "native_kv_cuda_graph_decode_pos_and_reuse",
+      "status": "PASS",
+      "bit_exact_vs_eager": true,
+      "max_abs_err_vs_fp64": 0.001953125
+    }
+  ]
+}
