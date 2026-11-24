@@ -54,6 +54,82 @@ def gemm_fp16_kernel(
 
 
 @ct.kernel(occupancy=2)
+def gemm_fp16_bias_kernel(
+    a_ptr,
+    b_ptr,
+    bias_ptr,
+    c_ptr,
+    tm: ct.Constant[int],
+    tn: ct.Constant[int],
+    tk: ct.Constant[int],
+) -> None:
+    """Tiled FP16 GEMM + 1D bias epilogue `(1, N)` in registers."""
+    group_m: ct.Constant[int] = 8
+    pid = ct.bid(0)
+    num_m = ct.num_tiles(a_ptr, axis=0, shape=(tm, tk))
+    num_n = ct.num_tiles(b_ptr, axis=1, shape=(tk, tn))
+    num_pid_in_group = group_m * num_n
+    group_id = pid // num_pid_in_group
+    first_pid_m = group_id * group_m
+    group_size_m = min(num_m - first_pid_m, group_m)
+    pid_m = first_pid_m + (pid % group_size_m)
+    pid_n = (pid % num_pid_in_group) // group_size_m
+
+    num_k = ct.num_tiles(a_ptr, axis=1, shape=(tm, tk))
+    acc = ct.zeros((tm, tn), dtype=ct.float32)
+    for k in range(num_k):
+        tile_a = ct.load(
+            a_ptr, index=(pid_m, k), shape=(tm, tk), padding_mode=ct.PaddingMode.ZERO, latency=3
+        )
+        tile_b = ct.load(
+            b_ptr, index=(k, pid_n), shape=(tk, tn), padding_mode=ct.PaddingMode.ZERO, latency=3
+        )
+        acc = ct.mma(tile_a, tile_b, acc)
+    bias_t = ct.load(
+        bias_ptr, index=(0, pid_n), shape=(1, tn), padding_mode=ct.PaddingMode.ZERO, latency=2
+    )
+    ct.store(c_ptr, index=(pid_m, pid_n), tile=ct.astype(acc, ct.float16) + bias_t)
+
+
+@ct.kernel(occupancy=2)
+def gemm_fp16_add_kernel(
+    a_ptr,
+    b_ptr,
+    res_ptr,
+    c_ptr,
+    tm: ct.Constant[int],
+    tn: ct.Constant[int],
+    tk: ct.Constant[int],
+) -> None:
+    """Tiled FP16 GEMM + `(M, N)` residual add epilogue in registers."""
+    group_m: ct.Constant[int] = 8
+    pid = ct.bid(0)
+    num_m = ct.num_tiles(a_ptr, axis=0, shape=(tm, tk))
+    num_n = ct.num_tiles(b_ptr, axis=1, shape=(tk, tn))
+    num_pid_in_group = group_m * num_n
+    group_id = pid // num_pid_in_group
+    first_pid_m = group_id * group_m
+    group_size_m = min(num_m - first_pid_m, group_m)
+    pid_m = first_pid_m + (pid % group_size_m)
+    pid_n = (pid % num_pid_in_group) // group_size_m
+
+    num_k = ct.num_tiles(a_ptr, axis=1, shape=(tm, tk))
+    acc = ct.zeros((tm, tn), dtype=ct.float32)
+    for k in range(num_k):
+        tile_a = ct.load(
+            a_ptr, index=(pid_m, k), shape=(tm, tk), padding_mode=ct.PaddingMode.ZERO, latency=3
+        )
+        tile_b = ct.load(
+            b_ptr, index=(k, pid_n), shape=(tk, tn), padding_mode=ct.PaddingMode.ZERO, latency=3
+        )
+        acc = ct.mma(tile_a, tile_b, acc)
+    res_t = ct.load(
+        res_ptr, index=(pid_m, pid_n), shape=(tm, tn), padding_mode=ct.PaddingMode.ZERO, latency=2
+    )
+    ct.store(c_ptr, index=(pid_m, pid_n), tile=ct.astype(acc, ct.float16) + res_t)
+
+
+@ct.kernel(occupancy=2)
 def gemm_fp8_kernel(
     a_ptr,
     b_ptr,
@@ -425,6 +501,37 @@ def splitk_reduce_fp16_kernel(
     ct.store(out_ptr, index=(pid_m, pid_n), tile=ct.astype(acc, ct.float16))
 
 
+@ct.kernel(occupancy=4)
+def splitk_reduce_bias_fp16_kernel(
+    part_ptr,
+    bias_ptr,
+    out_ptr,
+    split_k: ct.Constant[int],
+    tm: ct.Constant[int],
+    tn: ct.Constant[int],
+) -> None:
+    """Fused Split-K FP32->FP16 reduction with 1D bias `(1, N)` epilogue."""
+    pid_m = ct.bid(0)
+    pid_n = ct.bid(1)
+    acc = ct.zeros((tm, tn), dtype=ct.float32)
+    for sk in range(split_k):
+        partial = ct.reshape(
+            ct.load(
+                part_ptr,
+                index=(sk, pid_m, pid_n),
+                shape=(1, tm, tn),
+                padding_mode=ct.PaddingMode.ZERO,
+                latency=3,
+            ),
+            (tm, tn),
+        )
+        acc = acc + partial
+    bias_tile = ct.load(
+        bias_ptr, index=(0, pid_n), shape=(1, tn), padding_mode=ct.PaddingMode.ZERO, latency=2
+    )
+    ct.store(out_ptr, index=(pid_m, pid_n), tile=ct.astype(acc, ct.float16) + bias_tile)
+
+
 @ct.kernel(occupancy=2)
 def gemm_fp16_splitk_kernel(
     a_ptr,
@@ -464,7 +571,7 @@ def select_gemm_kernel_path(
     """Select specialized GEMM execution path across skinny, medium, and compute-bound regimes."""
     _ = arch
     if m <= 16 and k >= 512:
-        split_k = 4 if k >= 1024 else 2
+        split_k = 4 if k >= 768 else 2
         return {
             "regime": "skinny_splitk",
             "tile_shape": (16, 128, 64) if n >= 2048 else (16, 64, 64),
@@ -490,7 +597,7 @@ def select_gemm_kernel_path(
             "red_tile": (64, 64),
             "latency": 3,
         }
-    if m <= 512 and (ct.cdiv(m, 64) * ct.cdiv(n, 64)) >= 256:
+    if m <= 512 and (n <= 4096 or (ct.cdiv(m, 64) * ct.cdiv(n, 64)) >= 256):
         return {
             "regime": "large_compute",
             "tile_shape": (64, 64, 64),
@@ -511,10 +618,16 @@ def cutile_gemm_fp16(
     a: torch.Tensor,
     b: torch.Tensor,
     tile_shape: tuple[int, int, int] | None = None,
+    out: torch.Tensor | None = None,
+    part_buf: torch.Tensor | None = None,
+    bias: torch.Tensor | None = None,
+    residual: torch.Tensor | None = None,
 ) -> torch.Tensor:
-    """Run tiled FP16 GEMM: (M, K) @ (K, N) -> (M, N) with shape-specialized dispatch."""
+    """Run tiled FP16 GEMM: (M, K) @ (K, N) -> (M, N) with optional zero-alloc & fused epilogues."""
     if a.ndim != 2 or b.ndim != 2:
         raise ValueError(f"Expected 2D tensors, got {a.shape} and {b.shape}")
+    if bias is not None and residual is not None:
+        raise ValueError("Specify at most one of bias or residual in cutile_gemm_fp16")
     m, k = a.shape
     k_b, n = b.shape
     if k != k_b:
@@ -522,15 +635,34 @@ def cutile_gemm_fp16(
 
     a_c = a if a.is_contiguous() else a.contiguous()
     b_c = b if b.is_contiguous() else b.contiguous()
+    c = out if out is not None else torch.empty((m, n), device=a.device, dtype=torch.float16)
+    bias_2d = (
+        (
+            bias.view(1, n)
+            if (bias is not None and bias.is_contiguous())
+            else bias.contiguous().view(1, n)
+        )
+        if bias is not None
+        else None
+    )
+    res_2d = (
+        (residual if (residual is not None and residual.is_contiguous()) else residual.contiguous())
+        if residual is not None
+        else None
+    )
 
     if tile_shape is None:
         spec = select_gemm_kernel_path(m, n, k)
         tm, tn, tk = spec["tile_shape"]
-        split_k = int(spec["split_k"])
+        split_k = min(int(spec["split_k"]), max(1, k // tk))
         if split_k > 1:
             rtm, rtn = spec["red_tile"]
-            part = torch.empty((split_k, m, n), device=a.device, dtype=torch.float32)
-            out = torch.empty((m, n), device=a.device, dtype=torch.float16)
+            needed = split_k * m * n
+            part = (
+                part_buf[:needed].view(split_k, m, n)
+                if (part_buf is not None and part_buf.numel() >= needed)
+                else torch.empty((split_k, m, n), device=a.device, dtype=torch.float32)
+            )
             grid_sk = (ct.cdiv(m, tm), ct.cdiv(n, tn), split_k)
             ct.launch(
                 torch.cuda.current_stream(),
@@ -539,19 +671,48 @@ def cutile_gemm_fp16(
                 (a_c, b_c, part, split_k, tm, tn, tk),
             )
             grid_red = (ct.cdiv(m, rtm), ct.cdiv(n, rtn), 1)
-            ct.launch(
-                torch.cuda.current_stream(),
-                grid_red,
-                splitk_reduce_fp16_kernel,
-                (part, out, split_k, rtm, rtn),
-            )
-            return out
+            if bias_2d is not None:
+                ct.launch(
+                    torch.cuda.current_stream(),
+                    grid_red,
+                    splitk_reduce_bias_fp16_kernel,
+                    (part, bias_2d, c, split_k, rtm, rtn),
+                )
+            elif res_2d is not None:
+                ct.launch(
+                    torch.cuda.current_stream(),
+                    grid_red,
+                    splitk_reduce_add_fp16_kernel,
+                    (part, res_2d, c, split_k, rtm, rtn),
+                )
+            else:
+                ct.launch(
+                    torch.cuda.current_stream(),
+                    grid_red,
+                    splitk_reduce_fp16_kernel,
+                    (part, c, split_k, rtm, rtn),
+                )
+            return c
     else:
         tm, tn, tk = tile_shape
 
-    c = torch.empty((m, n), device=a.device, dtype=torch.float16)
     grid = (ct.cdiv(m, tm) * ct.cdiv(n, tn), 1, 1)
-    ct.launch(torch.cuda.current_stream(), grid, gemm_fp16_kernel, (a_c, b_c, c, tm, tn, tk))
+    if bias_2d is not None:
+        ct.launch(
+            torch.cuda.current_stream(),
+            grid,
+            gemm_fp16_bias_kernel,
+            (a_c, b_c, bias_2d, c, tm, tn, tk),
+        )
+    elif res_2d is not None:
+        ct.launch(
+            torch.cuda.current_stream(),
+            grid,
+            gemm_fp16_add_kernel,
+            (a_c, b_c, res_2d, c, tm, tn, tk),
+        )
+    else:
+        ct.launch(torch.cuda.current_stream(), grid, gemm_fp16_kernel, (a_c, b_c, c, tm, tn, tk))
     return c
 
 

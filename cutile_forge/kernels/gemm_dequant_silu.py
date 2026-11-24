@@ -475,3 +475,141 @@ def fused_swiglu_dequant(
         (a_c, gw, gs_c, gz_c, uw, us_c, uz_c, c, tm, tn, tk, group_size),
     )
     return c
+
+
+@ct.kernel(occupancy=2)
+def gemm_fp16_swiglu_kernel(
+    a_ptr,
+    wg_ptr,
+    wu_ptr,
+    c_ptr,
+    tm: ct.Constant[int],
+    tn: ct.Constant[int],
+    tk: ct.Constant[int],
+) -> None:
+    """Fused FP16 Gate + Up + SwiGLU (`SiLU(a @ W_gate) * (a @ W_up)`) in one kernel."""
+    group_m: ct.Constant[int] = 8
+    pid = ct.bid(0)
+    num_m = ct.num_tiles(a_ptr, axis=0, shape=(tm, tk))
+    num_n = ct.num_tiles(wg_ptr, axis=1, shape=(tk, tn))
+    num_pid_in_group = group_m * num_n
+    group_id = pid // num_pid_in_group
+    first_pid_m = group_id * group_m
+    group_size_m = min(num_m - first_pid_m, group_m)
+    pid_m = first_pid_m + (pid % group_size_m)
+    pid_n = (pid % num_pid_in_group) // group_size_m
+
+    num_k = ct.num_tiles(a_ptr, axis=1, shape=(tm, tk))
+    acc_g = ct.zeros((tm, tn), dtype=ct.float32)
+    acc_u = ct.zeros((tm, tn), dtype=ct.float32)
+    for k in range(num_k):
+        ta = ct.load(
+            a_ptr, index=(pid_m, k), shape=(tm, tk), padding_mode=ct.PaddingMode.ZERO, latency=3
+        )
+        twg = ct.load(
+            wg_ptr, index=(k, pid_n), shape=(tk, tn), padding_mode=ct.PaddingMode.ZERO, latency=3
+        )
+        twu = ct.load(
+            wu_ptr, index=(k, pid_n), shape=(tk, tn), padding_mode=ct.PaddingMode.ZERO, latency=3
+        )
+        acc_g = ct.mma(ta, twg, acc_g)
+        acc_u = ct.mma(ta, twu, acc_u)
+
+    sig = 1.0 / (1.0 + ct.exp(-acc_g))
+    out = ct.astype(acc_g * sig, ct.float16) * ct.astype(acc_u, ct.float16)
+    ct.store(c_ptr, index=(pid_m, pid_n), tile=out)
+
+
+@ct.kernel(occupancy=4)
+def gemm_fp16_swiglu_splitk_kernel(
+    a_ptr,
+    wg_ptr,
+    wu_ptr,
+    part_g_ptr,
+    part_u_ptr,
+    split_k: ct.Constant[int],
+    tm: ct.Constant[int],
+    tn: ct.Constant[int],
+    tk: ct.Constant[int],
+) -> None:
+    """Split-K FP16 Gate + Up GEMM accumulating FP32 partials `(split_k, M, N)`."""
+    pid_m = ct.bid(0)
+    pid_n = ct.bid(1)
+    sk_id = ct.bid(2)
+    num_k = ct.num_tiles(a_ptr, axis=1, shape=(tm, tk))
+    k_per_split = (num_k + split_k - 1) // split_k
+    k_start = sk_id * k_per_split
+    k_end = min(num_k, k_start + k_per_split)
+    acc_g = ct.zeros((tm, tn), dtype=ct.float32)
+    acc_u = ct.zeros((tm, tn), dtype=ct.float32)
+    for k in range(k_start, k_end):
+        ta = ct.load(
+            a_ptr, index=(pid_m, k), shape=(tm, tk), padding_mode=ct.PaddingMode.ZERO, latency=3
+        )
+        twg = ct.load(
+            wg_ptr, index=(k, pid_n), shape=(tk, tn), padding_mode=ct.PaddingMode.ZERO, latency=3
+        )
+        twu = ct.load(
+            wu_ptr, index=(k, pid_n), shape=(tk, tn), padding_mode=ct.PaddingMode.ZERO, latency=3
+        )
+        acc_g = ct.mma(ta, twg, acc_g)
+        acc_u = ct.mma(ta, twu, acc_u)
+    ct.store(part_g_ptr, index=(sk_id, pid_m, pid_n), tile=ct.reshape(acc_g, (1, tm, tn)))
+    ct.store(part_u_ptr, index=(sk_id, pid_m, pid_n), tile=ct.reshape(acc_u, (1, tm, tn)))
+
+
+def fused_swiglu_fp16(
+    a: torch.Tensor,
+    w_gate: torch.Tensor,
+    w_up: torch.Tensor,
+    tile_shape: tuple[int, int, int] | None = None,
+    out: torch.Tensor | None = None,
+    part_g_buf: torch.Tensor | None = None,
+    part_u_buf: torch.Tensor | None = None,
+) -> torch.Tensor:
+    """Compute `SiLU(a @ w_gate) * (a @ w_up)` for FP16 weights in one CuTile pass."""
+    m, k = a.shape
+    _, n = w_gate.shape
+    a_c = a if a.is_contiguous() else a.contiguous()
+    wg_c = w_gate if w_gate.is_contiguous() else w_gate.contiguous()
+    wu_c = w_up if w_up.is_contiguous() else w_up.contiguous()
+    c = out if out is not None else torch.empty((m, n), device=a.device, dtype=torch.float16)
+
+    if tile_shape is None and m <= 16 and k >= 512 and n % 64 == 0:
+        tm, tn, tk = 16, 64, 64
+        split_k = min(4 if k >= 768 else 2, max(1, k // tk))
+        if split_k > 1:
+            needed = split_k * m * n
+            pg = (
+                part_g_buf[:needed].view(split_k, m, n)
+                if (part_g_buf is not None and part_g_buf.numel() >= needed)
+                else torch.empty((split_k, m, n), device=a.device, dtype=torch.float32)
+            )
+            pu = (
+                part_u_buf[:needed].view(split_k, m, n)
+                if (part_u_buf is not None and part_u_buf.numel() >= needed)
+                else torch.empty((split_k, m, n), device=a.device, dtype=torch.float32)
+            )
+            ct.launch(
+                torch.cuda.current_stream(),
+                (ct.cdiv(m, tm), ct.cdiv(n, tn), split_k),
+                gemm_fp16_swiglu_splitk_kernel,
+                (a_c, wg_c, wu_c, pg, pu, split_k, tm, tn, tk),
+            )
+            ct.launch(
+                torch.cuda.current_stream(),
+                (ct.cdiv(m, tm), ct.cdiv(n, tn), 1),
+                splitk_reduce_swiglu_fp16_kernel,
+                (pg, pu, c, split_k, tm, tn),
+            )
+            return c
+
+    tm, tn, tk = tile_shape or ((16, 64, 64) if m <= 16 else (64, 64, 64))
+    grid = (ct.cdiv(m, tm) * ct.cdiv(n, tn), 1, 1)
+    ct.launch(
+        torch.cuda.current_stream(),
+        grid,
+        gemm_fp16_swiglu_kernel,
+        (a_c, wg_c, wu_c, c, tm, tn, tk),
+    )
+    return c
