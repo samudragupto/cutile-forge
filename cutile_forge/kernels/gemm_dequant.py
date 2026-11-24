@@ -796,7 +796,11 @@ def fused_gemm_dequant(
     z_c = zeros if zeros.is_contiguous() else zeros.contiguous()
     c = out if out is not None else torch.empty((m, n), device=a.device, dtype=torch.float16)
 
-    split_k = 1 if tile_shape is not None else _select_dequant_decode_splitk(m, n, k, group_size)
+    split_k = (
+        1
+        if (tile_shape is not None or (part_buf is None and k >= 8192))
+        else _select_dequant_decode_splitk(m, n, k, group_size)
+    )
     if split_k > 1 and tk == 128:
         needed = split_k * m * n
         part = (
@@ -858,7 +862,11 @@ def fused_gemm_dequant_add(
     r_c = residual if residual.is_contiguous() else residual.contiguous()
     c = out if out is not None else torch.empty((m, n), device=a.device, dtype=torch.float16)
 
-    split_k = 1 if tile_shape is not None else _select_dequant_decode_splitk(m, n, k, group_size)
+    split_k = (
+        1
+        if (tile_shape is not None or (part_buf is None and k >= 8192))
+        else _select_dequant_decode_splitk(m, n, k, group_size)
+    )
     if split_k > 1 and tk == 128:
         needed = split_k * m * n
         part = (

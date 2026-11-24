@@ -437,7 +437,13 @@ def fused_swiglu_dequant(
     split_k = (
         2
         if (
-            tile_shape is None and m <= 16 and k >= 2048 and tk == 128 and n >= 4096 and n % tn == 0
+            tile_shape is None
+            and m <= 16
+            and k >= 2048
+            and tk == 128
+            and n >= 4096
+            and n % tn == 0
+            and not (part_g_buf is None and k >= 8192)
         )
         else 1
     )
