@@ -353,24 +353,26 @@ def cutile_moe_router_topk(
     x: torch.Tensor,
     router_weight: torch.Tensor,
     top_k: int = 2,
+    out_dtype: torch.dtype | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Compute MoE router logits, softmax, and normalized top-k gating in one CuTile kernel."""
     m, k_dim = x.shape
     num_experts = router_weight.shape[0]
     if top_k <= 0 or top_k > num_experts:
         raise ValueError(f"top_k={top_k} invalid for num_experts={num_experts}")
+    target_dtype = out_dtype or x.dtype
 
     if not x.is_cuda or x.dtype != torch.float16:
         logits = torch.matmul(x.float(), router_weight.float().t())
         probs = torch.softmax(logits, dim=-1)
         vals, idx = torch.topk(probs, k=top_k, dim=-1)
         vals = vals / vals.sum(dim=-1, keepdim=True).clamp(min=1e-6)
-        return vals.to(x.dtype), idx.to(torch.int32)
+        return vals.to(target_dtype), idx.to(torch.int32)
 
     e_pad = max(16, _next_pow2_moe(num_experts))
     top_k_pad = _next_pow2_moe(top_k)
     tm, tk = 16, 64
-    probs_out = torch.empty((m, top_k_pad), device=x.device, dtype=torch.float16)
+    probs_out = torch.empty((m, top_k_pad), device=x.device, dtype=target_dtype)
     idx_out = torch.empty((m, top_k_pad), device=x.device, dtype=torch.int32)
     ct.launch(
         torch.cuda.current_stream(),
@@ -391,6 +393,70 @@ def cutile_moe_router_topk(
         ),
     )
     return probs_out[:, :top_k], idx_out[:, :top_k]
+
+
+@ct.kernel(occupancy=4)
+def cutile_moe_weighted_add_kernel(
+    out_ptr,  # (M, N) float32/float16
+    tok_idx_ptr,  # (R,) int32
+    y_ptr,  # (R, N) float16/float32
+    w_ptr,  # (R,) float32/float16
+    tile_n: ct.Constant[int],
+) -> None:
+    """Accumulate `out[tok_idx[r], :] += y[r, :] * w[r]` in FP32 without ATen index_add_."""
+    r = ct.bid(0)
+    pid_n = ct.bid(1)
+    cols = ct.reshape(pid_n * tile_n + ct.arange(tile_n, dtype=ct.int32), (1, tile_n))
+    dst_row = ct.astype(
+        ct.load(tok_idx_ptr, index=(r,), shape=(1,), padding_mode=ct.PaddingMode.ZERO),
+        ct.int32,
+    )
+    dst_2d = ct.reshape(dst_row, (1, 1))
+    wt = ct.astype(
+        ct.load(w_ptr, index=(r,), shape=(1,), padding_mode=ct.PaddingMode.ZERO),
+        ct.float32,
+    )
+    wt_2d = ct.reshape(wt, (1, 1))
+    yv = ct.astype(
+        ct.load(y_ptr, index=(r, pid_n), shape=(1, tile_n), padding_mode=ct.PaddingMode.ZERO),
+        ct.float32,
+    )
+    cur = ct.astype(ct.gather(out_ptr, (dst_2d, cols), padding_value=0), ct.float32)
+    ct.scatter(out_ptr, (dst_2d, cols), ct.astype(cur + yv * wt_2d, out_ptr.dtype))
+
+
+def cutile_moe_weighted_add(
+    out: torch.Tensor,
+    tok_idx: torch.Tensor,
+    expert_out: torch.Tensor,
+    row_weights: torch.Tensor,
+) -> torch.Tensor:
+    """Accumulate weighted expert outputs into `out` indexed by distinct `tok_idx` rows."""
+    r_count, n_cols = expert_out.shape
+    if r_count == 0:
+        return out
+    if not out.is_cuda or out.dtype not in (torch.float16, torch.float32):
+        out.index_add_(
+            0,
+            tok_idx.to(device=out.device, dtype=torch.long),
+            (expert_out.float() * row_weights.float().unsqueeze(1)).to(out.dtype),
+        )
+        return out
+
+    out_c = out if out.is_contiguous() else out.contiguous()
+    idx_c = tok_idx.to(device=out.device, dtype=torch.int32).contiguous()
+    y_c = expert_out if expert_out.is_contiguous() else expert_out.contiguous()
+    w_c = row_weights.to(device=out.device, dtype=torch.float32).contiguous()
+    tile_n = 256 if n_cols >= 256 else 128
+    ct.launch(
+        torch.cuda.current_stream(),
+        (r_count, ct.cdiv(n_cols, tile_n), 1),
+        cutile_moe_weighted_add_kernel,
+        (out_c, idx_c, y_c, w_c, tile_n),
+    )
+    if out_c is not out:
+        out.copy_(out_c)
+    return out
 
 
 def fused_moe_int4_native(

@@ -27,6 +27,7 @@ from cutile_forge.forge.fusion_graph import build_mistral_layer_tfg
 from cutile_forge.forge.fusion_rules import apply_fusion_rules
 from cutile_forge.forge.weight_streamer import WeightStreamer
 from cutile_forge.kernels.attention_gqa import fused_attention_gqa
+from cutile_forge.kernels.embedding_lmhead import cutile_embedding_lookup
 from cutile_forge.kernels.gemm_dequant import (
     cutile_gemm_fp16,
     fused_gemm_dequant,
@@ -36,6 +37,7 @@ from cutile_forge.kernels.gemm_dequant_silu import fused_gemm_dequant_silu
 from cutile_forge.kernels.layernorm_residual import fused_rmsnorm_residual
 from cutile_forge.kernels.moe_fused import (
     cutile_moe_router_topk,
+    cutile_moe_weighted_add,
     fused_moe_int4_gemm,
     fused_topk_gating,
 )
@@ -186,9 +188,13 @@ class MistralLayer:
             and weights.moe_w2 is not None
             and weights.moe_w3 is not None
         ):
-            r_logits = torch.matmul(post_norm.float(), weights.moe_gate.float().t())
-            probs, indices = fused_topk_gating(r_logits, top_k=self.config.top_k_experts)
-            ffn_out = torch.zeros_like(post_norm)
+            probs, indices = cutile_moe_router_topk(
+                post_norm,
+                weights.moe_gate.to(post_norm.dtype),
+                top_k=self.config.top_k_experts,
+                out_dtype=torch.float32,
+            )
+            ffn_acc = torch.zeros_like(post_norm, dtype=torch.float32)
             for e in range(len(weights.moe_w1)):
                 mask = indices == e
                 if not bool(mask.any()):
@@ -204,9 +210,8 @@ class MistralLayer:
                 )
                 u_val = _quant_linear_cutile(x_e, w3)
                 y_e = _quant_linear_cutile(g_act * u_val, w2)
-                ffn_out.index_add_(
-                    0, tok_idx, (y_e * probs[tok_idx, k_slot].unsqueeze(1)).to(ffn_out.dtype)
-                )
+                cutile_moe_weighted_add(ffn_acc, tok_idx, y_e, probs[tok_idx, k_slot])
+            ffn_out = ffn_acc.to(post_norm.dtype)
             return (residual_mid + ffn_out).view(bsz, seq_len, hidden_dim)
 
         gate_in = (
@@ -406,7 +411,10 @@ class Mistral7B:
         last_token_only: bool = False,
     ) -> torch.Tensor:
         """Run a forward pass over `input_ids` of shape `(B, S)` -> logits."""
-        hidden = F.embedding(input_ids.to(self.device), self.weights.embed_tokens)
+        if backend == "cutile" and self.device.type == "cuda":
+            hidden = cutile_embedding_lookup(input_ids.to(self.device), self.weights.embed_tokens)
+        else:
+            hidden = F.embedding(input_ids.to(self.device), self.weights.embed_tokens)
 
         for idx, layer in enumerate(self.layers):
             self._prefetch_next_layer(idx + 1)

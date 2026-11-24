@@ -15,6 +15,7 @@ from typing import Any, Literal
 import torch
 import torch.nn.functional as F
 
+from cutile_forge.engine.kv_cache import PagedKVCache
 from cutile_forge.forge.fusion_graph import DataTensor, FusionGraph, OpType, TileNode
 from cutile_forge.forge.pass_manager import PassReport, default_pass_manager
 from cutile_forge.kernels import (
@@ -1064,11 +1065,20 @@ def _apply_rope_torch(
     cos: torch.Tensor,
     sin: torch.Tensor,
     rotary_style: str = "interleaved",
+    position_offset: int = 0,
 ) -> torch.Tensor:
     bsz, n_heads, seq_len, d_head = x.shape
     half_d = d_head // 2
-    c = cos[:seq_len, :half_d].float().view(1, 1, seq_len, half_d)
-    s = sin[:seq_len, :half_d].float().view(1, 1, seq_len, half_d)
+    c = (
+        cos[position_offset : position_offset + seq_len, :half_d]
+        .float()
+        .view(1, 1, seq_len, half_d)
+    )
+    s = (
+        sin[position_offset : position_offset + seq_len, :half_d]
+        .float()
+        .view(1, 1, seq_len, half_d)
+    )
     if rotary_style == "half":
         x0 = x[..., :half_d].float()
         x1 = x[..., half_d:].float()
@@ -1392,6 +1402,9 @@ class UnifiedModelExecutor:
         qkv_bias: bool,
         sliding_window: int | None,
         use_cutile: bool,
+        kv_cache: PagedKVCache | None = None,
+        layer_idx: int = 0,
+        pos_offset: int = 0,
     ) -> torch.Tensor:
         bsz, seq_len, _ = h.shape
         q = self._linear(h, bw["wq"], bw.get("bq") if qkv_bias else None, use_cutile)
@@ -1403,7 +1416,7 @@ class UnifiedModelExecutor:
         v4 = v.view(bsz, seq_len, num_kv_heads, head_dim).transpose(1, 2)
 
         cos, sin = compute_scaled_rope_freqs(
-            seq_len,
+            pos_offset + seq_len,
             head_dim,
             theta=rope_theta,
             rope_scaling=rope_scaling,
@@ -1411,33 +1424,51 @@ class UnifiedModelExecutor:
             dtype=h.dtype,
         )
         if use_cutile and h.is_cuda and h.dtype == torch.float16:
-            q4 = apply_rope(q4, cos, sin)
-            k4 = apply_rope(k4, cos, sin)
+            q4 = apply_rope(q4, cos, sin, position_offset=pos_offset)
+            k4 = apply_rope(k4, cos, sin, position_offset=pos_offset)
+            if kv_cache is not None:
+                kv_cache.update(layer_idx, k4, v4, defer_prune=(seq_len > 1))
+                k_full, v_full = kv_cache.get_kv(layer_idx)
+            else:
+                k_full, v_full = k4, v4
             attn_out = fused_attention_gqa(
-                q4, k4, v4, causal=True, sliding_window=sliding_window or 0
+                q4, k_full, v_full, causal=True, sliding_window=sliding_window or 0
             )
+            if kv_cache is not None and seq_len > 1 and kv_cache.sliding_window is not None:
+                kv_cache.prune_outside_window(layer_idx)
             attn_flat = (
                 attn_out.transpose(1, 2).contiguous().view(bsz, seq_len, num_heads * head_dim)
             )
             return self._linear(attn_flat, bw["wo"], None, use_cutile)
 
         rotary_style = str(self.graph.metadata.get("rotary_style", "interleaved"))
-        q4 = _apply_rope_torch(q4, cos, sin, rotary_style=rotary_style)
-        k4 = _apply_rope_torch(k4, cos, sin, rotary_style=rotary_style)
+        q4 = _apply_rope_torch(q4, cos, sin, rotary_style=rotary_style, position_offset=pos_offset)
+        k4 = _apply_rope_torch(k4, cos, sin, rotary_style=rotary_style, position_offset=pos_offset)
+        if kv_cache is not None:
+            kv_cache.update(layer_idx, k4, v4, defer_prune=(seq_len > 1))
+            k_full, v_full = kv_cache.get_kv(layer_idx)
+        else:
+            k_full, v_full = k4, v4
 
         rep = num_heads // num_kv_heads
         if rep > 1:
-            k4 = k4.repeat_interleave(rep, dim=1)
-            v4 = v4.repeat_interleave(rep, dim=1)
+            k_full = k_full.repeat_interleave(rep, dim=1)
+            v_full = v_full.repeat_interleave(rep, dim=1)
 
-        scores = torch.matmul(q4.float(), k4.float().transpose(-1, -2)) / math.sqrt(float(head_dim))
-        pos = torch.arange(seq_len, device=h.device)
-        mask = pos.view(seq_len, 1) >= pos.view(1, seq_len)
+        s_kv = k_full.shape[2]
+        scores = torch.matmul(q4.float(), k_full.float().transpose(-1, -2)) / math.sqrt(
+            float(head_dim)
+        )
+        q_pos = torch.arange(seq_len, device=h.device).view(seq_len, 1) + (s_kv - seq_len)
+        k_pos = torch.arange(s_kv, device=h.device).view(1, s_kv)
+        mask = q_pos >= k_pos
         if sliding_window is not None and sliding_window > 0:
-            mask = mask & ((pos.view(seq_len, 1) - pos.view(1, seq_len)) < sliding_window)
-        scores = scores.masked_fill(~mask.view(1, 1, seq_len, seq_len), float("-inf"))
+            mask = mask & ((q_pos - k_pos) < sliding_window)
+        scores = scores.masked_fill(~mask.view(1, 1, seq_len, s_kv), float("-inf"))
         probs = torch.softmax(scores, dim=-1)
-        attn_out = torch.matmul(probs, v4.float()).to(h.dtype)
+        attn_out = torch.matmul(probs, v_full.float()).to(h.dtype)
+        if kv_cache is not None and seq_len > 1 and kv_cache.sliding_window is not None:
+            kv_cache.prune_outside_window(layer_idx)
         attn_flat = attn_out.transpose(1, 2).contiguous().view(bsz, seq_len, num_heads * head_dim)
         return self._linear(attn_flat, bw["wo"], None, use_cutile)
 
@@ -1450,6 +1481,8 @@ class UnifiedModelExecutor:
         timesteps: torch.Tensor | None = None,
         class_labels: torch.Tensor | None = None,
         use_cutile: bool = True,
+        kv_cache: PagedKVCache | None = None,
+        pos_offset: int = 0,
     ) -> torch.Tensor:
         g = self.graph
         t_cond: torch.Tensor | None = None
@@ -1520,51 +1553,60 @@ class UnifiedModelExecutor:
                     "Diffusion weights missing 't_fc1_w' in diffusion_embed or blocks[0]"
                 )
         elif isinstance(g.input_stage, MultimodalFusionStage):
-            if input_ids is None or pixel_values is None:
-                raise ValueError("Both input_ids and pixel_values required for multimodal model")
-            vs = g.input_stage.vision_stage
-            vis_h = self._run_vision_embed(
-                pixel_values, vs, weights["vision_embed"], use_cutile=use_cutile
-            )
-            for vb, vbw in zip(g.input_stage.vision_blocks, weights["vision_blocks"], strict=True):
-                vis_h = self._run_vit_block(vis_h, vb, vbw, use_cutile)
-            if vs.use_cls_token and g.input_stage.select_feature == "patch":
-                vis_h = vis_h[:, 1:, :]
-            proj = weights["projector"]
-            vis_proj = self._linear(
-                self._act(
-                    self._linear(vis_h, proj["fc1_w"], proj["fc1_b"], use_cutile),
-                    "gelu",
-                    use_cutile,
-                ),
-                proj["fc2_w"],
-                proj["fc2_b"],
-                use_cutile,
-            )
-            txt_h = self._embed_tokens(input_ids, weights["embed_tokens"], use_cutile)
-            img_tok_id = proj.get("image_token_index")
-            if img_tok_id is not None and bool((input_ids == int(img_tok_id)).any()):
-                img_mask = input_ids == int(img_tok_id)
-                n_img_slots = int(img_mask.sum().item())
-                if n_img_slots == vis_proj.shape[0] * vis_proj.shape[1]:
-                    hidden = txt_h.clone()
-                    hidden[img_mask] = vis_proj.to(txt_h.dtype).reshape(-1, txt_h.shape[-1])
-                else:
-                    img_pos = img_mask[0].nonzero(as_tuple=False)[0].item()
-                    hidden = torch.cat(
-                        [
-                            txt_h[:, :img_pos, :],
-                            vis_proj.to(txt_h.dtype),
-                            txt_h[:, img_pos + 1 :, :],
-                        ],
-                        dim=1,
+            if input_ids is None:
+                raise ValueError("input_ids required for multimodal model")
+            if pixel_values is None:
+                if kv_cache is None:
+                    raise ValueError(
+                        "Both input_ids and pixel_values required for multimodal model without kv_cache"
                     )
+                hidden = self._embed_tokens(input_ids, weights["embed_tokens"], use_cutile)
             else:
-                hidden = torch.cat([vis_proj, txt_h], dim=1)
+                vs = g.input_stage.vision_stage
+                vis_h = self._run_vision_embed(
+                    pixel_values, vs, weights["vision_embed"], use_cutile=use_cutile
+                )
+                for vb, vbw in zip(
+                    g.input_stage.vision_blocks, weights["vision_blocks"], strict=True
+                ):
+                    vis_h = self._run_vit_block(vis_h, vb, vbw, use_cutile)
+                if vs.use_cls_token and g.input_stage.select_feature == "patch":
+                    vis_h = vis_h[:, 1:, :]
+                proj = weights["projector"]
+                vis_proj = self._linear(
+                    self._act(
+                        self._linear(vis_h, proj["fc1_w"], proj["fc1_b"], use_cutile),
+                        "gelu",
+                        use_cutile,
+                    ),
+                    proj["fc2_w"],
+                    proj["fc2_b"],
+                    use_cutile,
+                )
+                txt_h = self._embed_tokens(input_ids, weights["embed_tokens"], use_cutile)
+                img_tok_id = proj.get("image_token_index")
+                if img_tok_id is not None and bool((input_ids == int(img_tok_id)).any()):
+                    img_mask = input_ids == int(img_tok_id)
+                    n_img_slots = int(img_mask.sum().item())
+                    if n_img_slots == vis_proj.shape[0] * vis_proj.shape[1]:
+                        hidden = txt_h.clone()
+                        hidden[img_mask] = vis_proj.to(txt_h.dtype).reshape(-1, txt_h.shape[-1])
+                    else:
+                        img_pos = img_mask[0].nonzero(as_tuple=False)[0].item()
+                        hidden = torch.cat(
+                            [
+                                txt_h[:, :img_pos, :],
+                                vis_proj.to(txt_h.dtype),
+                                txt_h[:, img_pos + 1 :, :],
+                            ],
+                            dim=1,
+                        )
+                else:
+                    hidden = torch.cat([vis_proj, txt_h], dim=1)
         else:
             raise TypeError(f"Unsupported input_stage: {type(g.input_stage)}")
 
-        for blk, bw in zip(g.blocks, weights["blocks"], strict=True):
+        for layer_idx, (blk, bw) in enumerate(zip(g.blocks, weights["blocks"], strict=True)):
             if isinstance(blk, DenseTransformerBlock):
                 if blk.norm_type == "layernorm":
                     h_norm = self._layer_norm(
@@ -1584,6 +1626,9 @@ class UnifiedModelExecutor:
                     blk.qkv_bias,
                     blk.sliding_window,
                     use_cutile,
+                    kv_cache=kv_cache,
+                    layer_idx=layer_idx,
+                    pos_offset=pos_offset,
                 )
 
                 if blk.norm_type == "layernorm":
@@ -1616,6 +1661,9 @@ class UnifiedModelExecutor:
                     blk.qkv_bias,
                     blk.sliding_window,
                     use_cutile,
+                    kv_cache=kv_cache,
+                    layer_idx=layer_idx,
+                    pos_offset=pos_offset,
                 )
                 h_moe = self._rms_norm(hidden, bw["post_norm_w"], blk.rms_norm_eps, use_cutile)
                 bsz_m, seq_m, d_m = h_moe.shape
@@ -1770,6 +1818,8 @@ class UnifiedModelExecutor:
         mel_features: torch.Tensor | None = None,
         timesteps: torch.Tensor | None = None,
         class_labels: torch.Tensor | None = None,
+        kv_cache: PagedKVCache | None = None,
+        pos_offset: int = 0,
     ) -> torch.Tensor:
         """Execute `UnifiedModelGraph` using CuTile kernels on CUDA (and PyTorch on CPU)."""
         return self._run_forward(
@@ -1780,6 +1830,8 @@ class UnifiedModelExecutor:
             timesteps=timesteps,
             class_labels=class_labels,
             use_cutile=True,
+            kv_cache=kv_cache,
+            pos_offset=pos_offset,
         )
 
     def reference_forward(
@@ -1790,6 +1842,8 @@ class UnifiedModelExecutor:
         mel_features: torch.Tensor | None = None,
         timesteps: torch.Tensor | None = None,
         class_labels: torch.Tensor | None = None,
+        kv_cache: PagedKVCache | None = None,
+        pos_offset: int = 0,
     ) -> torch.Tensor:
         """Execute pure-PyTorch reference forward pass for parity verification."""
         return self._run_forward(
@@ -1800,4 +1854,6 @@ class UnifiedModelExecutor:
             timesteps=timesteps,
             class_labels=class_labels,
             use_cutile=False,
+            kv_cache=kv_cache,
+            pos_offset=pos_offset,
         )
