@@ -5,8 +5,8 @@
 [![CI](https://github.com/samudragupto/cutile-forge/actions/workflows/ci.yml/badge.svg)](https://github.com/samudragupto/cutile-forge/actions/workflows/ci.yml)
 [![Validation](https://github.com/samudragupto/cutile-forge/actions/workflows/validation.yml/badge.svg)](https://github.com/samudragupto/cutile-forge/actions/workflows/validation.yml)
 [![Release](https://img.shields.io/badge/release-v3.9.0-1b365d)](https://github.com/samudragupto/cutile-forge/releases/tag/v3.9.0)
-[![Tests](https://img.shields.io/badge/tests-311%20GPU%20%7C%20208%20CPU-16a34a)](tests/)
-[![Parity](https://img.shields.io/badge/regress%20strict-3%20PASS%20%2F%205%20FAIL-d97706)](benchmarks/validation_artifacts/v4.0.0/phase24_regression/regress_full.json)
+[![Tests](https://img.shields.io/badge/tests-312%20GPU%20%7C%20208%20CPU-16a34a)](tests/)
+[![Parity](https://img.shields.io/badge/regress%20strict-3%20PASS%20%2F%205%20FAIL-d97706)](benchmarks/validation_artifacts/v4.0.0/phase24_rc2/regression/regress_full.json)
 [![mypy](https://img.shields.io/badge/mypy-clean-0ea5e9)](cutile_forge/)
 [![Docker](https://img.shields.io/badge/ghcr.io-v3.9.0--cu132-2563eb)](https://github.com/samudragupto/cutile-forge/pkgs/container/cutile-forge)
 [![License: MIT](https://img.shields.io/badge/License-MIT-6c757d.svg)](LICENSE)
@@ -30,7 +30,7 @@
 
 **CuTileForge (`v3.9.0`)** is a full-stack GPU compiler, inference runtime, and ML systems ecosystem built natively on NVIDIA's **CuTile Python DSL (`cuda.tile`)** targeting both consumer **Ada (`sm_89`)** and **Blackwell (`sm_120`)** architectures. Centered around a typed **Tile-Fusion Graph (TFG)** compiler (`8 → 3` algebraic + epilogue fusion rules), CuTileForge pairs a **zero-ATen full-step native CUDA-graph runtime** (`0` forbidden ATen compute calls, `1` full-step graph replay per decode token) with **native universal quantization kernels** (GPTQ, AWQ, GGUF `Q4_0`/`Q8_0`/`Q4_K`/`Q6_K`/`Q4_K_M`, INT8, FP8, and 2D block-scaled FP8 without load-time format conversion), a **13-family unified multimodal & diffusion model graph**, **Stage -1 PCIe DMA hybrid streaming** (`Llama-2-70B-GPTQ` on a single 32 GB GPU), **continuous batching**, **distributed TP/PP/EP abstractions**, and a production **OpenAI-compatible FastAPI serving layer** backed by `torch.compile(backend="cutile_forge")`.
 
-> **Validation & Claim Separation (`v3.9.0` + Phase 24 `v4.0.0` Candidate):** Green unit/integration tests (`311 passed` on RTX 5090 GPU; `208 passed, 103 skipped` on CPU), zero **forbidden ATen compute ops** across `11` audited real-checkpoint execution paths (`9` baseline `v3.9.0` paths + `NativeFP16DecoderRuntime` `Qwen2.5-0.5B` prefill & eager decode; not zero total ATen ops; `UnifiedModelExecutor` Qwen2.5/LLaVA cached decode verified in eager mode; DiT scope is denoiser forward only), and strict all-layer numerical parity (`3 PASS / 5 FAIL` under unchanged gates in [`benchmarks/validation_artifacts/v4.0.0/phase24_regression/regress_full.json`](benchmarks/validation_artifacts/v4.0.0/phase24_regression/regress_full.json)). Results on RTX 5090 (`sm_120`) do **not** establish RTX 4060 (`sm_89`, `UNVALIDATED` on `v3.1.0–v4.0.0`) or physical multi-GPU clusters (`BLOCKED: hardware` / `SIMULATED` on 1-GPU host). On Phase 24 RTX 5090 benchmarks, CuTileForge reaches **`257.26 tok/s`** (`C=1`) and **`3,716.81 tok/s`** (`C=16`) on `Mistral-7B-v0.1-GPTQ` (`5/5 PASS`), **`888.88 tok/s`** on `Qwen2.5-0.5B` (`FP16`, surpassing prior `SGLang 0.5.23` `803.05` and `vLLM 0.34.0` `694.12` C=1 probes), and **`139.87 tok/s`** with **`0`** routing host syncs on `Mixtral-8x7B-GPTQ` (while `http_nonstream C=64` ratio at `84.29%` and retained-weight Mistral VRAM at `10,524.1 MB` miss their frozen Phase 24 targets).
+> **Validation & Claim Separation (`v3.9.0` + Phase 24 RC2 `v4.0.0` Candidate @ [`406660f`](benchmarks/validation_artifacts/v4.0.0/phase24_rc2/final/before_after.json)):** Green unit/integration tests (`312 passed, 0 failed, 0 skipped` on RTX 5090 GPU; `208 passed, 104 skipped` on CPU), zero **forbidden ATen compute ops** across `11` audited real-checkpoint execution paths (`9` baseline `v3.9.0` paths + `NativeFP16DecoderRuntime` `Qwen2.5-0.5B` prefill & eager decode; not zero total ATen ops; `UnifiedModelExecutor` Qwen2.5/LLaVA cached decode verified in eager mode; DiT scope is denoiser forward only), strict all-layer numerical parity (`3 PASS / 5 FAIL` under unchanged gates in [`benchmarks/validation_artifacts/v4.0.0/phase24_rc2/regression/regress_full.json`](benchmarks/validation_artifacts/v4.0.0/phase24_rc2/regression/regress_full.json)), and **`15/15` frozen Phase 24 targets `PASS`** on the pinned RC2 commit (`406660f`). Results on RTX 5090 (`sm_120`) do **not** establish RTX 4060 (`sm_89`, `UNVALIDATED` on `v3.1.0–v4.0.0`) or physical multi-GPU clusters (`BLOCKED: hardware` / `SIMULATED` on 1-GPU host). On Phase 24 RC2 RTX 5090 benchmarks, CuTileForge reaches **`257.27 tok/s`** (`C=1`), **`998.26 tok/s`** (`C=4`), and **`3,701.66 tok/s`** (`C=16`) with **`8,592.0 MB`** peak VRAM (`<= 8,800.0 MB`) on `Mistral-7B-v0.1-GPTQ` (`5/5 PASS`), **`892.75 tok/s`** on `Qwen2.5-0.5B` via `NativeFP16DecoderRuntime` (`use_cuda_graph=True`, `graph_fallback_count=0`, `buckets=[512]`; distinct from the eager `UnifiedModelExecutor` row in `regress --tier full`, and compared only against historical `v3.6.0` unmatched `SGLang 0.5.23` `803.05` / `vLLM 0.34.0` `694.12` C=1 probes), **`140.28 tok/s`** with **`0`** routing host syncs on `Mixtral-8x7B-GPTQ`, and **`2,947.99 tok/s` (`88.77%` of `3,321.03 tok/s` in-process)** on 3-boot `http_nonstream C=64` serving (`http_stream C=64` **`2,996.54 tok/s`**, `90.23%`). Version bump to `v4.0.0` and release tag remain held pending explicit approval.
 
 <p align="center">
   <img src="docs/images_5090/fig9_v300_platform.png" alt="Figure 9: CuTileForge v3.0.0 Consolidated Platform Evaluation" width="100%"/>
@@ -413,7 +413,7 @@ Full platform results across Phases 9–13 (`v2.4.0` → `v3.0.0`) are archived 
 | **`v3.7.0`–`v3.7.1`** | Phases 21 / 21.1: `GateResult` Reporting, `DiT-XL/2` Timestep & `Whisper` `gelu_erf` Fixes, FP32 MoE Router, ULP Near-Tie & `Mixtral P2@185` Audit | 8-model strict parity **`2 PASS / 6 FAIL`** (`LLaVA-1.5` 16-tok, `DiT-XL/2` `cos=0.999999`); Mixtral `3/5` (`+14×` lower PPL diff, router `+3%`) | `291/291` |
 | **`v3.8.0`** | Phase 22: `PagedKVCache` Per-Slot FP8 E4M3 Scales, Expired Sliding-Window `NaN` Pre-MMA Zeroing (`has_sw_edge`), Honest README & Figure Sync | Sliding-window & per-slot FP8 oracle parity exact; kernels **`-44.29%` to `+1.77%`** (`+128 B/page` FP8); 8-model parity unchanged **`2 PASS / 6 FAIL`**; GitHub CI **`success`** (`8890d07`) | `298/298` |
 | **`v3.9.0`** | Phase 23: Native Mixtral MoE (`cutile_embedding_lookup` + `cutile_moe_router_topk` + `cutile_moe_weighted_add`) & Eager `PagedKVCache` Decode for `Qwen2.5-0.5B` & `LLaVA-1.5` | **`0` forbidden ATen compute ops** on 9 audited real-checkpoint paths; cross-page cached parity `12/12` Qwen / `16/16` LLaVA (`0` vision calls during decode); Mixtral `cos=0.999996`, `P2@185` still `SUBSTANTIVE_DIVERGENCE`; strict parity **`2 PASS / 6 FAIL`** | **`302/302`** |
-| **Phase 24 (`v4.0.0` cand.)** | Stages 24A–24G: Split-K INT4 Dequant GEMMs + Fused RMSNorm-Permute, Direct FP8 KV Split-KV, Zero-Sync Indexed M=1 MoE + In-Place Packing, `NativeFP16DecoderRuntime` CUDA Graphs, Chained Serving Steps | `Mistral-7B` **`257.26 tok/s`** (`C=1`), **`3,716.81`** (`C=16`), **`5/5 PASS`**; `Qwen2.5-0.5B` **`888.88 tok/s`**; `Mixtral-8x7B` **`139.87 tok/s`** (`0` syncs); 32K FP8 KV **`3.30 ms`**; 11 paths `0` forbidden ATen compute; strict parity **`3 PASS / 5 FAIL`** | **`311/311`** |
+| **Phase 24 RC2 (`v4.0.0` cand.)** | Stages 24A–24G + RC2 (`406660f`): Split-K INT4 Dequant GEMMs + Fused RMSNorm-Permute, Direct FP8 KV Split-KV, Zero-Sync Indexed M=1 MoE + In-Place Packing (`25d6203`), `NativeFP16DecoderRuntime` CUDA Graphs, HTTP Keep-Alive Stall Fix (`406660f`) | **`15/15` targets `PASS`**: `Mistral-7B` **`257.27 tok/s`** (`C=1`), **`3,701.66`** (`C=16`), **`8,592.0 MB`** VRAM, **`5/5 PASS`**; `Qwen2.5-0.5B` **`892.75 tok/s`**; `Mixtral-8x7B` **`140.28 tok/s`** (`0` syncs); HTTP `C=64` **`2,947.99`** (`88.77%`); 11 paths `0` forbidden ATen compute; strict parity **`3 PASS / 5 FAIL`** | **`312/312`** |
 
 #### Historical `v3.0.0` Notes & External Baseline Context (Superseded by Section 2.9 on `v3.6.0–v3.9.0`)
 
@@ -453,7 +453,7 @@ All 8 checkpoints below execute on CuTile kernels with **`0` forbidden ATen comp
   <img src="docs/figures/validation_v380/fig_v380_external_engines.png" alt="Figure V380-2: Isolated Engine Comparison — SGLang and vLLM vs CuTileForge on RTX 5090" width="100%"/>
 </p>
 
-Measured in [`docs/EXTERNAL_ENGINE_COMPARISON.md`](docs/EXTERNAL_ENGINE_COMPARISON.md) (`5` runs after `2` warmup, `OUT_TOKENS=64`, `temperature=0.0`, `v3.6.0/phase20_external_engines/manifest.json`):
+Measured in [`docs/EXTERNAL_ENGINE_COMPARISON.md`](docs/EXTERNAL_ENGINE_COMPARISON.md) (`5` runs after `2` warmup, `OUT_TOKENS=64`, `temperature=0.0`, **`v3.6.0` historical isolated probes** in `v3.6.0/phase20_external_engines/manifest.json` — unmatched to Phase 24 RC2 kernels/runtimes and not re-run side-by-side on `406660f`):
 
 | Engine | Model / Format | C=1 (`tok/s`) | C=4 (`tok/s`) | C=16 (`tok/s`) | Peak VRAM (MB) | Status & Honest Comparison |
 |---|---|---:|---:|---:|---:|---|
@@ -499,32 +499,34 @@ Verified on the clean `v3.9.0` release candidate ([`native_dispatch_report.json`
   - **Physical Multi-GPU (`>= 2` GPUs):** **`BLOCKED: hardware`** (`LoopbackCommTransport` results are `SIMULATED` math equivalence only).
   - **Local Docker Daemon:** **`BLOCKED`** (`docker.sock` permission denied / no `sudo`; GHCR images build via [`.github/workflows/docker.yml`](.github/workflows/docker.yml)).
   - **Clean-Room Independent Repro:** **`PENDING_INDEPENDENT_RUN`** ([`docs/REPRODUCE.md`](docs/REPRODUCE.md), [`benchmarks/repro_kit/`](benchmarks/repro_kit/)).
-- **Roadmap & Phase 24 (`v4.0.0` Candidate) Summary:** Phase 22 (`v3.8.0`) closed `PagedKVCache` numerical bugs; Phase 23 (`v3.9.0`) closed Mixtral native MoE/embedding compute dispatch and added eager `PagedKVCache` decode for `Qwen2.5-0.5B` and `LLaVA-1.5`; **Phase 24 (`v4.0.0` candidate)** completed Stages 24A–24G performance engineering below (version bump and release tag held pending explicit approval).
+- **Roadmap & Phase 24 (`v4.0.0` Candidate RC2) Summary:** Phase 22 (`v3.8.0`) closed `PagedKVCache` numerical bugs; Phase 23 (`v3.9.0`) closed Mixtral native MoE/embedding compute dispatch and added eager `PagedKVCache` decode for `Qwen2.5-0.5B` and `LLaVA-1.5`; **Phase 24 RC2 (`406660f`)** completed Stages 24A–24G plus the approved VRAM & serving follow-ups (`25d6203`, `406660f`) below, while preserving prior [`6f945b8`](benchmarks/validation_artifacts/v4.0.0/phase24_final/before_after.json) (`13/15`) as comparison point (version bump and `v4.0.0` release tag held pending explicit approval).
 
-#### 6. Phase 24 Performance Engineering & Verification (`v4.0.0` Candidate)
+#### 6. Phase 24 RC2 Performance Engineering & Verification (`v4.0.0` Candidate — Pinned Revision `406660f`)
 
-Verified on RTX 5090 (`sm_120`, commit [`f8d92dc`](benchmarks/validation_artifacts/v4.0.0/phase24_final/before_after.json)) against the frozen targets in [`frozen_targets.json`](benchmarks/validation_artifacts/v4.0.0/phase24_freeze/frozen_targets.json):
-- **Full Test & Typecheck Gate:** `black --check` (`153` files) clean, `ruff check` clean, `mypy --ignore-missing-imports` clean across `cutile_forge` + Phase 24 tests, CPU pytest **`208 passed, 103 skipped`**, GPU pytest **`311 passed, 0 failed, 0 skipped`**.
-- **11-Path Dispatch Audit ([`benchmarks/validation_artifacts/v4.0.0/phase24_audit/native_dispatch_report.json`](benchmarks/validation_artifacts/v4.0.0/phase24_audit/native_dispatch_report.json)):** **`0` forbidden ATen compute ops** across all `11` audited real-checkpoint paths (`9` `v3.9.0` paths + `NativeFP16DecoderRuntime` prefill and eager decode on `Qwen2.5-0.5B`; Mixtral M=1 `decode_seq1_paged_kv` dropped from `3,115` to `1,840` total ATen calls with **`0`** routing host syncs / `aten._local_scalar_dense.default`).
-- **8-Model Full Regression ([`benchmarks/validation_artifacts/v4.0.0/phase24_regression/regress_full.json`](benchmarks/validation_artifacts/v4.0.0/phase24_regression/regress_full.json)):** **`3 PASS / 5 FAIL`** under unchanged strict gates (up from `2 PASS / 6 FAIL` in `v3.9.0`, zero regression on any model): `Mistral-7B` improved to **`PASS 5/5`** (`100.0%` tok, `252+ tok/s`), `LLaVA-1.5` **`PASS`** (`16/16`), `DiT-XL/2` **`PASS`** (`cos=0.999999`), `Llama-2-70B` **`4/5`** (`cos=0.999998`), `Qwen2.5-0.5B` **`4/5`** (`UnifiedModelExecutor` prefill `10.74 -> 6.97 ms`), and `Mixtral-8x7B` **`3/5`** with **`0` `SUBSTANTIVE_DIVERGENCE`** (`P2@185` eliminated; `P0@190` and `P1@45` are `ONE_SIDED_TIE`).
+All checks, tests, 11-path dispatch audit, 8-model regression, 3-boot serving reproducibility, and 15 frozen target runs below were re-executed sequentially on the single clean pinned RC2 commit [`406660fd46ac`](benchmarks/validation_artifacts/v4.0.0/phase24_rc2/final/before_after.json) against [`frozen_targets.json`](benchmarks/validation_artifacts/v4.0.0/phase24_freeze/frozen_targets.json) (prior comparison point [`6f945b8`](benchmarks/validation_artifacts/v4.0.0/phase24_final/before_after.json) preserved untouched):
+- **Full Test & Typecheck Gate:** `black --check` (`153` files) clean, `ruff check` clean, `mypy --ignore-missing-imports` (`99` source files + Phase 24 tests) clean, CPU pytest **`208 passed, 104 skipped`**, GPU pytest **`312 passed, 0 failed, 0 skipped`**.
+- **11-Path Dispatch Audit ([`benchmarks/validation_artifacts/v4.0.0/phase24_rc2/audit/native_dispatch_report.json`](benchmarks/validation_artifacts/v4.0.0/phase24_rc2/audit/native_dispatch_report.json)):** **`0` forbidden ATen compute ops** across all `11` audited real-checkpoint paths (`9` `v3.9.0` paths + `NativeFP16DecoderRuntime` prefill and eager decode on `Qwen2.5-0.5B`; Mixtral M=1 `decode_seq1_paged_kv` runs in `1,840` total ATen calls with **`0`** routing host syncs / `aten._local_scalar_dense.default`).
+- **8-Model Full Regression ([`benchmarks/validation_artifacts/v4.0.0/phase24_rc2/regression/regress_full.json`](benchmarks/validation_artifacts/v4.0.0/phase24_rc2/regression/regress_full.json)):** **`3 PASS / 5 FAIL`** under unchanged strict gates (up from `2 PASS / 6 FAIL` in `v3.9.0`, zero regression vs `v3.9.0` or `6f945b8`): `Mistral-7B` **`PASS 5/5`** (`100.0%` tok, `cos=1.000000`, `ppl=5.147 vs 5.147`), `LLaVA-1.5` **`PASS`** (`cos=1.000000`, `1/1`), `DiT-XL/2` **`PASS`** (`cos=0.999999`), `Llama-2-70B` **`4/5`** (`cos=0.999998`), `Qwen2.5-0.5B` **`4/5`** (`cos=0.999997`), and `Mixtral-8x7B` **`3/5`** (`cos=0.999996`, `0` `SUBSTANTIVE_DIVERGENCE`).
+- **Qwen2.5-0.5B Runtime Qualification Separation:** Throughput targets (`4.165 ms` `S=512` prefill, `892.75 tok/s` `C=1` decode) execute on **`NativeFP16DecoderRuntime`** (`NativePagedKVCache`, `use_cuda_graph=True`, `graph_strategy="bucketed"`, `graph_fallback_count=0`, `captured_graph_buckets=[512]`, `sync_interval=32`, `prompt_len=64`, `max_new_tokens=64`). The strict `regress --tier full` `Qwen2.5-0.5B` row (`4/5 FAIL`) continues to evaluate uncached eager `UnifiedModelExecutor`.
+- **3-Boot × 3-Pass Serving Reproducibility ([`benchmarks/validation_artifacts/v4.0.0/phase24_rc2/serving/summary.json`](benchmarks/validation_artifacts/v4.0.0/phase24_rc2/serving/summary.json)):** Returning `Connection: close` on `/v1/chat/completions` eliminated HTTP/1.1 keep-alive Nagle/Delayed-ACK ingestion stalls (`~190 ms -> ~3.3 ms`), raising 3-boot median `http_nonstream C=64` from `84.29%` (`6f945b8`) to **`2,947.99 tok/s` (`88.77%` of `3,321.03 tok/s` in-proc, CV `1.42%`, `PASS`)** and `http_stream C=64` to **`2,996.54 tok/s` (`90.23%`, CV `0.11%`)**, with **`C=4: 4/4`, `C=16: 16/16` isolation** and **`inflight_after=0, active_kv_slots=0, disconnects_delta=1`** across all 3 boots (historical Phase 16 `84.99%` stays recorded as `FAIL`).
 
-| Workload Metric | `v3.9.0` Baseline | Frozen Target | Phase 24 Final | Speedup / Delta | Status |
-|---|---:|---:|---:|---|---|
-| **Mistral-7B** Prefill `S=512` (`ms`) | `72.94` | `<= 55.0 ms` | **`53.758`** | **`1.36×`** | `PASS` |
-| **Mistral-7B** `C=1` TTFT (`ms`) | `16.70` | `<= 10.5 ms` | **`6.21`** | **`2.69×`** | `PASS` |
-| **Mistral-7B** `C=1` Decode (`tok/s`) | `167.03` | `>= 220.0 tok/s` | **`257.26`** | **`1.54×`** | `PASS` |
-| **Mistral-7B** `C=1` ITL `p50` (`ms`) | `5.82` | `<= 4.5 ms` | **`3.89`** | **`1.50×`** | `PASS` |
-| **Mistral-7B** `C=4` Decode (`tok/s`) | `621.53` | `>= 800.0 tok/s` | **`999.21`** | **`1.61×`** *(leads `SGLang` `969.4`)* | `PASS` |
-| **Mistral-7B** `C=16` Decode (`tok/s`) | `2,308.02` | `>= 2,850.0 tok/s` | **`3,716.81`** | **`1.61×`** *(leads `SGLang` `3,261.8`)* | `PASS` |
-| **Qwen2.5-0.5B** Prefill `S=512` (`ms`) | `10.74` | `<= 8.0 ms` | **`4.169`** | **`2.58×`** | `PASS` |
-| **Qwen2.5-0.5B** `C=1` CUDA-Graph Decode (`tok/s`) | `139.91` | `>= 500.0 tok/s` | **`888.88`** | **`6.35×`** *(leads `SGLang` `803.1` & `vLLM` `694.1`)* | `PASS` |
-| **Mixtral-8x7B** `C=1` Decode (`tok/s`) | `43.90` | `>= 62.0 tok/s` | **`139.87`** | **`3.19×`** | `PASS` |
-| **Mixtral-8x7B** Routing Host Syncs / Step | `256` | `<= 0` | **`0`** | **`256 → 0`** | `PASS` |
-| **Serving** HTTP Non-Stream `C=64` (`tok/s`) | `2,519.59` | `>= 2,610.0 tok/s` | **`2,797.32`** | **`+11.0%`** | `PASS` |
-| **Serving** HTTP Non-Stream `C=64` (`% in-proc`) | `84.99%` | `>= 88.0%` | `84.29%` | `2,797.3 / 3,318.9 tok/s` *(in-proc `+11.9%`; SSE `2,946.45` = `88.8%`)* | `FAIL` |
-| **32L 32K FP8** KV Attention (`ms/step`) | `7.60` | `<= 3.86 ms` | **`3.3038`** | **`2.30×`** *(faster than FP16)* | `PASS` |
-| **`PagedKVCache`** FP8 Bytes / Token | `2,056.0` | `<= 2,056.0 B` | **`2,056.0`** | Unchanged | `PASS` |
-| **Mistral-7B** Peak Allocated VRAM (`MB`) | `8,679.0` | `<= 8,800.0 MB` | `10,524.1` | `+1,845.1 MB` *(`_pack_layer` pre-permuted `gate/up` & `QKV` copies)* | `FAIL` |
+| Workload Metric | `v3.9.0` Baseline | `6f945b8` Point | Frozen Target | RC2 (`406660f`) | Speedup / Notes *(historical `v3.6.0` refs unmatched)* | Status |
+|---|---:|---:|---:|---:|---|---|
+| **Mistral-7B** Prefill `S=512` (`ms`) | `72.94` | `53.758` | `<= 55.0 ms` | **`53.823`** | **`1.36×`** | `PASS` |
+| **Mistral-7B** `C=1` TTFT (`ms`) | `16.70` | `6.21` | `<= 10.5 ms` | **`6.09`** | **`2.74×`** | `PASS` |
+| **Mistral-7B** `C=1` Decode (`tok/s`) | `167.03` | `257.26` | `>= 220.0 tok/s` | **`257.27`** | **`1.54×`** | `PASS` |
+| **Mistral-7B** `C=1` ITL `p50` (`ms`) | `5.82` | `3.89` | `<= 4.5 ms` | **`3.89`** | **`1.50×`** | `PASS` |
+| **Mistral-7B** `C=4` Decode (`tok/s`) | `621.53` | `999.21` | `>= 800.0 tok/s` | **`998.26`** | **`1.61×`** *(hist. `v3.6.0` SGLang `969.4`)* | `PASS` |
+| **Mistral-7B** `C=16` Decode (`tok/s`) | `2,308.02` | `3,716.81` | `>= 2,850.0 tok/s` | **`3,701.66`** | **`1.60×`** *(hist. `v3.6.0` SGLang `3,261.8`)* | `PASS` |
+| **Qwen2.5-0.5B** Prefill `S=512` (`ms`) | `10.74` | `4.169` | `<= 8.0 ms` | **`4.165`** | **`2.58×`** *(`NativeFP16DecoderRuntime`)* | `PASS` |
+| **Qwen2.5-0.5B** `C=1` Cached Decode (`tok/s`) | `139.91` | `888.88` | `>= 500.0 tok/s` | **`892.75`** | **`6.38×`** *(`NativeFP16DecoderRuntime` vs `v3.6.0` hist. SGLang `803.1` / vLLM `694.1`)* | `PASS` |
+| **Mixtral-8x7B** `C=1` Decode (`tok/s`) | `43.90` | `139.87` | `>= 62.0 tok/s` | **`140.28`** | **`3.20×`** | `PASS` |
+| **Mixtral-8x7B** Routing Host Syncs / Step | `256` | `0` | `<= 0` | **`0`** | **`256 → 0`** | `PASS` |
+| **Serving** HTTP Non-Stream `C=64` (`tok/s`) | `2,519.59` | `2,797.32` | `>= 2,610.0 tok/s` | **`2,947.99`** | **`1.17×` (`+17.0%`)** *(hist. Ph16 `FAIL`)* | `PASS` |
+| **Serving** HTTP Non-Stream `C=64` (`% in-proc`) | `84.99%` | `84.29%` | `>= 88.0%` | **`88.77%`** | `2,948.0 / 3,321.0 tok/s` *(SSE `2,996.54` = `90.23%`)* | `PASS` |
+| **32L 32K FP8** KV Attention (`ms/step`) | `7.60` | `3.3038` | `<= 3.86 ms` | **`3.3042`** | **`2.30×`** *(faster than FP16 `3.8063 ms`)* | `PASS` |
+| **`PagedKVCache`** FP8 Bytes / Token | `2,056.0` | `2,056.0` | `<= 2,056.0 B` | **`2,056.0`** | Unchanged (`2,056 B`) | `PASS` |
+| **Mistral-7B** Peak Allocated VRAM (`MB`) | `8,679.0` | `10,524.1` | `<= 8,800.0 MB` | **`8,592.0`** | **`-87.0 MB` vs `v3.9.0`** *(in-place `_pack_layer`)* | `PASS` |
 
 ---
 
@@ -692,10 +694,10 @@ curl -N http://127.0.0.1:8000/v1/chat/completions \
 | Area | Verified result (`MEASURED` on RTX 5090, `sm_120`) | Limitation / unverified coverage |
 |---|---|---|
 | **Mistral-7B-v0.1-GPTQ (`C=1/4/16`)** | `167.03 / 621.53 / 2,308.02 tok/s` (`8,570–8,679 MB` VRAM, `v3.6.0` isolated run); `cutile-forge regress` `cos=1.000000`, `4/5` greedy (`v3.9.0`) | SGLang `0.5.23` is faster (`265.01 / 969.40 / 3,261.84 tok/s`, `18,512–18,532 MB` VRAM); `vLLM 0.34.0` marks `desc_act=True` GPTQ **`UNSUPPORTED`**; `TensorRT-LLM 1.3.0` **`NOT_RUN`** (`triton_kernels` import error) |
-| **Qwen2.5-0.5B (`FP16`, `C=1`)** | `HF Transformers 5.23.0`: `166.56 tok/s`; `vLLM 0.34.0`: `694.12 tok/s`; `SGLang 0.5.23`: `803.05 tok/s` (`v3.6.0` isolated run); Phase 23 added eager `PagedKVCache` (`12/12` tokens match uncached across page boundary) | External benchmark pre-dates cached KV (`170.27 tok/s`, **`DEGRADED`** vs `vLLM`/`SGLang`); still lacks persistent CUDA Graph decode loop in `UnifiedModelExecutor` |
+| **Qwen2.5-0.5B (`FP16`, `C=1`)** | `HF Transformers 5.23.0`: `166.56 tok/s`; `vLLM 0.34.0`: `694.12 tok/s`; `SGLang 0.5.23`: `803.05 tok/s` (historical `v3.6.0` isolated run, unmatched); Phase 24 added `NativeFP16DecoderRuntime` (`892.75 tok/s`, CUDA Graph replay, `graph_fallback_count=0`) | External benchmark pre-dates cached KV & `NativeFP16DecoderRuntime` (`170.27 tok/s`, **`DEGRADED`** on `v3.6.0` `UnifiedModelExecutor`); strict `regress --tier full` still runs uncached `UnifiedModelExecutor` (`4/5 FAIL`) |
 | **Real Long-Context (`Mistral-7B` & `Mixtral-8x7B`)** | Real 32L Mistral `4K..32K` runs (`118.64 -> 46.97 tok/s` FP16; `106.66 -> 37.46 tok/s` FP8) and real 32L Mixtral-8x7B `512..8192` (`33.03 -> 14.74 tok/s`, `27.93 GB` alloc) | Mistral `64K` **`UNSUPPORTED`** (`max_position_embeddings=32768`); quality degrades sharply `>4K` without sliding window (`PPL 602..16,606`); FP8 decode slower (`7.58 vs 3.84 ms` synthetic `32K`) |
 | **Quantization Accuracy (32L real + 8L repacked)** | Real 32L GPTQ: `2/2` exact greedy match (`0.0211%` PPL diff); Phase 15 real all-layer PPL verified (`Qwen2.5-0.5B` `GPTQ/AWQ/FP8/GGUF`, `Mistral` `GGUF Q4_K_M`) | `Qwen2.5-0.5B GGUF_Q4_K_M` (`Q5_0` tensors) is **`UNSUPPORTED`**; `qwen2_moe`/`deepseek_moe` are **`SYNTHETIC-ONLY`**; 8L repacked `FP8_e4m3_tensor` (`div=7`), `GGUF_Q4_K` (`div=5`) show divergence |
-| **Live Serving Soak & Continuous Batching** | **15-min sustained HTTP soak (`900.1 s`)**: `10,092/10,092` OK (`0` failures); Phase 16 SSE `C=64`: **`2,697.14 tok/s`** (`90.98%` **PASS**), `C=1..16` nonstream (`90.6%–97.9%` **PASS**) | Phase 16 **`http_nonstream C=64`** is **`FAIL`** (`2,519.59 tok/s`, `84.99%` 3-run median vs `>= 85%`; single run-0 `85.02%` does not override median) |
+| **Live Serving Soak & Continuous Batching** | **15-min sustained HTTP soak (`900.1 s`)**: `10,092/10,092` OK (`0` failures); Phase 24 RC2 (`406660f`) SSE `C=64`: **`2,996.54 tok/s`** (`90.23%` **PASS**) and `http_nonstream C=64`: **`2,947.99 tok/s`** (`88.77%` **PASS**) | Historical Phase 16 **`http_nonstream C=64`** remains recorded as **`FAIL`** (`2,519.59 tok/s`, `84.99%` 3-run median vs `>= 85%`; single run-0 `85.02%` does not override median) |
 | **Multi-GPU & Hardware Matrix** | Single-GPU loopback mathematical equivalence **`SIMULATED`** (`0.0` PP/EP/KV diff, `< 2e-3` TP) | Physical multi-GPU **`BLOCKED: hardware`**; RTX 4060 (`sm_89`) **`UNVALIDATED`** (`v3.1.0–v3.9.0`); Docker daemon **`BLOCKED`**; Independent repro **`PENDING_INDEPENDENT_RUN`** |
 
 - **Release Validation & Operational Reports:** [Final Compatibility Matrix (`29` cells)](docs/FINAL_COMPATIBILITY_MATRIX.md) · [Operational Limits](docs/OPERATIONAL_LIMITS.md) · [Hardware Support Matrix](docs/HARDWARE_SUPPORT_MATRIX.md) · [External Engine Comparison](docs/EXTERNAL_ENGINE_COMPARISON.md) · [Clean-Room Reproduction](docs/REPRODUCE.md) · [Model Compatibility](docs/MODEL_COMPATIBILITY.md) · [Quantization Accuracy](docs/QUANTIZATION_ACCURACY_REPORT.md) · [Serving Production](docs/SERVING_PRODUCTION_REPORT.md) · [Reliability Report](docs/RELIABILITY_REPORT.md) · [Kernel Regression Report](docs/KERNEL_REGRESSION_REPORT.md) · [Validation Artifacts Archive](benchmarks/validation_artifacts/)
@@ -719,7 +721,7 @@ cutile-forge/
 │   ├── onnx_import.py  # ONNX -> SDK Graph importer
 │   ├── doctor.py       # Hardware & cuda.tile readiness diagnostics (`cutile-forge doctor`)
 │   └── baselines/      # CUDA C++ (cp.async + WMMA) & cuBLAS pybind11 reference baselines
-├── tests/              # 311 GPU tests (tests/ + benchmarks/correctness/), 208 passed / 103 skipped on CPU
+├── tests/              # 312 GPU tests (tests/ + benchmarks/correctness/), 208 passed / 104 skipped on CPU
 ├── benchmarks/         # Micro-benchmarks, E2E Phases 9–12, benchmarks/production/, validation_artifacts/
 ├── scripts/            # Publication & validation figure generators (docs/images_5090, docs/figures)
 └── docs/               # Matrices, limits, RESULTS_RTX5090.md, ARCHITECTURE.md, TFG_COMPILER.md, preprint
@@ -730,7 +732,7 @@ cutile-forge/
 export CUTILE_ARCH=sm_120
 export HF_HOME=/var/tmp/arrhat_models/hf_cache
 
-# 1. Run full lint, type-check, GPU (311 passed) & CPU-only (208 passed, 103 skipped) verification gate
+# 1. Run full lint, type-check, GPU (312 passed) & CPU-only (208 passed, 104 skipped) verification gate
 ruff check cutile_forge/ tests/
 black --check cutile_forge/ tests/
 mypy cutile_forge/ --ignore-missing-imports
@@ -738,7 +740,7 @@ python3 -m pytest -q
 CUDA_VISIBLE_DEVICES="" python3 -m pytest -q
 
 # 2. Run 8-model regression suite (unchanged strict thresholds)
-cutile-forge regress --tier full --output benchmarks/validation_artifacts/v4.0.0/phase24_regression
+cutile-forge regress --tier full --output benchmarks/validation_artifacts/v4.0.0/phase24_rc2/regression
 ```
 
 #### Further Documentation

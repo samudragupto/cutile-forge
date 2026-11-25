@@ -1,0 +1,446 @@
+{
+  "tier": "full",
+  "commit": "406660fd46ac97ecb08d81a2fcb7a491ffc1a861",
+  "hardware_id": "NVIDIA GeForce RTX 5090 (sm_120)",
+  "contended": false,
+  "timestamp_utc": "2026-11-25T09:57:39.903222+00:00",
+  "results": [
+    {
+      "category": "Dense decoder",
+      "model": "Mistral-7B",
+      "checkpoint": "/home/arrhat/models/mistral_7b_4bit",
+      "reference_impl": "Mistral7B(backend='pytorch', GPTQ-32L)",
+      "layers_evaluated": 32,
+      "status": "PASS",
+      "weight_source": "real-checkpoint",
+      "native_execution": true,
+      "failing_check": null,
+      "metrics": {
+        "logit_cos_sim": 1.0,
+        "max_abs_diff": 0.0244,
+        "ppl_cutile": 5.1475,
+        "ppl_ref": 5.1473,
+        "ppl_tokens": 512,
+        "greedy_exact_matches": 5,
+        "greedy_total_prompts": 5,
+        "greedy_tokens_per_prompt": 256,
+        "greedy_tok_match_pct": 100.0,
+        "decode_med_tok_s": 253.31,
+        "decode_min_tok_s": 246.73,
+        "decode_max_tok_s": 253.98
+      },
+      "gates": [
+        {
+          "gate_name": "logit_cos_sim",
+          "raw_value": 0.9999995231628418,
+          "comparator": ">=",
+          "threshold": 0.9999,
+          "passed": true
+        },
+        {
+          "gate_name": "ppl_rel_diff",
+          "raw_value": 2.896827693329674e-05,
+          "comparator": "<=",
+          "threshold": 0.01,
+          "passed": true
+        },
+        {
+          "gate_name": "greedy_exact_matches",
+          "raw_value": 5.0,
+          "comparator": "==",
+          "threshold": 5.0,
+          "passed": true
+        }
+      ],
+      "notes": "NativeModelRuntime zero-ATen CUDA Graph decode + SWA=4096",
+      "diagnostics": {
+        "greedy_mismatches": []
+      }
+    },
+    {
+      "category": "Small decoder",
+      "model": "Qwen2.5-0.5B",
+      "checkpoint": "Qwen/Qwen2.5-0.5B",
+      "reference_impl": "transformers==5.23.0 (AutoModelForCausalLM)",
+      "layers_evaluated": 24,
+      "status": "FAIL",
+      "weight_source": "real-checkpoint",
+      "native_execution": true,
+      "failing_check": "greedy_exact_matches=4.0 (== 5.0)",
+      "metrics": {
+        "logit_cos_sim": 0.999997,
+        "max_abs_diff": 0.0366,
+        "ppl_cutile": 12.9381,
+        "ppl_ref": 12.9413,
+        "ppl_tokens": 492,
+        "greedy_exact_matches": 4,
+        "greedy_total_prompts": 5,
+        "greedy_tokens_per_prompt": 256,
+        "greedy_tok_match_pct": 99.92,
+        "prefill_512_med_ms": 7.3
+      },
+      "gates": [
+        {
+          "gate_name": "logit_cos_sim",
+          "raw_value": 0.9999974966049194,
+          "comparator": ">=",
+          "threshold": 0.9999,
+          "passed": true
+        },
+        {
+          "gate_name": "ppl_rel_diff",
+          "raw_value": 0.0002510232521837972,
+          "comparator": "<=",
+          "threshold": 0.01,
+          "passed": true
+        },
+        {
+          "gate_name": "greedy_exact_matches",
+          "raw_value": 4.0,
+          "comparator": "==",
+          "threshold": 5.0,
+          "passed": false
+        }
+      ],
+      "notes": "UnifiedModelExecutor executes native CuTile FlashAttention + RoPE + GEMM + RMSNorm + SiLU",
+      "diagnostics": {
+        "greedy_mismatches": [
+          {
+            "prompt_idx": 0,
+            "first_divergence_step": 97,
+            "ref_top1_token_id": 36195,
+            "ref_top2_token_id": 11392,
+            "cu_top1_token_id": 36195,
+            "cu_top2_token_id": 11392,
+            "ref_top1_logit": 24.234375,
+            "ref_top2_logit": 24.21875,
+            "ref_margin": 0.015625,
+            "cu_top1_logit": 24.21875,
+            "cu_top2_logit": 24.21875,
+            "cu_margin": 0.0,
+            "dtype": "float16",
+            "ulp_at_logit": 0.015625,
+            "ref_margin_ulps": 1.0,
+            "cu_margin_ulps": 0.0,
+            "delta_on_ref_top1": -0.015625,
+            "delta_on_cu_top1": -0.015625,
+            "inter_runtime_delta_ulps": 1.0,
+            "classification": "ONE_SIDED_TIE",
+            "cu_logits_source": "UnifiedModelExecutor.forward(step_logits)",
+            "ref_logits_source": "HF AutoModelForCausalLM.forward(full_seq)"
+          }
+        ]
+      }
+    },
+    {
+      "category": "MoE",
+      "model": "Mixtral-8x7B",
+      "checkpoint": "/var/tmp/arrhat_models/mixtral_8x7b_4bit",
+      "reference_impl": "Mistral7B(backend='pytorch', 32L)",
+      "layers_evaluated": 32,
+      "status": "FAIL",
+      "weight_source": "real-checkpoint",
+      "native_execution": true,
+      "failing_check": "greedy_exact_matches=3.0 (== 5.0)",
+      "metrics": {
+        "logit_cos_sim": 0.999996,
+        "max_abs_diff": 0.0664,
+        "ppl_cutile": 4.3418,
+        "ppl_ref": 4.3427,
+        "ppl_tokens": 512,
+        "greedy_exact_matches": 3,
+        "greedy_total_prompts": 5,
+        "greedy_tokens_per_prompt": 256,
+        "greedy_tok_match_pct": 99.77,
+        "decode_med_tok_s": 137.11,
+        "decode_min_tok_s": 123.67,
+        "decode_max_tok_s": 137.27
+      },
+      "gates": [
+        {
+          "gate_name": "logit_cos_sim",
+          "raw_value": 0.9999962449073792,
+          "comparator": ">=",
+          "threshold": 0.9999,
+          "passed": true
+        },
+        {
+          "gate_name": "ppl_rel_diff",
+          "raw_value": 0.00021574553767052493,
+          "comparator": "<=",
+          "threshold": 0.01,
+          "passed": true
+        },
+        {
+          "gate_name": "greedy_exact_matches",
+          "raw_value": 3.0,
+          "comparator": "==",
+          "threshold": 5.0,
+          "passed": false
+        }
+      ],
+      "notes": "32L HBM GPTQ + native CuTile cutile_moe_router_topk",
+      "diagnostics": {
+        "greedy_mismatches": [
+          {
+            "prompt_idx": 0,
+            "first_divergence_step": 190,
+            "ref_top1_token_id": 778,
+            "ref_top2_token_id": 298,
+            "cu_top1_token_id": 778,
+            "cu_top2_token_id": 298,
+            "ref_top1_logit": 23.9375,
+            "ref_top2_logit": 23.9375,
+            "ref_margin": 0.0,
+            "cu_top1_logit": 24.015625,
+            "cu_top2_logit": 23.953125,
+            "cu_margin": 0.0625,
+            "dtype": "float16",
+            "ulp_at_logit": 0.015625,
+            "ref_margin_ulps": 0.0,
+            "cu_margin_ulps": 4.0,
+            "delta_on_ref_top1": 0.078125,
+            "delta_on_cu_top1": 0.078125,
+            "inter_runtime_delta_ulps": 5.0,
+            "classification": "ONE_SIDED_TIE",
+            "cu_logits_source": "Mistral7B.forward(kv_cache=PagedKVCache,backend='cutile',last_token_only=True)",
+            "ref_logits_source": "Mistral7B.forward(kv_cache=None,backend='pytorch')"
+          },
+          {
+            "prompt_idx": 1,
+            "first_divergence_step": 45,
+            "ref_top1_token_id": 661,
+            "ref_top2_token_id": 415,
+            "cu_top1_token_id": 661,
+            "cu_top2_token_id": 415,
+            "ref_top1_logit": 22.578125,
+            "ref_top2_logit": 22.5625,
+            "ref_margin": 0.015625,
+            "cu_top1_logit": 22.546875,
+            "cu_top2_logit": 22.546875,
+            "cu_margin": 0.0,
+            "dtype": "float16",
+            "ulp_at_logit": 0.015625,
+            "ref_margin_ulps": 1.0,
+            "cu_margin_ulps": 0.0,
+            "delta_on_ref_top1": -0.03125,
+            "delta_on_cu_top1": -0.03125,
+            "inter_runtime_delta_ulps": 2.0,
+            "classification": "ONE_SIDED_TIE",
+            "cu_logits_source": "Mistral7B.forward(kv_cache=PagedKVCache,backend='cutile',last_token_only=True)",
+            "ref_logits_source": "Mistral7B.forward(kv_cache=None,backend='pytorch')"
+          }
+        ]
+      }
+    },
+    {
+      "category": "Vision",
+      "model": "SigLIP ViT-B/16",
+      "checkpoint": "google/siglip-base-patch16-224",
+      "reference_impl": "transformers==5.23.0 (SiglipVisionModel)",
+      "layers_evaluated": 12,
+      "status": "FAIL",
+      "weight_source": "real-checkpoint",
+      "native_execution": true,
+      "failing_check": "max_abs_diff=0.125 (< 0.05)",
+      "metrics": {
+        "emb_cos_sim": 0.999979,
+        "max_abs_diff": 0.125
+      },
+      "gates": [
+        {
+          "gate_name": "emb_cos_sim",
+          "raw_value": 0.9999792575836182,
+          "comparator": ">=",
+          "threshold": 0.9999,
+          "passed": true
+        },
+        {
+          "gate_name": "max_abs_diff",
+          "raw_value": 0.125,
+          "comparator": "<",
+          "threshold": 0.05,
+          "passed": false
+        }
+      ],
+      "notes": "UnifiedModelExecutor executes native CuTile patch GEMM, LayerNorm, bidirectional FlashAttention, GELU"
+    },
+    {
+      "category": "Audio",
+      "model": "Whisper-Tiny",
+      "checkpoint": "openai/whisper-tiny",
+      "reference_impl": "transformers==5.23.0 (WhisperModel.encoder)",
+      "layers_evaluated": 4,
+      "status": "FAIL",
+      "weight_source": "real-checkpoint",
+      "native_execution": true,
+      "failing_check": "max_abs_diff=0.3134765625 (< 0.1)",
+      "metrics": {
+        "emb_cos_sim": 0.999996,
+        "max_abs_diff": 0.31348
+      },
+      "gates": [
+        {
+          "gate_name": "emb_cos_sim",
+          "raw_value": 0.9999958276748657,
+          "comparator": ">=",
+          "threshold": 0.9999,
+          "passed": true
+        },
+        {
+          "gate_name": "max_abs_diff",
+          "raw_value": 0.3134765625,
+          "comparator": "<",
+          "threshold": 0.1,
+          "passed": false
+        }
+      ],
+      "notes": "UnifiedModelExecutor executes native CuTile Conv1d(via cutile_conv2d), LayerNorm, bidirectional FlashAttention, GELU"
+    },
+    {
+      "category": "Multimodal",
+      "model": "LLaVA-1.5",
+      "checkpoint": "llava-hf/llava-1.5-7b-hf",
+      "reference_impl": "transformers==5.23.0 (LlavaForConditionalGeneration)",
+      "layers_evaluated": 55,
+      "status": "PASS",
+      "weight_source": "real-checkpoint",
+      "native_execution": true,
+      "failing_check": null,
+      "metrics": {
+        "logit_cos_sim": 1.0,
+        "max_abs_diff": 0.0156,
+        "greedy_exact_matches": 1,
+        "greedy_total_prompts": 1,
+        "greedy_tokens_per_prompt": 16,
+        "greedy_tok_match_pct": 100.0
+      },
+      "gates": [
+        {
+          "gate_name": "logit_cos_sim",
+          "raw_value": 0.9999998211860657,
+          "comparator": ">=",
+          "threshold": 0.9999,
+          "passed": true
+        },
+        {
+          "gate_name": "greedy_token_matches",
+          "raw_value": 16.0,
+          "comparator": "==",
+          "threshold": 16.0,
+          "passed": true
+        }
+      ],
+      "notes": "UnifiedModelExecutor executes native CuTile CLIP ViT + QuickGELU + 2L GELU proj + 32L Llama attention/MLP"
+    },
+    {
+      "category": "Diffusion",
+      "model": "DiT-XL/2",
+      "checkpoint": "facebook/DiT-XL-2-256",
+      "reference_impl": "diffusers==0.43.0 (DiTTransformer2DModel)",
+      "layers_evaluated": 28,
+      "status": "PASS",
+      "weight_source": "real-checkpoint",
+      "native_execution": true,
+      "failing_check": null,
+      "metrics": {
+        "output_cos_sim": 0.999999,
+        "max_abs_diff": 0.00439
+      },
+      "gates": [
+        {
+          "gate_name": "output_cos_sim",
+          "raw_value": 0.9999986290931702,
+          "comparator": ">=",
+          "threshold": 0.9999,
+          "passed": true
+        },
+        {
+          "gate_name": "max_abs_diff",
+          "raw_value": 0.00439453125,
+          "comparator": "<",
+          "threshold": 0.05,
+          "passed": true
+        }
+      ],
+      "notes": "User-approved DiT-XL/2-256; UnifiedModelExecutor executes native CuTile LayerNorm, patch GEMM, d=72 FlashAttention"
+    },
+    {
+      "category": "Large decoder",
+      "model": "Llama-2-70B",
+      "checkpoint": "/var/tmp/arrhat_models/llama_70b_4bit",
+      "reference_impl": "Mistral7B(backend='pytorch', 80L)",
+      "layers_evaluated": 80,
+      "status": "FAIL",
+      "weight_source": "real-checkpoint",
+      "native_execution": true,
+      "failing_check": "greedy_exact_matches=4.0 (== 5.0)",
+      "metrics": {
+        "logit_cos_sim": 0.999998,
+        "max_abs_diff": 0.0254,
+        "ppl_cutile": 4.8154,
+        "ppl_ref": 4.8143,
+        "ppl_tokens": 512,
+        "greedy_exact_matches": 4,
+        "greedy_total_prompts": 5,
+        "greedy_tokens_per_prompt": 256,
+        "greedy_tok_match_pct": 99.92,
+        "decode_med_tok_s": 3.9,
+        "decode_min_tok_s": 3.9,
+        "decode_max_tok_s": 3.91
+      },
+      "gates": [
+        {
+          "gate_name": "logit_cos_sim",
+          "raw_value": 0.9999979734420776,
+          "comparator": ">=",
+          "threshold": 0.9999,
+          "passed": true
+        },
+        {
+          "gate_name": "ppl_rel_diff",
+          "raw_value": 0.00023808928998998453,
+          "comparator": "<=",
+          "threshold": 0.01,
+          "passed": true
+        },
+        {
+          "gate_name": "greedy_exact_matches",
+          "raw_value": 4.0,
+          "comparator": "==",
+          "threshold": 5.0,
+          "passed": false
+        }
+      ],
+      "notes": "80L GPTQ Stage -1 PCIe streaming (55 HBM + 25 DDR5)",
+      "diagnostics": {
+        "greedy_mismatches": [
+          {
+            "prompt_idx": 2,
+            "first_divergence_step": 124,
+            "ref_top1_token_id": 373,
+            "ref_top2_token_id": 322,
+            "cu_top1_token_id": 373,
+            "cu_top2_token_id": 322,
+            "ref_top1_logit": 20.3125,
+            "ref_top2_logit": 20.3125,
+            "ref_margin": 0.0,
+            "cu_top1_logit": 20.328125,
+            "cu_top2_logit": 20.3125,
+            "cu_margin": 0.015625,
+            "dtype": "float16",
+            "ulp_at_logit": 0.015625,
+            "ref_margin_ulps": 0.0,
+            "cu_margin_ulps": 1.0,
+            "delta_on_ref_top1": 0.015625,
+            "delta_on_cu_top1": 0.015625,
+            "inter_runtime_delta_ulps": 1.0,
+            "classification": "ONE_SIDED_TIE",
+            "cu_logits_source": "Mistral7B.forward(kv_cache=PagedKVCache,backend='cutile',last_token_only=True)",
+            "ref_logits_source": "Mistral7B.forward(kv_cache=None,backend='pytorch')"
+          }
+        ]
+      }
+    }
+  ]
+}

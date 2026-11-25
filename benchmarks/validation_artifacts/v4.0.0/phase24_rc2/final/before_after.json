@@ -1,0 +1,194 @@
+{
+  "hardware": "NVIDIA GeForce RTX 5090 (sm_120)",
+  "commit": "406660fd46ac97ecb08d81a2fcb7a491ffc1a861",
+  "prior_comparison_commit": "6f945b8",
+  "baseline_tag": "v3.9.0",
+  "mistral": {
+    "prefill_512_ms": 53.823,
+    "c1_ttft_ms": 6.09,
+    "c1_itl_p50_ms": 3.89,
+    "c1_tok_s": 257.27,
+    "c4_tok_s": 998.26,
+    "c16_tok_s": 3701.66,
+    "mistral_vram_mb": 8592.0,
+    "mistral_vram_load_mb": 4046.0,
+    "mistral_vram_init_mb": 8586.0,
+    "mistral_vram_with_prefill512_mb": 8632.9
+  },
+  "qwen": {
+    "prefill_512_ms": 4.165,
+    "c1_tok_s": 892.75,
+    "qualification": {
+      "runtime_class": "NativeFP16DecoderRuntime",
+      "kv_cache_class": "NativePagedKVCache",
+      "use_cuda_graph": true,
+      "graph_strategy": "bucketed",
+      "graph_fallback_count": 0,
+      "captured_graph_buckets": [
+        512
+      ],
+      "sync_interval": 32,
+      "prompt_len": 64,
+      "max_new_tokens": 64,
+      "regress_full_note": "Strict regress --tier full Qwen2.5-0.5B row still evaluates uncached UnifiedModelExecutor against HuggingFace FP16."
+    }
+  },
+  "mixtral": {
+    "c1_tok_s": 140.28
+  },
+  "kv_32l_32k": {
+    "32l_32k_fp8_ms_per_step": 3.3042,
+    "32l_32k_fp16_ms_per_step": 3.8063,
+    "fp8_bytes_per_token": 2056.0
+  },
+  "serving_3run": {
+    "inproc_c64_tok_s": 3321.03,
+    "http_nonstream_c64_tok_s": 2947.99,
+    "http_nonstream_pct": 88.77,
+    "http_stream_c64_tok_s": 2996.54,
+    "http_stream_pct": 90.23
+  },
+  "regression": {
+    "pass": 3,
+    "fail": 5
+  },
+  "frozen_targets_passed": 15,
+  "frozen_targets_total": 15,
+  "comparisons": [
+    {
+      "metric": "Mistral-7B Prefill S=512 (ms)",
+      "baseline_v390": 72.94,
+      "prior_6f945b8": 53.758,
+      "target": "<= 55.0 ms",
+      "final_phase24": 53.823,
+      "delta_or_speedup": "1.36x",
+      "status": "PASS"
+    },
+    {
+      "metric": "Mistral-7B C=1 TTFT (ms)",
+      "baseline_v390": 16.7,
+      "prior_6f945b8": 6.21,
+      "target": "<= 10.5 ms",
+      "final_phase24": 6.09,
+      "delta_or_speedup": "2.74x",
+      "status": "PASS"
+    },
+    {
+      "metric": "Mistral-7B C=1 Decode (tok/s)",
+      "baseline_v390": 167.03,
+      "prior_6f945b8": 257.26,
+      "target": ">= 220.0 tok/s",
+      "final_phase24": 257.27,
+      "delta_or_speedup": "1.54x",
+      "status": "PASS"
+    },
+    {
+      "metric": "Mistral-7B C=1 ITL p50 (ms)",
+      "baseline_v390": 5.82,
+      "prior_6f945b8": 3.89,
+      "target": "<= 4.5 ms",
+      "final_phase24": 3.89,
+      "delta_or_speedup": "1.50x",
+      "status": "PASS"
+    },
+    {
+      "metric": "Mistral-7B C=4 Decode (tok/s)",
+      "baseline_v390": 621.53,
+      "prior_6f945b8": 999.21,
+      "target": ">= 800.0 tok/s",
+      "final_phase24": 998.26,
+      "delta_or_speedup": "1.61x",
+      "status": "PASS"
+    },
+    {
+      "metric": "Mistral-7B C=16 Decode (tok/s)",
+      "baseline_v390": 2308.02,
+      "prior_6f945b8": 3716.81,
+      "target": ">= 2850.0 tok/s",
+      "final_phase24": 3701.66,
+      "delta_or_speedup": "1.60x",
+      "status": "PASS"
+    },
+    {
+      "metric": "Qwen2.5-0.5B Prefill S=512 (ms)",
+      "baseline_v390": 10.74,
+      "prior_6f945b8": 4.169,
+      "target": "<= 8.0 ms",
+      "final_phase24": 4.165,
+      "delta_or_speedup": "2.58x",
+      "status": "PASS"
+    },
+    {
+      "metric": "Qwen2.5-0.5B C=1 Cached Decode (tok/s)",
+      "baseline_v390": 139.91,
+      "prior_6f945b8": 888.88,
+      "target": ">= 500.0 tok/s",
+      "final_phase24": 892.75,
+      "delta_or_speedup": "6.38x",
+      "status": "PASS"
+    },
+    {
+      "metric": "Mixtral-8x7B C=1 Decode (tok/s)",
+      "baseline_v390": 43.9,
+      "prior_6f945b8": 139.87,
+      "target": ">= 62.0 tok/s",
+      "final_phase24": 140.28,
+      "delta_or_speedup": "3.20x",
+      "status": "PASS"
+    },
+    {
+      "metric": "Mixtral-8x7B Routing Host Syncs / Step",
+      "baseline_v390": 256,
+      "prior_6f945b8": 0,
+      "target": "<= 0",
+      "final_phase24": 0,
+      "delta_or_speedup": "256 -> 0",
+      "status": "PASS"
+    },
+    {
+      "metric": "HTTP Non-Stream C=64 (tok/s)",
+      "baseline_v390": 2519.59,
+      "prior_6f945b8": 2797.32,
+      "target": ">= 2610.0 tok/s",
+      "final_phase24": 2947.99,
+      "delta_or_speedup": "1.17x (+17.0%)",
+      "status": "PASS"
+    },
+    {
+      "metric": "HTTP Non-Stream C=64 (% of in-proc C=64)",
+      "baseline_v390": 84.99,
+      "prior_6f945b8": 84.29,
+      "target": ">= 88.0%",
+      "final_phase24": 88.77,
+      "delta_or_speedup": "2948.0 / 3321.0 tok/s (in-proc +12.0%)",
+      "status": "PASS"
+    },
+    {
+      "metric": "32L 32K FP8 KV Attention (ms/step)",
+      "baseline_v390": 7.6,
+      "prior_6f945b8": 3.3038,
+      "target": "<= 3.86 ms",
+      "final_phase24": 3.3042,
+      "delta_or_speedup": "2.30x",
+      "status": "PASS"
+    },
+    {
+      "metric": "PagedKVCache FP8 Bytes / Token",
+      "baseline_v390": 2056.0,
+      "prior_6f945b8": 2056.0,
+      "target": "<= 2056.0 B",
+      "final_phase24": 2056.0,
+      "delta_or_speedup": "unchanged (2056 B)",
+      "status": "PASS"
+    },
+    {
+      "metric": "Mistral-7B Peak Allocated VRAM (MB)",
+      "baseline_v390": 8679.0,
+      "prior_6f945b8": 10524.1,
+      "target": "<= 8800.0 MB",
+      "final_phase24": 8592.0,
+      "delta_or_speedup": "-87.0 MB",
+      "status": "PASS"
+    }
+  ]
+}
