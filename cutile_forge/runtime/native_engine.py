@@ -253,23 +253,16 @@ class NativeModelRuntime:
         g_eff = lw.gate_proj
         u_eff = lw.up_proj
         if can_fuse_swiglu and dp is not None and self.use_cuda:
-            from cutile_forge.engine.weight_loader import QuantLinearWeight
-
             dp_long = dp.to(device=lw.gate_proj.qweight.device, dtype=torch.long)
-            g_eff = QuantLinearWeight(
-                qweight=lw.gate_proj.qweight.index_select(1, dp_long).contiguous(),
-                scales=lw.gate_proj.scales.index_select(1, dp_long).contiguous(),
-                zeros=lw.gate_proj.zeros.index_select(1, dp_long).contiguous(),
-                group_size=lw.gate_proj.group_size,
-                perm=lw.gate_proj.perm,
-            )
-            u_eff = QuantLinearWeight(
-                qweight=lw.up_proj.qweight.index_select(1, dp_long).contiguous(),
-                scales=lw.up_proj.scales.index_select(1, dp_long).contiguous(),
-                zeros=lw.up_proj.zeros.index_select(1, dp_long).contiguous(),
-                group_size=lw.up_proj.group_size,
-                perm=lw.up_proj.perm,
-            )
+            lw.gate_proj.qweight = lw.gate_proj.qweight.index_select(1, dp_long).contiguous()
+            lw.gate_proj.scales = lw.gate_proj.scales.index_select(1, dp_long).contiguous()
+            lw.gate_proj.zeros = lw.gate_proj.zeros.index_select(1, dp_long).contiguous()
+            lw.up_proj.qweight = lw.up_proj.qweight.index_select(1, dp_long).contiguous()
+            lw.up_proj.scales = lw.up_proj.scales.index_select(1, dp_long).contiguous()
+            lw.up_proj.zeros = lw.up_proj.zeros.index_select(1, dp_long).contiguous()
+            lw.down_proj.perm = None
+            g_eff = lw.gate_proj
+            u_eff = lw.up_proj
             dp = None
 
         return _PackedNativeLayer(

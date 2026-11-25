@@ -132,3 +132,52 @@ def test_flash_decoding_direct_fp8_kv_parity_and_lazy_scratchpad() -> None:
         q, k_fp8.to(torch.float16), v_fp8.to(torch.float16), num_splits=16, causal=False
     )
     assert (out_direct - out_upcast).abs().max().item() < 1e-3
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+def test_native_runtime_inplace_gate_up_perm_zero_duplication() -> None:
+    """Verify NativeModelRuntime permutes gate/up weights in-place without duplicating weights."""
+    from cutile_forge.engine.config import GPUConfig, ModelConfig
+    from cutile_forge.engine.model import Mistral7B
+    from cutile_forge.engine.weight_loader import create_random_4bit_weights
+    from cutile_forge.runtime import NativeModelRuntime
+
+    cfg = ModelConfig(
+        vocab_size=256,
+        hidden_size=128,
+        intermediate_size=256,
+        num_hidden_layers=2,
+        num_attention_heads=4,
+        num_key_value_heads=2,
+        head_dim=32,
+        group_size=128,
+    )
+    weights = create_random_4bit_weights(cfg, seed=7, device="cuda")
+    for idx, lw in enumerate(weights.layers):
+        g = torch.Generator(device="cuda").manual_seed(100 + idx)
+        lw.down_proj.perm = torch.randperm(
+            cfg.intermediate_size, generator=g, device="cuda", dtype=torch.int32
+        )
+    model = Mistral7B(weights=weights, gpu_config=GPUConfig(vram_gb=32.0), device="cuda")
+    inp = torch.tensor([[1, 5, 9, 13]], device="cuda", dtype=torch.long)
+    with torch.no_grad():
+        logits_before = model.forward(inp, kv_cache=None, pos_offset=0, backend="pytorch").float()
+
+    rt = NativeModelRuntime(model, max_seq_len=128, block_size=16, use_cuda_graph=False)
+    for lw, p in zip(weights.layers, rt._packed_layers, strict=True):
+        assert p.gate_proj is lw.gate_proj
+        assert p.up_proj is lw.up_proj
+        assert p.gate_proj.qweight.data_ptr() == lw.gate_proj.qweight.data_ptr()
+        assert p.up_proj.qweight.data_ptr() == lw.up_proj.qweight.data_ptr()
+        assert lw.down_proj.perm is None
+        assert p.down_perm_i32 is None
+
+    with torch.no_grad():
+        logits_after = model.forward(inp, kv_cache=None, pos_offset=0, backend="pytorch").float()
+    assert torch.allclose(logits_after, logits_before, atol=1e-2, rtol=1e-2)
+    assert (
+        torch.nn.functional.cosine_similarity(
+            logits_after.flatten(), logits_before.flatten(), dim=0
+        ).item()
+        > 0.99999
+    )
