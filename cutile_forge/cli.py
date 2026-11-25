@@ -222,7 +222,7 @@ def main() -> None:
             # Pre-capture batch buckets up to args.max_batch_size for first context bucket
             if rt.use_cuda_graph and rt._all_layers_on_gpu:
                 first_ctx = rt.context_buckets[0]
-                for b_cap in (1, 4, 8, 16, 32, 64):
+                for b_cap in (1, 2, 4, 8, 16, 32, 64):
                     if b_cap <= args.max_batch_size:
                         ws = rt._get_or_create_workspace(b_cap)
                         _ = rt._capture_full_step_graph(ws, first_ctx)
@@ -239,7 +239,7 @@ def main() -> None:
             max_concurrent_requests=args.max_concurrent,
             max_prompt_tokens=args.max_prompt_tokens,
         )
-        uvicorn.run(app, host=args.host, port=args.port, timeout_keep_alive=60)
+        uvicorn.run(app, host=args.host, port=args.port, timeout_keep_alive=60, access_log=False)
     elif args.command == "bench":
         import importlib
 

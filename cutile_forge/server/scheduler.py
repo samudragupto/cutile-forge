@@ -247,6 +247,7 @@ class ContinuousBatchScheduler:
                 new_actives: list[_ActiveSlot] = []
                 pending_deliver: list[tuple[int, ScheduledRequest, int]] = []
                 try:
+                    nxt_groups: list[tuple[list[tuple[int, ScheduledRequest]], torch.Tensor]] = []
                     for _, grp in by_len.items():
                         slot_ids = [sid for sid, _ in grp]
                         inp_t = torch.tensor(
@@ -255,9 +256,21 @@ class ContinuousBatchScheduler:
                             device=self.runtime.device,
                         )
                         nxt = self.runtime.prefill_into_slots(slot_ids, inp_t)
-                        toks = nxt.view(len(grp)).cpu().tolist()
-                        for (sid, req), t_val in zip(grp, toks, strict=True):
+                        nxt_groups.append((grp, nxt.view(len(grp))))
+                    if len(nxt_groups) == 1:
+                        grp0, t0 = nxt_groups[0]
+                        for (sid, req), t_val in zip(grp0, t0.cpu().tolist(), strict=True):
                             pending_deliver.append((sid, req, int(t_val)))
+                    elif nxt_groups:
+                        all_toks = torch.cat([t for _, t in nxt_groups], dim=0).cpu().tolist()
+                        offset = 0
+                        for grp, _ in nxt_groups:
+                            g_len = len(grp)
+                            for (sid, req), t_val in zip(
+                                grp, all_toks[offset : offset + g_len], strict=True
+                            ):
+                                pending_deliver.append((sid, req, int(t_val)))
+                            offset += g_len
 
                     for sid, req, tok0 in pending_deliver:
                         if req.cancel_event.is_set():
@@ -283,14 +296,22 @@ class ContinuousBatchScheduler:
                                     generated=1,
                                 )
                             )
+                    drain_more = False
                     with self._lock:
                         for slot_obj in new_actives:
                             self._active[slot_obj.slot_id] = slot_obj
                         if new_actives:
                             self._gpu_inputs_dirty = True
                         self._sync_slot_metrics_locked()
-                        # Only interleave another prefill immediately if no active slot is awaiting decode
-                        # OR wait until one decode step completes so streaming ITL stays flat!
+                        # Admit remaining queued non-streaming requests before entering decode
+                        drain_more = bool(
+                            self._pending
+                            and self._free_slots
+                            and self._active
+                            and not any(s.req.stream for s in self._active.values())
+                        )
+                    if drain_more:
+                        continue
                 except Exception as exc:
                     with self._lock:
                         for sid, req in admit:
@@ -326,7 +347,7 @@ class ContinuousBatchScheduler:
                 num_steps = 1
                 if use_multi:
                     rem_min = min(max(1, s.req.max_tokens - s.generated) for s in decode_list)
-                    num_steps = min(16, rem_min)
+                    num_steps = min(32, rem_min)
                     if hasattr(self.runtime, "bucket_len_for_pos"):
                         max_p = max(in_pos)
                         blen = int(self.runtime.bucket_len_for_pos(max_p))
