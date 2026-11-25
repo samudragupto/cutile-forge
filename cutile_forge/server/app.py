@@ -452,7 +452,11 @@ def create_app(
                         _mark_disconnect()
                     telemetry["requests_inflight"] = max(0, telemetry["requests_inflight"] - 1)
 
-            return StreamingResponse(continuous_event_stream(), media_type="text/event-stream")
+            return StreamingResponse(
+                continuous_event_stream(),
+                media_type="text/event-stream",
+                headers={"Connection": "close"},
+            )
 
         if req.stream:
             assert batch_lock is not None and gpu_executor is not None
@@ -523,7 +527,11 @@ def create_app(
                         telemetry["client_disconnects_total"] += 1
                     telemetry["requests_inflight"] = max(0, telemetry["requests_inflight"] - 1)
 
-            return StreamingResponse(event_stream(), media_type="text/event-stream")
+            return StreamingResponse(
+                event_stream(),
+                media_type="text/event-stream",
+                headers={"Connection": "close"},
+            )
 
         try:
             if scheduler is not None:
@@ -569,6 +577,10 @@ def create_app(
                 "total_tokens": prompt_len + len(out_ids),
             },
         }
-        return Response(content=json.dumps(payload), media_type="application/json")
+        return Response(
+            content=json.dumps(payload),
+            media_type="application/json",
+            headers={"Connection": "close"},
+        )
 
     return app

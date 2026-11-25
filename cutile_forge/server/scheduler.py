@@ -296,22 +296,12 @@ class ContinuousBatchScheduler:
                                     generated=1,
                                 )
                             )
-                    drain_more = False
                     with self._lock:
                         for slot_obj in new_actives:
                             self._active[slot_obj.slot_id] = slot_obj
                         if new_actives:
                             self._gpu_inputs_dirty = True
                         self._sync_slot_metrics_locked()
-                        # Admit remaining queued non-streaming requests before entering decode
-                        drain_more = bool(
-                            self._pending
-                            and self._free_slots
-                            and self._active
-                            and not any(s.req.stream for s in self._active.values())
-                        )
-                    if drain_more:
-                        continue
                 except Exception as exc:
                     with self._lock:
                         for sid, req in admit:
@@ -338,8 +328,7 @@ class ContinuousBatchScheduler:
                 in_pos = [s.pos for s in decode_list]
 
                 use_multi = (
-                    not admit
-                    and not has_pending
+                    not has_pending
                     and len(decode_list) >= self.max_batch_size
                     and not any(s.req.stream for s in decode_list)
                     and hasattr(self.runtime, "decode_slots_steps")
