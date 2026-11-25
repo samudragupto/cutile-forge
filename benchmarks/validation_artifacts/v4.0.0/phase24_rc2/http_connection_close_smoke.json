@@ -1,0 +1,36 @@
+{
+  "client_pool_limits": {
+    "max_connections": 8,
+    "max_keepalive_connections": 8
+  },
+  "sequential_nonstream": {
+    "count": 10,
+    "all_connection_close": true,
+    "all_200": true
+  },
+  "concurrent_nonstream_bursts": {
+    "bursts": 2,
+    "requests_per_burst": 8,
+    "all_connection_close": true,
+    "all_200": true
+  },
+  "sequential_sse": {
+    "count": 4,
+    "all_connection_close": true,
+    "all_done": true
+  },
+  "concurrent_sse_burst": {
+    "count": 4,
+    "all_connection_close": true,
+    "all_done": true
+  },
+  "total_requests_verified": 34,
+  "metrics_after": {
+    "requests_total": 34,
+    "requests_succeeded": 34,
+    "errors_total": 0,
+    "requests_inflight": 0,
+    "active_kv_slots": 0
+  },
+  "endpoint_scope": "127.0.0.1 loopback only; /v1/chat/completions sets Connection: close while /health and /metrics keep-alive remain enabled. Does not establish the same efficiency gain behind TLS termination or a reverse proxy."
+}

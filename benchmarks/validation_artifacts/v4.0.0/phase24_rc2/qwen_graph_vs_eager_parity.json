@@ -1,0 +1,40 @@
+{
+  "model": "Qwen/Qwen2.5-0.5B",
+  "runtime_class": "NativeFP16DecoderRuntime",
+  "comparison": "bucketed CUDA Graph replay (use_cuda_graph=True) vs eager cuTile execution (use_cuda_graph=False)",
+  "graph_fallback_count": 0,
+  "captured_graph_buckets": [
+    512
+  ],
+  "total_token_matches": "96/96",
+  "global_min_logits_cosine": 0.99999976,
+  "global_max_logits_abs_diff": 0.0,
+  "status": "PASS",
+  "prompts": [
+    {
+      "prompt_name": "bench_prefix_64",
+      "prompt_len": 64,
+      "steps": 32,
+      "exact_token_matches": "32/32",
+      "min_logits_cosine": 0.99999976,
+      "max_logits_abs_diff": 0.0
+    },
+    {
+      "prompt_name": "page_boundary_prefix_19",
+      "prompt_len": 19,
+      "steps": 32,
+      "exact_token_matches": "32/32",
+      "min_logits_cosine": 0.99999988,
+      "max_logits_abs_diff": 0.0
+    },
+    {
+      "prompt_name": "multi_page_prefix_48",
+      "prompt_len": 48,
+      "steps": 32,
+      "exact_token_matches": "32/32",
+      "min_logits_cosine": 0.99999988,
+      "max_logits_abs_diff": 0.0
+    }
+  ],
+  "note": "Zero graph fallbacks confirms CUDA Graph replay executed; this check directly verifies per-step logit and emitted-token parity between bucketed CUDA Graph replay and eager NativeFP16DecoderRuntime execution, separate from UnifiedModelExecutor's 4/5 strict FAIL in regress --tier full."
+}
